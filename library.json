@@ -1,0 +1,21 @@
+{
+  "name": "M5Unified",
+  "description": "Library for M5Stack/Core2/Tough, M5StickC/C-Plus, M5CoreInk, M5Paper",
+  "keywords": "M5Unified",
+  "authors": {
+    "name": "M5Stack, lovyan03",
+    "url": "http://www.m5stack.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m5stack/M5Unified.git"
+  },
+  "dependencies": [
+    {
+      "name": "M5GFX"
+    }
+  ],
+  "version": "0.0.1",
+  "framework": "arduino",
+  "platforms": "espressif32"
+}

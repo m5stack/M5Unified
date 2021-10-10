@@ -1,0 +1,98 @@
+// Copyright (c) M5Stack. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+#ifndef __M5_RTC_8563_CLASS_H__
+#define __M5_RTC_8563_CLASS_H__
+
+#include "I2C_Class.hpp"
+
+namespace m5
+{
+  struct rtc_time_t
+  {
+    std::int8_t hours;
+    std::int8_t minutes;
+    std::int8_t seconds;
+
+    rtc_time_t(std::int8_t hours = -1, std::int8_t minutes = -1, std::int8_t seconds = -1)
+    : hours   { hours   }
+    , minutes { minutes }
+    , seconds { seconds }
+    {}
+  };
+
+  struct rtc_date_t
+  {
+    /// year 1900-2099
+    std::int16_t year;
+
+    /// month 1-12
+    std::int8_t month;
+
+    /// date 1-31
+    std::int8_t date;
+
+    /// weekDay 0:sun / 1:mon / 2:tue / 3:wed / 4:thu / 5:fri / 6:sat
+    std::int8_t weekDay;
+  
+    rtc_date_t(std::int16_t year = 2000, std::int8_t month = 1, std::int8_t date = -1, std::int8_t weekDay = -1)
+    : year    { year    }
+    , month   { month   }
+    , date    { date    }
+    , weekDay { weekDay }
+    {}
+  };
+
+  class BM8563_Class : public I2C_Device
+  {
+  public:
+    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x51;
+
+    BM8563_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+    : I2C_Device ( i2c_addr, freq, i2c )
+    {}
+
+    bool begin(void);
+
+    bool getVoltLow(void);
+
+    bool getTime(rtc_time_t* time) const;
+    bool getDate(rtc_date_t* date) const;
+
+    void setTime(const rtc_time_t &time);
+    void setTime(const rtc_time_t* const time) { if (time) { setTime(*time); } }
+
+    void setDate(const rtc_date_t &date);
+    void setDate(const rtc_date_t* const date) { if (date) { setDate(*date); } }
+
+    /// Set timer IRQ
+    /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
+    /// @return the set number of seconds.
+    int setAlarmIRQ(int afterSeconds);
+
+    /// Set alarm by time
+    int setAlarmIRQ(const rtc_time_t &time);
+    int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time);
+
+    bool getIRQstatus(void);
+    void clearIRQ(void);
+    void disableIRQ(void);
+
+    rtc_time_t getTime(void) const
+    {
+      rtc_time_t time;
+      getTime(&time);
+      return time;
+    }
+
+    rtc_date_t getDate(void) const
+    {
+      rtc_date_t date;
+      getDate(&date);
+      return date;
+    }
+
+  };
+}
+
+#endif

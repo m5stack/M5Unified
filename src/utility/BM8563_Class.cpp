@@ -1,0 +1,221 @@
+// Copyright (c) M5Stack. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+#include "BM8563_Class.hpp"
+
+#include <esp_log.h>
+
+namespace m5
+{
+  static std::uint8_t bcd2ToByte(std::uint8_t value)
+  {
+    return ((value >> 4) * 10) + (value & 0x0F);
+  }
+
+  static std::uint8_t byteToBcd2(std::uint8_t value)
+  {
+    std::uint_fast8_t bcdhigh = value / 10;
+    return (bcdhigh << 4) | (value - (bcdhigh * 10));
+  }
+
+  bool BM8563_Class::begin(void)
+  {
+    _init = writeRegister8(0x00, 0x00) && writeRegister8(0x0E, 0x03);
+    return _init;
+  }
+
+  bool BM8563_Class::getVoltLow(void)
+  {
+    return readRegister8(0x02) & 0x80; // RTCC_VLSEC_MASK
+  }
+
+  bool BM8563_Class::getTime(rtc_time_t* time) const
+  {
+    std::uint8_t buf[3] = { 0 };
+
+    if (!readRegister(0x02, buf, 3)) { return false; }
+
+    time->seconds = bcd2ToByte(buf[0] & 0x7f);
+    time->minutes = bcd2ToByte(buf[1] & 0x7f);
+    time->hours   = bcd2ToByte(buf[2] & 0x3f);
+    return true;
+  }
+
+  void BM8563_Class::setTime(const rtc_time_t& time)
+  {
+    std::uint8_t buf[] =
+      { byteToBcd2(time.seconds)
+      , byteToBcd2(time.minutes)
+      , byteToBcd2(time.hours)
+      };
+    writeRegister(0x02, buf, sizeof(buf));
+  }
+
+  bool BM8563_Class::getDate(rtc_date_t* date) const
+  {
+    std::uint8_t buf[4] = {0};
+
+    if (!readRegister(0x05, buf, 4)) { return false; }
+
+    date->date    = bcd2ToByte(buf[0] & 0x3f);
+    date->weekDay = bcd2ToByte(buf[1] & 0x07);
+    date->month   = bcd2ToByte(buf[2] & 0x1f);
+    date->year    = bcd2ToByte(buf[3] & 0xff)
+                  + ((0x80 & buf[2]) ? 1900 : 2000);
+    return true;
+  }
+
+  void BM8563_Class::setDate(const rtc_date_t& date)
+  {
+    std::uint8_t w = date.weekDay;
+    if (w > 6 && date.year >= 1900 && ((std::size_t)(date.month - 1)) < 12)
+    { /// weekDay auto adjust
+      std::int_fast16_t y = date.year / 100;
+      w = (date.year + (date.year >> 2) - y + (y >> 2) + (13 * date.month + 8) / 5 + date.date) % 7;
+    }
+
+    std::uint8_t buf[] =
+      { byteToBcd2(date.date)
+      , w
+      , (std::uint8_t)(byteToBcd2(date.month) + (date.year < 2000 ? 0x80 : 0))
+      , byteToBcd2(date.year % 100)
+      };
+    writeRegister(0x05, buf, sizeof(buf));
+  }
+
+  int BM8563_Class::setAlarmIRQ(int afterSeconds)
+  {
+    std::uint8_t reg_value = readRegister8(0x01) & ~0x0C;
+
+    if (afterSeconds < 0)
+    { // disable timer
+      writeRegister8(0x01, reg_value & ~0x01);
+      writeRegister8(0x0E, 0x03);
+      return -1;
+    }
+
+    std::size_t div = 1;
+    std::uint8_t type_value = 0x82;
+    if (afterSeconds < 270)
+    {
+      if (afterSeconds > 255) { afterSeconds = 255; }
+    }
+    else
+    {
+      div = 60;
+      afterSeconds = (afterSeconds + 30) / div;
+      if (afterSeconds > 255) { afterSeconds = 255; }
+      type_value = 0x83;
+    }
+
+    writeRegister8(0x0E, type_value);
+    writeRegister8(0x0F, afterSeconds);
+
+    writeRegister8(0x01, (reg_value | 0x01) & ~0x80);
+    return afterSeconds * div;
+  }
+
+  int BM8563_Class::setAlarmIRQ(const rtc_time_t &time)
+  {
+    union
+    {
+      std::uint32_t raw = ~0;
+      std::uint8_t buf[4];
+    };
+    bool irq_enable = false;
+
+    if (time.minutes >= 0)
+    {
+      irq_enable = true;
+      buf[0] = byteToBcd2(time.minutes) & 0x7f;
+    }
+
+    if (time.hours >= 0)
+    {
+      irq_enable = true;
+      buf[1] = byteToBcd2(time.hours) & 0x3f;
+    }
+
+    writeRegister(0x09, buf, 4);
+
+    if (irq_enable)
+    {
+      bitOn(0x01, 0x02);
+    } else {
+      bitOff(0x01, 0x02);
+    }
+
+    return irq_enable;
+  }
+
+  int BM8563_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
+  {
+    union
+    {
+      std::uint32_t raw = ~0;
+      std::uint8_t buf[4];
+    };
+    bool irq_enable = false;
+
+    if (time.minutes >= 0)
+    {
+      irq_enable = true;
+      buf[0] = byteToBcd2(time.minutes) & 0x7f;
+    }
+
+    if (time.hours >= 0)
+    {
+      irq_enable = true;
+      buf[1] = byteToBcd2(time.hours) & 0x3f;
+    }
+
+    if (date.date >= 0)
+    {
+      irq_enable = true;
+      buf[2] = byteToBcd2(date.date) & 0x3f;
+    }
+
+    if (date.weekDay >= 0)
+    {
+      irq_enable = true;
+      buf[3] = byteToBcd2(date.weekDay) & 0x07;
+    }
+
+    writeRegister(0x09, buf, 4);
+
+    if (irq_enable)
+    {
+      bitOn(0x01, 1 << 1);
+    }
+    else
+    {
+      bitOff(0x01, 1 << 1);
+    }
+
+    return irq_enable;
+  }
+
+  bool BM8563_Class::getIRQstatus(void)
+  {
+    return _init && (0x0C & readRegister8(0x01));
+  }
+
+  void BM8563_Class::clearIRQ(void)
+  {
+    bitOff(0x01, 0x0C);
+  }
+
+  void BM8563_Class::disableIRQ(void)
+  {
+    // disable alerm (bit7:1=disabled)
+    std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
+    writeRegister(0x09, buf, 4);
+
+    // disable timer (bit7:0=disabled)
+    writeRegister8(0x0E, 0);
+
+    // clear flag and INT enable bits
+    writeRegister8(0x01, 0x00);
+  }
+
+}
