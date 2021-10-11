@@ -67,7 +67,6 @@ void setup(void)
   {
     box_list[i].draw();
   }
-  M5.Display.print("rotation");
 }
 
 void loop(void)
@@ -83,8 +82,6 @@ void loop(void)
   }
 
   static m5::touch_state_t prev_state;
-  m5::touch_point_t tp;
-  tp = M5.Touch.getDetail();
   auto t = M5.Touch.getDetail();
   if (prev_state != t.state)
   {
@@ -124,6 +121,7 @@ void loop(void)
         }
       }
 
+      M5.Display.waitDisplay();
       if (box_list[j].touch_id == t.id)
       {
         if (t.wasReleased())
@@ -143,7 +141,6 @@ void loop(void)
           }
         }
       }
-      M5.Display.waitDisplay();
       box_list[j].draw();
     }
   }

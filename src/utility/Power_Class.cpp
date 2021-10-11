@@ -165,8 +165,7 @@ namespace m5
         , 0x90, 0x07    // reg90h GPIO0(LDOio0) floating
         , 0x91, 0xA0    // reg91h GPIO0(LDOio0) 2.8V
 
-        , 0x12, 0x07    // reg12h DCDC1,DCDC3,LDO2 enable / LDO3,DCDC2,EXTEN disable
-        // , 0x23, 0x00    // reg23h DCDC2 700mV
+        , 0x12, 0x07    // reg12h enable DCDC1,DCDC3,LDO2  /  disable LDO3,DCDC2,EXTEN
         , 0x26, 0x6A    // reg26h DCDC1 3350mV (ESP32 VDD)
         };
       Axp192.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
@@ -222,15 +221,14 @@ namespace m5
       else        { m5gfx::gpio_lo(M5Paper_EXT5V_ENABLE_PIN); }
       break;
 
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      {
-        std::uint8_t val = (Axp192.readRegister8(0x90) & 0xF8) | (enable ? 0x02 : 0x01);
-        Axp192.writeRegister8(0x90, val);
-        Axp192.setEXTEN(enable);
-      }
+      Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+      NON_BREAK;
+
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+      Axp192.setEXTEN(enable);
       break;
 
     default:
