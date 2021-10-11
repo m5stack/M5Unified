@@ -6,6 +6,7 @@ file(GLOB SRCS
      src/utility/*.cpp
      )
 set(COMPONENT_SRCS ${SRCS})
+set(COMPONENT_REQUIRES M5GFX esp_adc_cal)
 
 register_component()
 
