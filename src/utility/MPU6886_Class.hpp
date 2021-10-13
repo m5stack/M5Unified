@@ -11,6 +11,10 @@ namespace m5
   class MPU6886_Class : public I2C_Device
   {
   public:
+    static constexpr std::uint8_t DEV_ID_MPU6886 = 0x19;
+    static constexpr std::uint8_t DEV_ID_MPU6050 = 0x68;
+    static constexpr std::uint8_t DEV_ID_MPU9250 = 0x71;
+
     enum Ascale
     { AFS_2G = 0
     , AFS_4G
@@ -32,7 +36,6 @@ namespace m5
     {}
 
     bool begin(void);
-    std::uint8_t whoAmI(void);
 
     void getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const;
     void getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const;
@@ -43,6 +46,8 @@ namespace m5
 
     bool setINTPinActiveLogic(bool level);
 
+    std::uint8_t whoAmI(void) const { return _device_id; }
+
   protected:
     void setGyroFsr(Gscale scale);
     void setAccelFsr(Ascale scale);
@@ -50,6 +55,7 @@ namespace m5
     float aRes, gRes;
     Gscale _gscale;
     Ascale _ascale;
+    std::uint8_t _device_id = 0;
   };
 }
 

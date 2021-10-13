@@ -11,7 +11,10 @@ namespace m5
   bool MPU6886_Class::begin(void)
   {
     // WHO_AM_I : IMU Check
-    if (whoAmI() != 0x19)
+    _device_id = readRegister8(0x75);
+    if (_device_id != DEV_ID_MPU6886
+     && _device_id != DEV_ID_MPU6050
+     && _device_id != DEV_ID_MPU9250)
     {
       return false;
     }
@@ -110,11 +113,6 @@ namespace m5
     std::uint8_t tmp = readRegister8(0x37) & 0x7F;
     tmp |= level ? 0x00 : 0x80;
     return writeRegister8(0x37, tmp);
-  }
-
-  std::uint8_t MPU6886_Class::whoAmI(void)
-  {
-    return readRegister8(0x75);
   }
 
   void MPU6886_Class::getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const

@@ -7,9 +7,23 @@ namespace m5
 {
   bool IMU_Class::begin(void)
   {
+    _imu = imu_t::imu_unknown;
     if (Mpu6886.begin())
     {
-      _imu = imu_t::imu_mpu6886;
+      switch (Mpu6886.whoAmI())
+      {
+      case MPU6886_Class::DEV_ID_MPU6050:
+        _imu = imu_t::imu_mpu6050;
+        break;
+      case MPU6886_Class::DEV_ID_MPU6886:
+        _imu = imu_t::imu_mpu6886;
+        break;
+      case MPU6886_Class::DEV_ID_MPU9250:
+        _imu = imu_t::imu_mpu9250;
+        break;
+      default:
+        return false;
+      }
     }
     else
     if (Sh200q.begin())
@@ -26,7 +40,9 @@ namespace m5
 
   bool IMU_Class::getAccel(float *x, float *y, float *z)
   {
-    if (_imu == imu_t::imu_mpu6886)
+    if (_imu == imu_t::imu_mpu6050
+     || _imu == imu_t::imu_mpu6886
+     || _imu == imu_t::imu_mpu9250)
     {
       Mpu6886.getAccel(x, y, z);
     }
@@ -52,7 +68,9 @@ namespace m5
 
   bool IMU_Class::getGyro(float *x, float *y, float *z)
   {
-    if (_imu == imu_t::imu_mpu6886)
+    if (_imu == imu_t::imu_mpu6050
+     || _imu == imu_t::imu_mpu6886
+     || _imu == imu_t::imu_mpu9250)
     {
       Mpu6886.getGyro(x, y, z);
     }

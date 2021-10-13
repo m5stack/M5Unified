@@ -13,7 +13,9 @@ namespace m5
   enum imu_t
   { imu_unknown
   , imu_sh200q
+  , imu_mpu6050
   , imu_mpu6886
+  , imu_mpu9250
   };
 
   class IMU_Class
@@ -24,6 +26,8 @@ namespace m5
     bool getAccel(float* ax, float* ay, float* az);
     bool getGyro(float* gx, float* gy, float* gz);
     bool getTemp(float *t);
+
+    bool isEnabled(void) const { return _imu != imu_unknown; }
 
     imu_t getType(void) const { return _imu; }
 
