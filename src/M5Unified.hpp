@@ -5,8 +5,21 @@
 #define __M5UNIFIED_HPP__
 
 #if defined (ARDUINO)
- #include <SD.h>
- #include <SPIFFS.h>
+ #if __has_include(<SD.h>)
+  #include <SD.h>
+ #endif
+ #if __has_include(<SPIFFS.h>)
+  #include <SPIFFS.h>
+ #endif
+ #if __has_include(<LittleFS.h>)
+  #include <LittleFS.h>
+ #endif
+ #if __has_include(<LITTLEFS.h>)
+  #include <LITTLEFS.h>
+ #endif
+ #if __has_include(<PSRamFS.h>)
+  #include <PSRamFS.h>
+ #endif
 #endif
 
 #include <M5GFX.h>

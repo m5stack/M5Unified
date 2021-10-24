@@ -10,10 +10,15 @@
 #include <soc/adc_channel.h>
 #include "../M5Unified.hpp"
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
- #define NON_BREAK ;[[fallthrough]];
-#else
- #define NON_BREAK ;
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION_MAJOR >= 4
+  #define NON_BREAK ;[[fallthrough]];
+ #endif
+#endif
+
+#ifndef NON_BREAK
+#define NON_BREAK ;
 #endif
 
 namespace m5

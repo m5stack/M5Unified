@@ -11,10 +11,15 @@
 /// global instance.
 m5::M5Unified M5;
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
- #define NON_BREAK ;[[fallthrough]];
-#else
- #define NON_BREAK ;
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION_MAJOR >= 4
+  #define NON_BREAK ;[[fallthrough]];
+ #endif
+#endif
+
+#ifndef NON_BREAK
+#define NON_BREAK ;
 #endif
 
 namespace m5
@@ -159,7 +164,16 @@ namespace m5
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      adc_power_acquire(); /// for GPIO 36,39 Chattering prevention.
+ /// for GPIO 36,39 Chattering prevention.
+#if defined (ESP_IDF_VERSION_VAL)
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(3, 3, 5)
+      adc_power_acquire();
+  #else
+      adc_power_on();
+  #endif
+#else
+      adc_power_on();
+#endif
       break;
 
     default:
