@@ -7,7 +7,7 @@
 #include "I2C_Class.hpp"
 #include "AXP192_Class.hpp"
 #include "IP5306_Class.hpp"
-#include "BM8563_Class.hpp"
+#include "RTC8563_Class.hpp"
 
 namespace m5
 {

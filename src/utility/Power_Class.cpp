@@ -277,7 +277,7 @@ namespace m5
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
       /// RTCタイマーは指定時間になるとGPIO35をLOWにすることで通知を行うが、
-      /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。
+      /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。;
       /// そのため、同じくGPIO35に接続されているMPU6886のINTピンを利用してプルアップを実施する。;
       /// IMUの種類がMPU6886でない個体は対応できない (SH200Qではできない);
       M5.Imu.Mpu6886.setINTPinActiveLogic(true);

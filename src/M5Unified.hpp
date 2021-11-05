@@ -24,7 +24,7 @@
 
 #include <M5GFX.h>
 
-#include "utility/BM8563_Class.hpp"
+#include "utility/RTC8563_Class.hpp"
 #include "utility/AXP192_Class.hpp"
 #include "utility/IP5306_Class.hpp"
 #include "utility/IMU_Class.hpp"
@@ -56,7 +56,7 @@ namespace m5
 
     IMU_Class Imu;
     Power_Class Power;
-    BM8563_Class Rtc;
+    RTC8563_Class Rtc;
     Touch_Class Touch;
 
 /*
