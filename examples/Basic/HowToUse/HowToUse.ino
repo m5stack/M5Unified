@@ -39,6 +39,9 @@ void setup(void)
   // Begin the M5 first.
   M5.begin();
 
+  // If you use external port 5V output. write this.
+  M5.Power.setExtPower(true);
+
 #if defined ( ARDUINO )
 
   // If you need Serial, write this.
@@ -50,9 +53,6 @@ void setup(void)
 #endif
 
   M5.Display.clear();
-
-  // If you use external port 5V output. write this.
-  M5.Power.setExtPower(true);
 
   // If you use IMU, write this.
   if (M5.Imu.begin())
@@ -310,8 +310,8 @@ void loop(void)
     }
 
     M5.Display.startWrite();
-
     M5.Display.setClipRect(h, h, M5.Display.width(), M5.Display.height());
+    M5.Display.waitDisplay();
     for (int i = 0; i < 6; ++i)
     {
       if (xpos[i] == prev_xpos[i]) continue;
