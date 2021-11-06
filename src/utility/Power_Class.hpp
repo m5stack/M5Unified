@@ -9,6 +9,8 @@
 #include "IP5306_Class.hpp"
 #include "RTC8563_Class.hpp"
 
+#include <driver/adc.h>
+
 namespace m5
 {
   class M5Unified;
@@ -97,7 +99,9 @@ namespace m5
     void _timerSleep(void);
 
     std::int8_t _wakeupPin = -1;
+    std::int8_t _pwrHoldPin = -1;
     pmic_t _pmic = pmic_t::pmic_unknown;
+    adc1_channel_t _batAdc;
     float _adc_ratio = 0;
   };
 }

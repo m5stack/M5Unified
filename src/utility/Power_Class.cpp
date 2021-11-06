@@ -3,7 +3,6 @@
 
 #include "Power_Class.hpp"
 
-#include <driver/adc.h>
 #include <esp_adc_cal.h>
 #include <esp_sleep.h>
 #include <esp_log.h>
@@ -25,6 +24,8 @@ namespace m5
 {
   static constexpr int CoreInk_POWER_HOLD_PIN = 12;
   static constexpr int M5Paper_POWER_HOLD_PIN =  2;
+  static constexpr int TimerCam_POWER_HOLD_PIN = 33;
+  static constexpr int TimerCam_LED_PIN = 2;
   static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
 
   bool Power_Class::begin(void)
@@ -37,15 +38,30 @@ namespace m5
     default:
       break;
 
+    case board_t::board_M5TimerCam:
+      _pwrHoldPin = TimerCam_POWER_HOLD_PIN;
+      m5gfx::pinMode(TimerCam_POWER_HOLD_PIN, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_hi(TimerCam_POWER_HOLD_PIN);
+      m5gfx::pinMode(TimerCam_LED_PIN, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_hi(TimerCam_LED_PIN);
+      _batAdc = ADC1_GPIO38_CHANNEL;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 1.513f;
+      break;
+
     case board_t::board_M5StackCoreInk:
+      _pwrHoldPin = CoreInk_POWER_HOLD_PIN;
       _wakeupPin = GPIO_NUM_27; // power button;
+      _batAdc = ADC1_GPIO35_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
       break;
 
     case board_t::board_M5Paper:
+      _pwrHoldPin = M5Paper_POWER_HOLD_PIN;
       m5gfx::pinMode(M5Paper_EXT5V_ENABLE_PIN, m5gfx::pin_mode_t::output);
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
+      _batAdc = ADC1_GPIO35_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -246,10 +262,10 @@ namespace m5
     switch (_pmic)
     {
     case pmic_t::pmic_adc:
-      m5gfx::gpio_lo( M5.getBoard() == board_t::board_M5StackCoreInk
-                    ? CoreInk_POWER_HOLD_PIN
-                    : M5Paper_POWER_HOLD_PIN
-                    );
+      if (_pwrHoldPin >= 0)
+      {
+        m5gfx::gpio_lo( _pwrHoldPin );
+      }
       break;
 
     case pmic_t::pmic_axp192:
@@ -380,20 +396,19 @@ namespace m5
   }
 
 
-  static std::int32_t getBatteryAdcRaw(void)
+  static std::int32_t getBatteryAdcRaw(adc1_channel_t adc_ch)
   {
     static constexpr int BASE_VOLATAGE = 3600;
-    static constexpr auto CoreInk_M5Paper_BAT_ADC = ADC1_GPIO35_CHANNEL;
 
     static esp_adc_cal_characteristics_t* adc_chars = nullptr;
     if (adc_chars == nullptr)
     {
       adc1_config_width(ADC_WIDTH_BIT_12);
-      adc1_config_channel_atten(CoreInk_M5Paper_BAT_ADC, ADC_ATTEN_DB_11);
+      adc1_config_channel_atten(adc_ch, ADC_ATTEN_DB_11);
       adc_chars = (esp_adc_cal_characteristics_t*)calloc(1, sizeof(esp_adc_cal_characteristics_t));
       esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
     }
-    return esp_adc_cal_raw_to_voltage(adc1_get_raw(CoreInk_M5Paper_BAT_ADC), adc_chars);
+    return esp_adc_cal_raw_to_voltage(adc1_get_raw(adc_ch), adc_chars);
   }
 
   std::int32_t Power_Class::getBatteryLevel(void)
@@ -409,9 +424,9 @@ namespace m5
       break;
 
     case pmic_t::pmic_adc:
-      volt = getBatteryAdcRaw() * _adc_ratio;
+      volt = getBatteryAdcRaw(_batAdc) * _adc_ratio;
       break;
-    
+
     default:
       return -2;
     }

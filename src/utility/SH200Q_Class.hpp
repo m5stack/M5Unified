@@ -17,7 +17,8 @@ namespace m5
     : I2C_Device ( i2c_addr, freq, i2c )
     {}
 
-    bool begin(void);
+    bool begin(I2C_Class* i2c = nullptr);
+
     std::uint8_t WhoAmI(void);
 
     void getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const;

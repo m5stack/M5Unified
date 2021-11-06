@@ -3,12 +3,19 @@
 
 #include "IMU_Class.hpp"
 
+#include "../M5Unified.hpp"
+
 namespace m5
 {
-  bool IMU_Class::begin(void)
+  bool IMU_Class::begin(I2C_Class* i2c)
   {
+    if (i2c)
+    {
+      i2c->begin();
+    }
+
     _imu = imu_t::imu_unknown;
-    if (Mpu6886.begin())
+    if (Mpu6886.begin(i2c))
     {
       switch (Mpu6886.whoAmI())
       {
@@ -26,7 +33,7 @@ namespace m5
       }
     }
     else
-    if (Sh200q.begin())
+    if (Sh200q.begin(i2c))
     {
       _imu = imu_t::imu_sh200q;
     }
@@ -40,58 +47,93 @@ namespace m5
 
   bool IMU_Class::getAccel(float *x, float *y, float *z)
   {
-    if (_imu == imu_t::imu_mpu6050
-     || _imu == imu_t::imu_mpu6886
-     || _imu == imu_t::imu_mpu9250)
-    {
-      Mpu6886.getAccel(x, y, z);
-    }
-    else if (_imu == imu_t::imu_sh200q)
-    {
-      Sh200q.getAccel(x, y, z);
-    }
-    else
+    if (_imu == imu_t::imu_unknown)
     {
       *x = 0;
       *y = 0;
       *z = 0;
       return false;
     }
-/*
-    if (board == m5gfx::board_unknown) {
-      *x = -(*x);
-      *z = -(*z);
+    if (_imu == imu_t::imu_sh200q)
+    {
+      Sh200q.getAccel(x, y, z);
     }
-//*/
+    else
+    // if (_imu == imu_t::imu_mpu6050
+    //  || _imu == imu_t::imu_mpu6886
+    //  || _imu == imu_t::imu_mpu9250)
+    {
+      Mpu6886.getAccel(x, y, z);
+    }
+    auto r = _rotation;
+    if (r)
+    {
+      if (r == 2)
+      {
+        *x = -(*x);
+        *z = -(*z);
+      }
+      else
+      {
+        auto tmpx = *x;
+        if (r == 1)
+        {
+          *x = - *z;
+          *z = tmpx;
+        }
+        else
+        {
+          *x = *z;
+          *z = - tmpx;
+        }
+      }
+    }
     return true;
   }
 
   bool IMU_Class::getGyro(float *x, float *y, float *z)
   {
-    if (_imu == imu_t::imu_mpu6050
-     || _imu == imu_t::imu_mpu6886
-     || _imu == imu_t::imu_mpu9250)
-    {
-      Mpu6886.getGyro(x, y, z);
-    }
-    else if (_imu == imu_t::imu_sh200q)
-    {
-      Sh200q.getGyro(x, y, z);
-    }
-    else
+    if (_imu == imu_t::imu_unknown)
     {
       *x = 0;
       *y = 0;
       *z = 0;
       return false;
     }
-/*
-    if (board == m5gfx::board_unknown) {
-      *x = -(*x);
-      *z = -(*z);
+    if (_imu == imu_t::imu_sh200q)
+    {
+      Sh200q.getGyro(x, y, z);
     }
-//*/
+    else
+    // if (_imu == imu_t::imu_mpu6050
+    //  || _imu == imu_t::imu_mpu6886
+    //  || _imu == imu_t::imu_mpu9250)
+    {
+      Mpu6886.getGyro(x, y, z);
+    }
+    auto r = _rotation;
+    if (r)
+    {
+      if (r == 2)
+      {
+        *x = -(*x);
+        *z = -(*z);
+      }
+      else
+      {
+        auto tmpx = *x;
+        if (r == 1)
+        {
+          *x = - *z;
+          *z = tmpx;
+        }
+        else
+        {
+          *x = *z;
+          *z = - tmpx;
+        }
+      }
+    }
     return true;
   }
-
 }

@@ -41,7 +41,7 @@ namespace m5
     std::uint32_t _lastChange = 0;
     std::uint32_t _lastRawChange = 0;
     std::uint16_t _msecDebounce = 10;
-    std::uint16_t _msecHold = 300;
+    std::uint16_t _msecHold = 500;
     bool _raw_press = false;
     std::uint8_t _changeState = 0; // 0:nochange  1:click  2:hold
     std::uint8_t _press = 0;     // 0:release  1:click  2:holding

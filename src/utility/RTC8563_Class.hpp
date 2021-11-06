@@ -60,7 +60,7 @@ namespace m5
     : I2C_Device ( i2c_addr, freq, i2c )
     {}
 
-    bool begin(I2C_Class* = nullptr);
+    bool begin(I2C_Class* i2c = nullptr);
 
     bool getVoltLow(void);
 

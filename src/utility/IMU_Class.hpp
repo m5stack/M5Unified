@@ -21,7 +21,7 @@ namespace m5
   class IMU_Class
   {
   public:
-    bool begin(void);
+    bool begin(I2C_Class* i2c = nullptr);
 
     bool getAccel(float* ax, float* ay, float* az);
     bool getGyro(float* gx, float* gy, float* gz);
@@ -31,9 +31,13 @@ namespace m5
 
     imu_t getType(void) const { return _imu; }
 
+    void setRotation(uint_fast8_t rotation) { _rotation = rotation & 3; };
+
     MPU6886_Class Mpu6886;
     SH200Q_Class Sh200q;
+
   private:
+    uint8_t _rotation = 0;
     imu_t _imu = imu_t::imu_unknown;
   };
 }

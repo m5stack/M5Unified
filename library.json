@@ -1,6 +1,6 @@
 {
   "name": "M5Unified",
-  "description": "Library for M5Stack/Core2/Tough, M5StickC/C-Plus, M5CoreInk, M5Paper",
+  "description": "Library for M5Stack/Core2/Tough, M5StickC/C-Plus, M5CoreInk, M5Paper, M5ATOM",
   "keywords": "M5Unified",
   "authors": {
     "name": "M5Stack, lovyan03",
@@ -15,7 +15,7 @@
       "name": "M5GFX"
     }
   ],
-  "version": "0.0.1",
+  "version": "0.0.2",
   "framework": "arduino",
   "platforms": "espressif32"
 }

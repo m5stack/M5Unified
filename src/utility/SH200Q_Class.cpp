@@ -5,8 +5,13 @@
 
 namespace m5
 {
-  bool SH200Q_Class::begin(void)
+  bool SH200Q_Class::begin(I2C_Class* i2c)
   {
+    if (i2c)
+    {
+      _i2c = i2c;
+    }
+
     // WHO_AM_I : IMU Check
     if (WhoAmI() != 0x18)
     {

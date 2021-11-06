@@ -20,7 +20,13 @@ namespace m5
 
   bool RTC8563_Class::begin(I2C_Class* i2c)
   {
-    if (i2c) { _i2c = i2c; }
+    if (i2c)
+    {
+      _i2c = i2c;
+      i2c->begin();
+    }
+    /// TimerCameraの内蔵RTCが初期化に失敗することがあったため、最初に空打ちする; 
+    writeRegister8(0x00, 0x00);
     _init = writeRegister8(0x00, 0x00) && writeRegister8(0x0E, 0x03);
     return _init;
   }

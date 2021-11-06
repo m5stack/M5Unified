@@ -8,8 +8,13 @@
 namespace m5
 {
 
-  bool MPU6886_Class::begin(void)
+  bool MPU6886_Class::begin(I2C_Class* i2c)
   {
+    if (i2c)
+    {
+      _i2c = i2c;
+    }
+
     // WHO_AM_I : IMU Check
     _device_id = readRegister8(0x75);
     if (_device_id != DEV_ID_MPU6886

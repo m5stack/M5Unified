@@ -32,6 +32,8 @@
 #include "utility/Power_Class.hpp"
 #include "utility/Touch_Class.hpp"
 
+#include <memory>
+
 namespace m5
 {
   using board_t = m5gfx::board_t;
@@ -46,7 +48,20 @@ namespace m5
     board_t getBoard(void) const { return _board; }
 
     /// Perform initialization process at startup.
-    void begin(void);
+    void begin(void)
+    {
+      auto brightness = Display.getBrightness();
+      Display.setBrightness(0);
+      bool res = Display.init_without_reset();
+      // _board = Display.getBoard();
+      _board = _check_boardtype(Display.getBoard());
+      if (!res)
+      {
+        Display._set_board(_switch_display());
+      }
+      _begin();
+      Display.setBrightness(brightness);
+    }
 
     /// To call this function in a loop function.
     void update(void);
@@ -68,6 +83,7 @@ namespace m5
   M5Paper:                     BtnA,BtnB,BtnC
   M5Station:                   BtnA,BtnB,BtnC
   M5Tough:                                    BtnPWR
+  M5ATOM:                      BtnA
 */
     Button_Class BtnA;
     Button_Class BtnB;
@@ -83,6 +99,49 @@ namespace m5
 
   private:
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
+
+    void _begin(void);
+    board_t _check_boardtype(board_t);
+
+    std::unique_ptr<m5gfx::LGFX_Device> _ex_display;
+    board_t _switch_display(void)
+    {
+#if defined ( __M5GFX_M5ATOMDISPLAY__ )
+      if (_board == board_t::board_M5ATOM)
+      {
+        auto dsp = new M5AtomDisplay();
+        _ex_display.reset(dsp);
+        if (Display._init_with_panel(dsp->getPanel()))
+        {
+          return dsp->getBoard();
+        }
+      }
+#endif
+#if defined ( __M5GFX_M5UNITLCD__ ) || defined ( __M5GFX_M5UNITOLED__ )
+      Power.setExtPower(true);
+#endif
+#if defined ( __M5GFX_M5UNITLCD__ )
+      {
+        auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
+        _ex_display.reset(dsp);
+        if (Display._init_with_panel(dsp->getPanel()))
+        {
+          return dsp->getBoard();
+        }
+      }
+#endif
+#if defined ( __M5GFX_M5UNITOLED__ )
+      {
+        auto dsp = new M5UnitOLED(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
+        _ex_display.reset(dsp);
+        if (Display._init_with_panel(dsp->getPanel()))
+        {
+          return dsp->getBoard();
+        }
+      }
+#endif
+      return Display.getBoard();
+    }
   };
 }
 
