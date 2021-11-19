@@ -3,10 +3,6 @@
 
 #include "Power_Class.hpp"
 
-#include <esp_adc_cal.h>
-#include <esp_sleep.h>
-#include <esp_log.h>
-#include <soc/adc_channel.h>
 #include "../M5Unified.hpp"
 
 #if __has_include (<esp_idf_version.h>)
@@ -19,6 +15,14 @@
 #ifndef NON_BREAK
 #define NON_BREAK ;
 #endif
+
+#include <esp_log.h>
+#include <esp_sleep.h>
+#include <sdkconfig.h>
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
+#include <esp_adc_cal.h>
+#include <soc/adc_channel.h>
 
 namespace m5
 {
@@ -558,3 +562,137 @@ namespace m5
   }
 
 }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+namespace m5
+{
+  bool Power_Class::begin(void)
+  {
+    _pmic = pmic_t::pmic_unknown;
+
+    return (_pmic != pmic_t::pmic_unknown);
+  }
+
+  void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
+  {
+  }
+
+  void Power_Class::setLed(uint8_t brightness)
+  {
+  }
+
+  void Power_Class::_powerOff(bool withTimer)
+  {
+    esp_deep_sleep_start();
+  }
+
+  void Power_Class::_timerSleep(void)
+  {
+    M5.Display.sleep();
+    M5.Display.waitDisplay();
+
+    _powerOff(true);
+  }
+
+  void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
+  {
+    M5.Display.sleep();
+    ESP_LOGD("Power","deepSleep");
+
+    if (touch_wakeup && _wakeupPin >= 0)
+    {
+      esp_deep_sleep_enable_gpio_wakeup(1<<_wakeupPin, esp_deepsleep_gpio_wake_up_mode_t::ESP_GPIO_WAKEUP_GPIO_LOW);
+      esp_sleep_enable_gpio_wakeup();
+      while (m5gfx::gpio_in(_wakeupPin) == false)
+      {
+        m5gfx::delay(10);
+      }
+    }
+    if (micro_seconds > 0)
+    {
+      esp_sleep_enable_timer_wakeup(micro_seconds);
+    }
+    else
+    {
+      esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+    }
+    esp_deep_sleep_start();
+  }
+
+  void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
+  {
+    ESP_LOGD("Power","lightSleep");
+
+    if (touch_wakeup && _wakeupPin >= 0)
+    {
+      esp_deep_sleep_enable_gpio_wakeup(1<<_wakeupPin, esp_deepsleep_gpio_wake_up_mode_t::ESP_GPIO_WAKEUP_GPIO_LOW);
+      esp_sleep_enable_gpio_wakeup();
+      esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+      while (m5gfx::gpio_in(_wakeupPin) == false)
+      {
+        m5gfx::delay(10);
+      }
+    }
+    if (micro_seconds > 0){
+      esp_sleep_enable_timer_wakeup(micro_seconds);
+    }else{
+      esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+    }
+    esp_light_sleep_start();
+  }
+
+  void Power_Class::powerOff(void)
+  {
+    M5.Display.sleep();
+    M5.Display.waitDisplay();
+    _powerOff(false);
+  }
+
+  void Power_Class::timerSleep( int seconds )
+  {
+    M5.Rtc.clearIRQ();
+    M5.Rtc.setAlarmIRQ(seconds);
+    esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+    _timerSleep();
+  }
+
+  void Power_Class::timerSleep( const rtc_time_t& time)
+  {
+    M5.Rtc.clearIRQ();
+    M5.Rtc.setAlarmIRQ(time);
+    _timerSleep();
+  }
+
+  void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
+  {
+    M5.Rtc.clearIRQ();
+    M5.Rtc.setAlarmIRQ(date, time);
+    _timerSleep();
+  }
+
+  std::int32_t Power_Class::getBatteryLevel(void)
+  {
+    return -2;
+  }
+
+  void Power_Class::setBatteryCharge(bool enable)
+  {
+  }
+
+  void Power_Class::setChargeCurrent(std::uint16_t max_mA)
+  {
+  }
+
+  void Power_Class::setChargeVoltage(std::uint16_t max_mV)
+  {
+  }
+
+  Power_Class::is_charging_t Power_Class::isCharging(void)
+  {
+    return is_charging_t::charge_unknown;
+  }
+
+}
+
+#endif

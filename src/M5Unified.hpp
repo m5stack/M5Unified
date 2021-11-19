@@ -4,6 +4,8 @@
 #ifndef __M5UNIFIED_HPP__
 #define __M5UNIFIED_HPP__
 
+#include <sdkconfig.h>
+
 #if defined (ARDUINO)
  #if __has_include(<SD.h>)
   #include <SD.h>
@@ -143,6 +145,7 @@ namespace m5
     std::unique_ptr<m5gfx::LGFX_Device> _ex_display;
     board_t _switch_display(void)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (_board == board_t::board_M5ATOM)
       {
@@ -162,6 +165,7 @@ namespace m5
           return dsp->getBoard();
         }
       }
+#endif
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ ) || defined ( __M5GFX_M5UNITOLED__ )
       Power.setExtPower(true);

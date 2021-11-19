@@ -62,26 +62,35 @@ namespace m5
     {
       res = Mpu6886.getAccel(x, y, z);
     }
-    auto r = _rotation;
-    if (r)
+    if (!res)
     {
-      if (r == 2)
+      *x = 0;
+      *y = 0;
+      *z = 0;
+    }
+    else
+    {
+      auto r = _rotation;
+      if (r)
       {
-        *x = -(*x);
-        *z = -(*z);
-      }
-      else
-      {
-        auto tmpx = *x;
-        if (r == 1)
+        if (r == 2)
         {
-          *x = - *z;
-          *z = tmpx;
+          *x = -(*x);
+          *z = -(*z);
         }
         else
         {
-          *x = *z;
-          *z = - tmpx;
+          auto tmpx = *x;
+          if (r == 1)
+          {
+            *x = - *z;
+            *z = tmpx;
+          }
+          else
+          {
+            *x = *z;
+            *z = - tmpx;
+          }
         }
       }
     }
@@ -105,27 +114,35 @@ namespace m5
     {
       res = Mpu6886.getGyro(x, y, z);
     }
-
-    auto r = _rotation;
-    if (r)
+    if (!res)
     {
-      if (r == 2)
+      *x = 0;
+      *y = 0;
+      *z = 0;
+    }
+    else
+    {
+      auto r = _rotation;
+      if (r)
       {
-        *x = -(*x);
-        *z = -(*z);
-      }
-      else
-      {
-        auto tmpx = *x;
-        if (r == 1)
+        if (r == 2)
         {
-          *x = - *z;
-          *z = tmpx;
+          *x = -(*x);
+          *z = -(*z);
         }
         else
         {
-          *x = *z;
-          *z = - tmpx;
+          auto tmpx = *x;
+          if (r == 1)
+          {
+            *x = - *z;
+            *z = tmpx;
+          }
+          else
+          {
+            *x = *z;
+            *z = - tmpx;
+          }
         }
       }
     }
