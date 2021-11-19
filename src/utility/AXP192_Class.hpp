@@ -47,6 +47,13 @@ namespace m5
     inline void setLDO2(int voltage) { _set_LDO(2, voltage); }
     inline void setLDO3(int voltage) { _set_LDO(3, voltage); }
 
+    inline void setGPIO(uint8_t gpio_num, bool state) { if (gpio_num < 3) { _set_GPIO0_2(gpio_num, state); } else { _set_GPIO3_4(gpio_num - 3, state); } }
+    inline void setGPIO0(bool state) { _set_GPIO0_2(0, state); }
+    inline void setGPIO1(bool state) { _set_GPIO0_2(1, state); }
+    inline void setGPIO2(bool state) { _set_GPIO0_2(2, state); }
+    inline void setGPIO3(bool state) { _set_GPIO3_4(0, state); }
+    inline void setGPIO4(bool state) { _set_GPIO3_4(1, state); }
+
     void powerOff(void);
 
     void setAdcState(bool enable);
@@ -82,6 +89,8 @@ namespace m5
     void _set_DCDC(std::uint8_t num, int voltage);
     void _set_LDO(std::uint8_t num, int voltage);
     void _set_LDO2_LDO3(std::uint8_t num, int voltage);
+    void _set_GPIO0_2(std::uint8_t num, bool state);
+    void _set_GPIO3_4(std::uint8_t num, bool state);
   };
 }
 

@@ -15,14 +15,17 @@
 
 //----------------------------------------------------------------
 
+// If you use ATOMDisplay, write this.
+#define M5ATOMDISPLAY_WIDTH  1280  // width
+#define M5ATOMDISPLAY_HEIGHT  720  // height
+#define M5ATOMDISPLAY_RATE     60  // refresh rate
+#include <M5AtomDisplay.h>
+
 // If you use Unit LCD, write this.
 #include <M5UnitLCD.h>
 
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
-
-// If you use ATOMDisplay, write this.
-#include <M5AtomDisplay.h>
 
 // * The display header must be included before the M5Unified library.
 
@@ -36,42 +39,22 @@
 
 void setup(void)
 {
-  // Begin the M5 first.
-  M5.begin();
-
-  // If you use external port 5V output. write this.
-  M5.Power.setExtPower(true);
+  auto cfg = M5.config();
 
 #if defined ( ARDUINO )
-
-  // If you need Serial, write this.
-  // Serial.begin(115200);
-
-  // If you need SD card access, write this.
-  // SD.begin(4, SPI, 25000000);
-
+  cfg.serial_baudrate = 115200;   // default=115200. if "Serial" is not needed, set it to 0.
 #endif
+  cfg.clear_display = true;  // default=true. clear the screen when begin.
+  cfg.output_power  = true;  // default=true. use external port 5V output.
+  cfg.internal_imu  = true;  // default=true. use internal IMU.
+  cfg.internal_rtc  = true;  // default=true. use internal RTC.
+  cfg.external_imu  = true;  // default=false. use Unit Accel & Gyro.
+  cfg.external_rtc  = true;  // default=false. use Unit RTC.
+  cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
 
-  M5.Display.clear();
+  M5.begin(cfg);
 
-  // If you use IMU, write this.
-  if (M5.Imu.begin())
-  {
-    if (M5.getBoard() == m5::board_t::board_M5ATOM)
-    { // ATOM Matrix's IMU is oriented differently, so change the setting.
-      M5.Imu.setRotation(2);
-    }
-  }
-  else
-  { // If you use External Unit Accel & Gyro, write this.
-    M5.Imu.begin(&M5.Ex_I2C);
-  }
 
-  // If you use External Unit RTC, write this.
-  if (!M5.Rtc.isEnabled())
-  {
-    M5.Rtc.begin(&M5.Ex_I2C);
-  }
 
   if (M5.Rtc.isEnabled())
   {
@@ -86,7 +69,7 @@ void setup(void)
 //M5.Display.setEpdMode(epd_mode_t::epd_quality); // slow but high quality. (for image)
 
   /// For models with LCD : backlight control (0~255)
-  M5.Display.setBrightness(160);
+  M5.Display.setBrightness(128);
 
   if (M5.Display.width() < M5.Display.height())
   { /// Landscape mode.
@@ -161,8 +144,6 @@ void setup(void)
   M5.Display.print("IMU:");
   M5.Display.println(name);
   M5.Display.endWrite();
-
-  // M5.Display.setAutoDisplay(false);
 }
 
 void loop(void)
@@ -179,7 +160,7 @@ void loop(void)
   M5Stick C/CPlus:             BtnA,BtnB,     BtnPWR
   M5Stick CoreInk:             BtnA,BtnB,BtnC,BtnPWR,BtnEXT
   M5Paper:                     BtnA,BtnB,BtnC
-  M5Station:                   BtnA,BtnB,BtnC
+  M5Station:                   BtnA,BtnB,BtnC,BtnPWR
   M5Tough:                                    BtnPWR
   M5ATOM:                      BtnA
 */
@@ -242,42 +223,19 @@ void loop(void)
     M5.Display.fillRect(0, h*6, h, h-1, colors[state]);
   }
 
-//------------------- RTC test
   static uint32_t prev_sec;
   uint32_t sec = m5gfx::millis() / 1000;
   if (prev_sec != sec)
   {
     prev_sec = sec;
 
-    M5.Display.startWrite();
-    if (M5.Rtc.isEnabled())
-    {
-      static constexpr const char* const wd[7] = {"Sun","Mon","Tue","Wed","Thr","Fri","Sat"};
-      m5::rtc_datetime_t dt;
-      if (M5.Rtc.getDateTime(&dt))
-      {
-        char buf[32];
-        snprintf( buf, 30, "%04d/%02d/%02d(%s)"
-                , dt.date.year
-                , dt.date.month
-                , dt.date.date
-                , wd[dt.date.weekDay]
-                );
-        M5.Display.drawString(buf, M5.Display.width() / 2, 0);
-        snprintf( buf, 30, "%02d:%02d:%02d"
-                , dt.time.hours
-                , dt.time.minutes
-                , dt.time.seconds
-                );
-        M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
-      }
-    }
 //------------------- Battery level
     static int prev_battery = INT_MAX;
     int battery = M5.Power.getBatteryLevel();
     if (prev_battery != battery)
     {
       prev_battery = battery;
+      M5.Display.startWrite();
       M5.Display.setCursor(0, M5.Display.fontHeight() * 2);
       M5.Display.print("Bat:");
       if (battery >= 0)
@@ -288,8 +246,63 @@ void loop(void)
       {
         M5.Display.print("none");
       }
+      M5.Display.endWrite();
     }
-    M5.Display.endWrite();
+//------------------- RTC test
+    if (M5.Rtc.isEnabled())
+    {
+      static constexpr const char* const wd[] = {"Sun","Mon","Tue","Wed","Thr","Fri","Sat","ERR"};
+      char buf[32];
+//*
+      /// Get the date and time from the RTC and display it.
+      m5::rtc_datetime_t dt;
+      if (M5.Rtc.getDateTime(&dt))
+      {
+        M5.Display.startWrite();
+        snprintf( buf, 30, "%04d/%02d/%02d(%s)"
+                , dt.date.year
+                , dt.date.month
+                , dt.date.date
+                , wd[dt.date.weekDay & 7]
+                );
+        M5.Display.drawString(buf, M5.Display.width() / 2, 0);
+        snprintf( buf, 30, "%02d:%02d:%02d"
+                , dt.time.hours
+                , dt.time.minutes
+                , dt.time.seconds
+                );
+        M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
+        M5.Display.endWrite();
+      }
+      else
+      {
+        M5.Display.drawString("RTC error", M5.Display.width() / 2, M5.Display.fontHeight()>>1);
+      }
+/*/
+/// In the example above, the date and time are obtained through I2C communication with the RTC.
+/// However, since M5Unified synchronizes the ESP32's internal clock at startup, 
+/// it is also possible to get the date and time, as shown in the example below.
+/// ※ Note that there will be an error of a few seconds per day. 
+///    You may want to call M5.Rtc.setSystemTimeFromRtc() periodically to synchronize.
+      auto t = time(nullptr);
+      auto time = localtime(&t);
+      M5.Display.startWrite();
+      snprintf( buf, 30, "%04d/%02d/%02d(%s)"
+              , time->tm_year + 1900
+              , time->tm_mon + 1
+              , time->tm_mday
+              , wd[time->tm_wday & 7]
+              );
+      M5.Display.drawString(buf, M5.Display.width() / 2, 0);
+      snprintf( buf, 30, "%02d:%02d:%02d"
+              , time->tm_hour
+              , time->tm_min
+              , time->tm_sec
+              );
+      M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
+      M5.Display.endWrite();
+//*/
+    }
   }
 
 //------------------- IMU test

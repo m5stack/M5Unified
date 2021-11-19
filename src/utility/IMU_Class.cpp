@@ -47,23 +47,20 @@ namespace m5
 
   bool IMU_Class::getAccel(float *x, float *y, float *z)
   {
+    bool res = false;
     if (_imu == imu_t::imu_unknown)
     {
-      *x = 0;
-      *y = 0;
-      *z = 0;
-      return false;
     }
     if (_imu == imu_t::imu_sh200q)
     {
-      Sh200q.getAccel(x, y, z);
+      res = Sh200q.getAccel(x, y, z);
     }
     else
     // if (_imu == imu_t::imu_mpu6050
     //  || _imu == imu_t::imu_mpu6886
     //  || _imu == imu_t::imu_mpu9250)
     {
-      Mpu6886.getAccel(x, y, z);
+      res = Mpu6886.getAccel(x, y, z);
     }
     auto r = _rotation;
     if (r)
@@ -88,29 +85,27 @@ namespace m5
         }
       }
     }
-    return true;
+    return res;
   }
 
   bool IMU_Class::getGyro(float *x, float *y, float *z)
   {
+    bool res = false;
     if (_imu == imu_t::imu_unknown)
     {
-      *x = 0;
-      *y = 0;
-      *z = 0;
-      return false;
     }
     if (_imu == imu_t::imu_sh200q)
     {
-      Sh200q.getGyro(x, y, z);
+      res = Sh200q.getGyro(x, y, z);
     }
     else
     // if (_imu == imu_t::imu_mpu6050
     //  || _imu == imu_t::imu_mpu6886
     //  || _imu == imu_t::imu_mpu9250)
     {
-      Mpu6886.getGyro(x, y, z);
+      res = Mpu6886.getGyro(x, y, z);
     }
+
     auto r = _rotation;
     if (r)
     {
@@ -134,6 +129,6 @@ namespace m5
         }
       }
     }
-    return true;
+    return res;
   }
 }

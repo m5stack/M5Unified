@@ -2,7 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "Touch_Class.hpp"
-#include "../M5Unified.hpp"
 
 namespace m5
 {
@@ -53,9 +52,9 @@ namespace m5
       det->size = tp->size;
       det->id   = tp->id;
       if (!(tm & touch_state_t::mask_moving))
-      { // 未フリック時の処理
+      { // Processing when not flicked.
         if (tm & touch_state_t::mask_touch)
-        { // タッチ直後でない
+        { // Not immediately after the touch.
           if (abs(det->base_x - tp->x) > _flickThresh
            || abs(det->base_y - tp->y) > _flickThresh)
           {
@@ -63,7 +62,7 @@ namespace m5
             tm = static_cast<touch_state_t>(tm | touch_state_t::flick_begin);
           }
           else if (!(tm & touch_state_t::mask_holding))
-          { // ホールド時間が経過していない
+          { // The hold time has not elapsed.
             if (msec - det->base_msec > _msecHold)
             {
               tm = touch_state_t::hold_begin;

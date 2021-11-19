@@ -3,7 +3,7 @@
 
 #include "RTC8563_Class.hpp"
 
-#include <esp_log.h>
+#include <sys/time.h>
 
 namespace m5
 {
@@ -40,7 +40,7 @@ namespace m5
   {
     std::uint8_t buf[7] = { 0 };
 
-    if (!readRegister(0x02, buf, 7)) { return false; }
+    if (!isEnabled() || !readRegister(0x02, buf, 7)) { return false; }
 
     datetime->time.seconds = bcd2ToByte(buf[0] & 0x7f);
     datetime->time.minutes = bcd2ToByte(buf[1] & 0x7f);
@@ -59,7 +59,7 @@ namespace m5
   {
     std::uint8_t buf[3] = { 0 };
 
-    if (!readRegister(0x02, buf, 3)) { return false; }
+    if (!isEnabled() || !readRegister(0x02, buf, 3)) { return false; }
 
     time->seconds = bcd2ToByte(buf[0] & 0x7f);
     time->minutes = bcd2ToByte(buf[1] & 0x7f);
@@ -246,4 +246,23 @@ namespace m5
     writeRegister8(0x01, 0x00);
   }
 
+  void RTC8563_Class::setSystemTimeFromRtc(void)
+  {
+    rtc_datetime_t dt;
+    if (getDateTime(&dt))
+    {
+      tm t_st;
+      t_st.tm_isdst = -1;
+      t_st.tm_year = dt.date.year - 1900;
+      t_st.tm_mon  = dt.date.month - 1;
+      t_st.tm_mday = dt.date.date;
+      t_st.tm_hour = dt.time.hours;
+      t_st.tm_min  = dt.time.minutes;
+      t_st.tm_sec  = dt.time.seconds;
+      timeval now;
+      now.tv_sec = mktime(&t_st);
+      now.tv_usec = 0;
+      settimeofday(&now, nullptr);
+    }
+  }
 }

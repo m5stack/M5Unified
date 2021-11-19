@@ -43,6 +43,39 @@ namespace m5
   class M5Unified
   {
   public:
+    struct config_t
+    {
+#if defined ( ARDUINO )
+
+      /// use "Serial" begin.
+      uint32_t serial_baudrate = 115200;
+
+#endif
+
+      /// Clear the screen.
+      bool clear_display = true;
+
+      /// use external port 5V output.
+      bool output_power  = true;
+
+      /// use internal IMU.
+      bool internal_imu  = true;
+
+      /// use internal RTC.
+      bool internal_rtc  = true;
+
+      /// use Unit Accel & Gyro.
+      bool external_imu  = false;
+
+      /// use Unit RTC.
+      bool external_rtc  = false;
+
+      /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
+      uint8_t led_brightness = 0;
+    };
+
+    config_t config(void) const { return config_t(); }
+
     /// get the board type of the runtime environment.
     /// @return board type
     board_t getBoard(void) const { return _board; }
@@ -50,21 +83,25 @@ namespace m5
     /// Perform initialization process at startup.
     void begin(void)
     {
+      begin(config_t{});
+    }
+    void begin(const config_t& cfg)
+    {
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
       bool res = Display.init_without_reset();
-      // _board = Display.getBoard();
       _board = _check_boardtype(Display.getBoard());
       if (!res)
       {
         Display._set_board(_switch_display());
       }
-      _begin();
+      _begin(cfg);
       Display.setBrightness(brightness);
     }
 
     /// To call this function in a loop function.
     void update(void);
+
 
     M5GFX Display;
     M5GFX &Lcd = Display;
@@ -81,7 +118,7 @@ namespace m5
   M5Stick C/CPlus:             BtnA,BtnB,     BtnPWR
   M5Stick CoreInk:             BtnA,BtnB,BtnC,BtnPWR,BtnEXT
   M5Paper:                     BtnA,BtnB,BtnC
-  M5Station:                   BtnA,BtnB,BtnC
+  M5Station:                   BtnA,BtnB,BtnC,BtnPWR
   M5Tough:                                    BtnPWR
   M5ATOM:                      BtnA
 */
@@ -100,7 +137,7 @@ namespace m5
   private:
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
-    void _begin(void);
+    void _begin(const config_t& cfg);
     board_t _check_boardtype(board_t);
 
     std::unique_ptr<m5gfx::LGFX_Device> _ex_display;
@@ -109,7 +146,16 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (_board == board_t::board_M5ATOM)
       {
-        auto dsp = new M5AtomDisplay();
+#ifndef M5ATOMDISPLAY_WIDTH
+#define M5ATOMDISPLAY_WIDTH 1280
+#endif
+#ifndef M5ATOMDISPLAY_HEIGHT
+#define M5ATOMDISPLAY_HEIGHT 720
+#endif
+#ifndef M5ATOMDISPLAY_RATE
+#define M5ATOMDISPLAY_RATE 60
+#endif
+        auto dsp = new M5AtomDisplay(M5ATOMDISPLAY_WIDTH, M5ATOMDISPLAY_HEIGHT, M5ATOMDISPLAY_RATE);
         _ex_display.reset(dsp);
         if (Display._init_with_panel(dsp->getPanel()))
         {

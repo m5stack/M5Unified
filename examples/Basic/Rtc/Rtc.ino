@@ -15,21 +15,16 @@
 
 void setup(void)
 {
-  Serial.begin(115200);
+  auto cfg = M5.config();
 
-  M5.begin();
+  cfg.external_rtc  = true;  // default=false. use Unit RTC.
 
-  if (!M5.Rtc.isEnabled()) // (Internal RTC not found)
-  { // External RTC setup ( for Unit RTC )
-    M5.Power.setExtPower(true);
-    M5.Ex_I2C.begin();
-    M5.Rtc.begin(&M5.Ex_I2C);
-  }
+  M5.begin(cfg);
 
   if (!M5.Rtc.isEnabled())
   { 
     Serial.println("RTC not found.");
-    for (;;) { m5gfx::delay(500); }
+    for (;;) { vTaskDelay(500); }
   }
 
   Serial.println("RTC found.");

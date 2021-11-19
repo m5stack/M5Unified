@@ -43,7 +43,7 @@ namespace m5
       m5gfx::pinMode(TimerCam_POWER_HOLD_PIN, m5gfx::pin_mode_t::output);
       m5gfx::gpio_hi(TimerCam_POWER_HOLD_PIN);
       m5gfx::pinMode(TimerCam_LED_PIN, m5gfx::pin_mode_t::output);
-      m5gfx::gpio_hi(TimerCam_LED_PIN);
+      m5gfx::gpio_lo(TimerCam_LED_PIN);  // system LED off
       _batAdc = ADC1_GPIO38_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 1.513f;
@@ -71,9 +71,12 @@ namespace m5
       _wakeupPin = GPIO_NUM_39; // touch panel INT;
       NON_BREAK;
 
+    case board_t::board_M5Station:
+      m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::output);
+      NON_BREAK;
+
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-    case board_t::board_M5Station:
       _pmic = Power_Class::pmic_t::pmic_axp192;
       Axp192.begin();
       break;
@@ -185,7 +188,9 @@ namespace m5
         , 0x84, 0x32    // reg84h ADC 25Hz
         , 0x90, 0x07    // reg90h GPIO0(LDOio0) floating
         , 0x91, 0xA0    // reg91h GPIO0(LDOio0) 2.8V
-
+        , 0x98, 0x00    // PWM1 X
+        , 0x99, 0xFF    // PWM1 Y1
+        , 0x9A, 0xFF    // PWM1 Y1
         , 0x12, 0x07    // reg12h enable DCDC1,DCDC3,LDO2  /  disable LDO3,DCDC2,EXTEN
         , 0x26, 0x6A    // reg26h DCDC1 3350mV (ESP32 VDD)
         };
@@ -204,7 +209,8 @@ namespace m5
       case board_t::board_M5StackCore2:
         Axp192.setLDO2(3300); // LCD + SD peripheral power supply
         Axp192.setLDO3(0);    // VIB_MOTOR STOP
-        Axp192.writeRegister8(0x92, 0x00);  // GPIO1 NMOS OpenDrain (SystemLED)
+        Axp192.writeRegister8(0x9A, 255);  // PWM 255 (LED OFF)
+        Axp192.writeRegister8(0x92, 0x02); // GPIO1 PWM
         Axp192.setChargeCurrent(390); // Core2 battery = 390mAh
         break;
 
@@ -215,13 +221,14 @@ namespace m5
 
       case board_t::board_M5Station:
         {
-          static constexpr std::uint8_t reg92h_95h[] = 
+          static constexpr std::uint8_t reg92h_96h[] = 
           { 0x00 // GPIO1 NMOS OpenDrain
           , 0x00 // GPIO2 NMOS OpenDrain
-          , 0x00 // GPIO3 low, GPIO4 low
+          , 0x00 // GPIO0~2 low
           , 0x05 // GPIO3 NMOS OpenDrain, GPIO4 NMOS OpenDrain
+          , 0x00 // GPIO3 low, GPIO4 low
           };
-          Axp192.writeRegister(0x92, reg92h_95h, sizeof(reg92h_95h));
+          Axp192.writeRegister(0x92, reg92h_96h, sizeof(reg92h_96h));
         }
         break;
 
@@ -233,7 +240,7 @@ namespace m5
     return (_pmic != pmic_t::pmic_unknown);
   }
 
-  void Power_Class::setExtPower(bool enable)
+  void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
   {
     switch (M5.getBoard())
     {
@@ -250,6 +257,52 @@ namespace m5
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
       Axp192.setEXTEN(enable);
+      break;
+
+    case board_t::board_M5Station:
+      for (int i = 0; i < 5; ++i)
+      {
+        if (port_mask & (1 << i)) { Axp192.setGPIO(i, enable); }
+      }
+      if (port_mask & ext_port_mask_t::ext_USB)
+      {
+        if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
+        else        { m5gfx::gpio_lo(GPIO_NUM_12); }
+      }
+
+    default:
+      break;
+    }
+  }
+
+  void Power_Class::setLed(uint8_t brightness)
+  {
+    static std::unique_ptr<m5gfx::Light_PWM> led;
+
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5StackCore2:
+      Axp192.writeRegister8(0x9A, 255-brightness);
+      break;
+
+    case board_t::board_M5StackCoreInk:
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+    case board_t::board_M5TimerCam:
+      {
+        if (led.get() == nullptr)
+        {
+          led.reset(new m5gfx::Light_PWM());
+          auto cfg = led->config();
+          cfg.invert = (M5.getBoard() != board_t::board_M5TimerCam);
+          /// M5StickC,CPlus /CoreInk : LED = GPIO10 / TimerCam:LED = GPIO2
+          cfg.pin_bl = cfg.invert ? 10 : TimerCam_LED_PIN;
+          cfg.pwm_channel = 7;
+          led->config(cfg);
+          led->init(brightness);
+        }
+        led->setBrightness(brightness);
+      }
       break;
 
     default:

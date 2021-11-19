@@ -100,6 +100,8 @@ namespace m5
     int setAlarmIRQ(const rtc_time_t &time);
     int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time);
 
+    void setSystemTimeFromRtc(void);
+
     bool getIRQstatus(void);
     void clearIRQ(void);
     void disableIRQ(void);
