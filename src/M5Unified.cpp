@@ -34,7 +34,7 @@ namespace m5
   {
     if (board == board_t::board_unknown)
     {
-      switch (esp_efuse_get_pkg_ver())
+      switch (m5gfx::get_pkg_ver())
       {
       case EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6:
         board = board_t::board_M5TimerCam;
@@ -207,7 +207,7 @@ namespace m5
     case board_t::board_M5Tough:
  /// for GPIO 36,39 Chattering prevention.
 #if defined (ESP_IDF_VERSION_VAL)
-  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(3, 3, 5)
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(3, 1, 1)
       adc_power_acquire();
   #else
       adc_power_on();

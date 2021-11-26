@@ -95,7 +95,7 @@ namespace m5
       _board = _check_boardtype(Display.getBoard());
       if (!res)
       {
-        Display._set_board(_switch_display());
+        ((M5GFX_*)&Display)->setBoard(_switch_display());
       }
       _begin(cfg);
       Display.setBrightness(brightness);
@@ -149,49 +149,50 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (_board == board_t::board_M5ATOM)
       {
-#ifndef M5ATOMDISPLAY_WIDTH
-#define M5ATOMDISPLAY_WIDTH 1280
-#endif
-#ifndef M5ATOMDISPLAY_HEIGHT
-#define M5ATOMDISPLAY_HEIGHT 720
-#endif
-#ifndef M5ATOMDISPLAY_RATE
-#define M5ATOMDISPLAY_RATE 60
-#endif
-        auto dsp = new M5AtomDisplay(M5ATOMDISPLAY_WIDTH, M5ATOMDISPLAY_HEIGHT, M5ATOMDISPLAY_RATE);
+        auto dsp = new M5AtomDisplay;
         _ex_display.reset(dsp);
-        if (Display._init_with_panel(dsp->getPanel()))
+        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
         {
           return dsp->getBoard();
         }
       }
 #endif
 #endif
-#if defined ( __M5GFX_M5UNITLCD__ ) || defined ( __M5GFX_M5UNITOLED__ )
-      Power.setExtPower(true);
-#endif
+
 #if defined ( __M5GFX_M5UNITLCD__ )
       {
         auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
         _ex_display.reset(dsp);
-        if (Display._init_with_panel(dsp->getPanel()))
+        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
         {
           return dsp->getBoard();
         }
       }
 #endif
+
 #if defined ( __M5GFX_M5UNITOLED__ )
       {
         auto dsp = new M5UnitOLED(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
         _ex_display.reset(dsp);
-        if (Display._init_with_panel(dsp->getPanel()))
+        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
         {
           return dsp->getBoard();
         }
       }
 #endif
-      return Display.getBoard();
+      return ((M5GFX_*)&Display)->getBoard();
     }
+
+  private:
+    struct M5GFX_ : public M5GFX
+    {
+      void setBoard(board_t board) { _board = board; }
+      bool init_with_panel(lgfx::Panel_Device* panel)
+      {
+        setPanel(panel);
+        return LGFX_Device::init_impl(true, true);
+      }
+    };
   };
 }
 

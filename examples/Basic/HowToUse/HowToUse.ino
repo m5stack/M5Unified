@@ -16,9 +16,9 @@
 //----------------------------------------------------------------
 
 // If you use ATOMDisplay, write this.
-#define M5ATOMDISPLAY_WIDTH  1280  // width
-#define M5ATOMDISPLAY_HEIGHT  720  // height
-#define M5ATOMDISPLAY_RATE     60  // refresh rate
+// #define M5ATOMDISPLAY_LOGICAL_WIDTH  1280  // width
+// #define M5ATOMDISPLAY_LOGICAL_HEIGHT  720  // height
+// #define M5ATOMDISPLAY_REFRESH_RATE     60  // refresh rate
 #include <M5AtomDisplay.h>
 
 // If you use Unit LCD, write this.
