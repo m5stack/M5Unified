@@ -15,7 +15,7 @@
       "name": "M5GFX"
     }
   ],
-  "version": "0.0.2",
+  "version": "0.0.3",
   "framework": "arduino",
   "platforms": "espressif32",
   "headers": "M5Unified.h"
