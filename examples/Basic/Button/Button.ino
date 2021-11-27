@@ -6,14 +6,8 @@ void setup(void)
 {
   M5.begin();
 
-// M5.Power.setExtPower(true);  // If you need external port 5V output.
-// M5.Imu.begin();              // If you need IMU
-// SD.begin(4, SPI, 25000000);  // If you need SD card access
-// Serial.begin(115200);        // If you need Serial
-
-  M5.Display.setEpdMode(epd_mode_t::epd_fastest); /// For models with EPD: refresh control
-
-  M5.Display.setBrightness(160); /// For models with LCD: backlight control (0~255)
+  /// For models with EPD : refresh control
+  M5.Display.setEpdMode(epd_mode_t::epd_fastest); // fastest but very-low quality.
 
   if (M5.Display.width() < M5.Display.height())
   { /// Landscape mode.
@@ -26,17 +20,21 @@ void loop(void)
   vTaskDelay(1);
 
   M5.update();
-
+//------------------- Button test
 /*
-  /// List of available buttons:
+/// List of available buttons:
   M5Stack BASIC/GRAY/GO/FIRE:  BtnA,BtnB,BtnC
   M5Stack Core2:               BtnA,BtnB,BtnC,BtnPWR
   M5Stick C/CPlus:             BtnA,BtnB,     BtnPWR
   M5Stick CoreInk:             BtnA,BtnB,BtnC,BtnPWR,BtnEXT
   M5Paper:                     BtnA,BtnB,BtnC
-  M5Station:                   BtnA,BtnB,BtnC
+  M5Station:                   BtnA,BtnB,BtnC,BtnPWR
   M5Tough:                                    BtnPWR
+  M5ATOM:                      BtnA
 */
+
+  static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE };
+  static constexpr const char* const names[] = { "none", "wasHold", "wasClicked", "wasPressed", "wasReleased" };
 
   M5.Display.startWrite();
 
@@ -44,49 +42,59 @@ void loop(void)
   int state = M5.BtnPWR.wasHold() ? 1
             : M5.BtnPWR.wasClicked() ? 2
             : 0;
+
+  int w = M5.Display.width() / 5;
+  int h = M5.Display.height();
   if (state)
   {
-    ESP_LOGI("loop", "BtnPWR:%s", (state == 1) ? "wasHold" : "wasClicked");
-    M5.Display.fillRect(0, 0, 38, 38, (state == 1) ? TFT_CYAN : TFT_RED);
+    ESP_LOGI("loop", "BtnPWR:%s", names[state]);
+    M5.Display.fillRect(w*0, 0, w-1, h, colors[state]);
   }
 
   /// BtnA,BtnB,BtnC,BtnEXT, BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
-  state = M5.BtnA.wasPressed() ? 1
-        : M5.BtnA.wasReleased() ? 2
+  state = M5.BtnA.wasHold() ? 1
+        : M5.BtnA.wasClicked() ? 2
+        : M5.BtnA.wasPressed() ? 3
+        : M5.BtnA.wasReleased() ? 4
         : 0;
   if (state)
   {
-    ESP_LOGI("loop", "BtnA:%s", (state == 1) ? "wasPressed" : "wasRelease");
-    M5.Display.fillRect(40, 0, 38, 38, (state == 1) ? TFT_YELLOW : TFT_BLUE);
+    ESP_LOGI("loop", "BtnA:%s", names[state]);
+    M5.Display.fillRect(w*1, 0, w-1, h, colors[state]);
   }
 
-  state = M5.BtnB.wasPressed() ? 1
-        : M5.BtnB.wasReleased() ? 2
+  state = M5.BtnB.wasHold() ? 1
+        : M5.BtnB.wasClicked() ? 2
+        : M5.BtnB.wasPressed() ? 3
+        : M5.BtnB.wasReleased() ? 4
         : 0;
   if (state)
   {
-    ESP_LOGI("loop", "BtnB:%s", (state == 1) ? "wasPressed" : "wasRelease");
-    M5.Display.fillRect(80, 0, 38, 38, (state == 1) ? TFT_YELLOW : TFT_BLUE);
+    ESP_LOGI("loop", "BtnB:%s", names[state]);
+    M5.Display.fillRect(w*2, 0, w-1, h, colors[state]);
   }
 
-  state = M5.BtnC.wasPressed() ? 1
-        : M5.BtnC.wasReleased() ? 2
+  state = M5.BtnC.wasHold() ? 1
+        : M5.BtnC.wasClicked() ? 2
+        : M5.BtnC.wasPressed() ? 3
+        : M5.BtnC.wasReleased() ? 4
         : 0;
   if (state)
   {
-    ESP_LOGI("loop", "BtnC:%s", (state == 1) ? "wasPressed" : "wasRelease");
-    M5.Display.fillRect(120, 0, 38, 38, (state == 1) ? TFT_YELLOW : TFT_BLUE);
+    ESP_LOGI("loop", "BtnC:%s", names[state]);
+    M5.Display.fillRect(w*3, 0, w-1, h, colors[state]);
   }
 
-  state = M5.BtnEXT.wasPressed() ? 1
-        : M5.BtnEXT.wasReleased() ? 2
+  state = M5.BtnEXT.wasHold() ? 1
+        : M5.BtnEXT.wasClicked() ? 2
+        : M5.BtnEXT.wasPressed() ? 3
+        : M5.BtnEXT.wasReleased() ? 4
         : 0;
   if (state)
   {
-    ESP_LOGI("loop", "BtnEXT:%s", (state == 1) ? "wasPressed" : "wasRelease");
-    M5.Display.fillRect(160, 0, 38, 38, (state == 1) ? TFT_YELLOW : TFT_BLUE);
+    ESP_LOGI("loop", "BtnEXT:%s", names[state]);
+    M5.Display.fillRect(w*4, 0, w-1, h, colors[state]);
   }
-
   M5.Display.endWrite();
 }
 

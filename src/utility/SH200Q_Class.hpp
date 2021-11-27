@@ -17,15 +17,16 @@ namespace m5
     : I2C_Device ( i2c_addr, freq, i2c )
     {}
 
-    bool begin(void);
+    bool begin(I2C_Class* i2c = nullptr);
+
     std::uint8_t WhoAmI(void);
 
-    void getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const;
-    void getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const;
+    bool getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const;
+    bool getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const;
 
-    void getAccel(float* ax, float* ay, float* az);
-    void getGyro(float* gx, float* gy, float* gz);
-    void getTemp(float *t);
+    bool getAccel(float* ax, float* ay, float* az) const;
+    bool getGyro(float* gx, float* gy, float* gz) const;
+    bool getTemp(float *t) const;
   };
 }
 

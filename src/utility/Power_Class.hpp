@@ -7,11 +7,24 @@
 #include "I2C_Class.hpp"
 #include "AXP192_Class.hpp"
 #include "IP5306_Class.hpp"
-#include "BM8563_Class.hpp"
+#include "RTC8563_Class.hpp"
+
+#include <driver/adc.h>
 
 namespace m5
 {
   class M5Unified;
+
+  enum ext_port_mask_t
+  { ext_none = 0
+  , ext_PA  = 0b00000001
+  , ext_PB1 = 0b00000010
+  , ext_PB2 = 0b00000100
+  , ext_PC1 = 0b00001000
+  , ext_PC2 = 0b00010000
+  , ext_USB = 0b00100000
+  , ext_HAT = 0b01000000
+  };
 
   class Power_Class
   {
@@ -35,7 +48,12 @@ namespace m5
 
     /// Set power supply to external ports.
     /// @param enable true=output / false=input
-    void setExtPower(bool enable);
+    /// @param port_mask for M5Station. ext_port (bitmask).
+    void setExtPower(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
+
+    /// Turn on/off the power LED.
+    /// @param brightness 0=OFF: 1~255=ON (Set brightness if possible.)
+    void setLed(uint8_t brightness = 255);
 
     /// all power off.
     void powerOff(void);
@@ -97,7 +115,9 @@ namespace m5
     void _timerSleep(void);
 
     std::int8_t _wakeupPin = -1;
+    std::int8_t _pwrHoldPin = -1;
     pmic_t _pmic = pmic_t::pmic_unknown;
+    adc1_channel_t _batAdc;
     float _adc_ratio = 0;
   };
 }

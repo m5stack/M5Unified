@@ -8,10 +8,18 @@
 namespace m5
 {
 
-  bool MPU6886_Class::begin(void)
+  bool MPU6886_Class::begin(I2C_Class* i2c)
   {
+    if (i2c)
+    {
+      _i2c = i2c;
+    }
+
     // WHO_AM_I : IMU Check
-    if (whoAmI() != 0x19)
+    _device_id = readRegister8(0x75);
+    if (_device_id != DEV_ID_MPU6886
+     && _device_id != DEV_ID_MPU6050
+     && _device_id != DEV_ID_MPU9250)
     {
       return false;
     }
@@ -62,46 +70,32 @@ namespace m5
 
   void MPU6886_Class::setGyroFsr(Gscale scale)
   {
+    scale = (Gscale)(scale & 3);
     _gscale = scale;
     writeRegister8(0x1B, scale << 3);
     vTaskDelay(10);
-    switch (scale)
-    {
-    case GFS_250DPS:
-      gRes = 250.0f / 32768.0f;
-      break;
-    case GFS_500DPS:
-      gRes = 500.0f / 32768.0f;
-      break;
-    case GFS_1000DPS:
-      gRes = 1000.0f / 32768.0f;
-      break;
-    case GFS_2000DPS:
-      gRes = 2000.0f / 32768.0f;
-      break;
-    }
+    static constexpr const float table[] =
+    {  250.0f / 32768.0f   // GFS_250DPS
+    ,  500.0f / 32768.0f   // GFS_500DPS
+    , 1000.0f / 32768.0f   // GFS_1000DPS
+    , 2000.0f / 32768.0f   // GFS_2000DPS
+    };
+    gRes = table[scale];
   }
 
   void MPU6886_Class::setAccelFsr(Ascale scale)
   {
+    scale = (Ascale)(scale & 3);
     _ascale = scale;
     writeRegister8(0x1C, scale << 3);
     vTaskDelay(10);
-    switch (scale)
-    {
-    case AFS_2G:
-      aRes = 2.0f / 32768.0f;
-      break;
-    case AFS_4G:
-      aRes = 4.0f / 32768.0f;
-      break;
-    case AFS_8G:
-      aRes = 8.0f / 32768.0f;
-      break;
-    case AFS_16G:
-      aRes = 16.0f / 32768.0f;
-      break;
-    }
+    static constexpr const float table[] =
+    {  2.0f / 32768.0f  // AFS_2G
+    ,  4.0f / 32768.0f  // AFS_4G
+    ,  8.0f / 32768.0f  // AFS_8G
+    , 16.0f / 32768.0f  // AFS_16G
+    };
+    aRes = table[scale];
   }
 
   bool MPU6886_Class::setINTPinActiveLogic(bool level)
@@ -112,53 +106,53 @@ namespace m5
     return writeRegister8(0x37, tmp);
   }
 
-  std::uint8_t MPU6886_Class::whoAmI(void)
-  {
-    return readRegister8(0x75);
-  }
-
-  void MPU6886_Class::getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const
+  bool MPU6886_Class::getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const
   {
     std::uint8_t buf[6];
-    readRegister(0x3B, buf, 6); // MPU6886_ACCEL
-    *ax = (buf[0] << 8) | buf[1];
-    *ay = (buf[2] << 8) | buf[3];
-    *az = (buf[4] << 8) | buf[5];
+    bool res = readRegister(0x3B, buf, 6);
+    *ax = (buf[0] << 8) + buf[1];
+    *ay = (buf[2] << 8) + buf[3];
+    *az = (buf[4] << 8) + buf[5];
+    return res;
   }
 
-  void MPU6886_Class::getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const
+  bool MPU6886_Class::getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const
   {
     std::uint8_t buf[6];
-    readRegister(0x43, buf, 6); // MPU6886_GYRO
-    *gx = (buf[0] << 8) | buf[1];
-    *gy = (buf[2] << 8) | buf[3];
-    *gz = (buf[4] << 8) | buf[5];
+    bool res = readRegister(0x43, buf, 6);
+    *gx = (buf[0] << 8) + buf[1];
+    *gy = (buf[2] << 8) + buf[3];
+    *gz = (buf[4] << 8) + buf[5];
+    return res;
   }
 
-  void MPU6886_Class::getAccel(float* ax, float* ay, float* az)
+  bool MPU6886_Class::getAccel(float* ax, float* ay, float* az) const
   {
     static constexpr float aRes = 8.0f / 32768.0f;
     std::uint8_t buf[6];
-    readRegister(0x3B, buf, 6);
-    *ax = (std::int16_t)((buf[0] << 8) | buf[1]) * aRes;
-    *ay = (std::int16_t)((buf[2] << 8) | buf[3]) * aRes;
-    *az = (std::int16_t)((buf[4] << 8) | buf[5]) * aRes;
+    bool res = readRegister(0x3B, buf, 6);
+    *ax = (std::int16_t)((buf[0] << 8) + buf[1]) * aRes;
+    *ay = (std::int16_t)((buf[2] << 8) + buf[3]) * aRes;
+    *az = (std::int16_t)((buf[4] << 8) + buf[5]) * aRes;
+    return res;
   }
 
-  void MPU6886_Class::getGyro(float* gx, float* gy, float* gz)
+  bool MPU6886_Class::getGyro(float* gx, float* gy, float* gz) const
   {
     static constexpr float gRes = 2000.0f / 32768.0f;
     std::uint8_t buf[6];
-    readRegister(0x43, buf, 6);
-    *gx = (std::int16_t)((buf[0] << 8) | buf[1]) * gRes;
-    *gy = (std::int16_t)((buf[2] << 8) | buf[3]) * gRes;
-    *gz = (std::int16_t)((buf[4] << 8) | buf[5]) * gRes;
+    bool res = readRegister(0x43, buf, 6);
+    *gx = (std::int16_t)((buf[0] << 8) + buf[1]) * gRes;
+    *gy = (std::int16_t)((buf[2] << 8) + buf[3]) * gRes;
+    *gz = (std::int16_t)((buf[4] << 8) + buf[5]) * gRes;
+    return res;
   }
 
-  void MPU6886_Class::getTemp(float *t)
+  bool MPU6886_Class::getTemp(float *t) const
   {
     std::uint8_t buf[2];
-    readRegister(0x41, buf, 2);
-    *t = 25.0f + ((buf[0] << 8) | buf[1]) / 326.8f;
+    bool res = readRegister(0x41, buf, 2);
+    *t = 25.0f + ((buf[0] << 8) + buf[1]) / 326.8f;
+    return res;
   }
 }

@@ -3,88 +3,114 @@
 
 #include "M5Unified.hpp"
 
-#include <driver/adc.h>
-#include <esp_adc_cal.h>
-#include <esp_sleep.h>
-#include <esp_log.h>
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION_MAJOR >= 4
+  #define NON_BREAK ;[[fallthrough]];
+ #endif
+#endif
+
+#ifndef NON_BREAK
+#define NON_BREAK ;
+#endif
 
 /// global instance.
 m5::M5Unified M5;
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
- #define NON_BREAK ;[[fallthrough]];
-#else
- #define NON_BREAK ;
-#endif
+#include <driver/adc.h>
+#include <esp_adc_cal.h>
+#include <soc/efuse_reg.h>
 
 namespace m5
 {
-  static constexpr int TFCARD_CS_PIN =  4;
-  static constexpr int CoreInk_BUTTON_EXT_PIN =  5;
-  static constexpr int CoreInk_BUTTON_PWR_PIN = 27;
-
-  void M5Unified::begin(void)
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+  static constexpr gpio_num_t TFCARD_CS_PIN          = GPIO_NUM_4;
+  static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
+  static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
+#endif
+  board_t M5Unified::_check_boardtype(board_t board)
   {
-    auto brightness = Display.getBrightness();
-    Display.startWrite(false);
-    Display.setBrightness(0);
-    Display.init_without_reset();
-    _board = Display.getBoard();
-
-    if (_board == board_t::board_unknown)
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    if (board == board_t::board_unknown)
     {
+      switch (m5gfx::get_pkg_ver())
+      {
+      case EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6:
+        board = board_t::board_M5TimerCam;
+        break;
+
+      case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
+
+#if defined ( ARDUINO_STAMP_PICO )
+        board = board_t::board_M5StampPico;
+        break;
+#endif
+
+      case 6: // EFUSE_RD_CHIP_VER_PKG_ESP32PICOV3_02: // ATOM PSRAM
+        board = board_t::board_M5ATOM;
+        break;
+
+      default:
+
 #if defined ( ARDUINO_M5Stack_Core_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE )
 
-      _board = board_t::board_M5Stack;
+        board = board_t::board_M5Stack;
 
 #elif defined ( ARDUINO_M5STACK_Core2 )
 
-      _board = board_t::board_M5StackCore2;
+        board = board_t::board_M5StackCore2;
 
 #elif defined ( ARDUINO_M5Stick_C )
 
-      _board = board_t::board_M5StickC;
+        board = board_t::board_M5StickC;
 
 #elif defined ( ARDUINO_M5Stick_C_Plus )
 
-      _board = board_t::board_M5StickCPlus;
+        board = board_t::board_M5StickCPlus;
 
 #elif defined ( ARDUINO_M5Stack_CoreInk )
 
-      _board = board_t::board_M5StackCoreInk;
+        board = board_t::board_M5StackCoreInk;
 
 #elif defined ( ARDUINO_M5STACK_Paper )
 
-      _board = board_t::board_M5Paper;
+        board = board_t::board_M5Paper;
 
 #elif defined ( ARDUINO_M5STACK_TOUGH )
 
-      _board = board_t::board_M5Tough;
+        board = board_t::board_M5Tough;
 
 #elif defined ( ARDUINO_M5Stack_ATOM )
 
-      _board = board_t::board_M5ATOM;
+        board = board_t::board_M5ATOM;
 
 #elif defined ( ARDUINO_M5Stack_Timer_CAM )
 
-      _board = board_t::board_M5TimerCam;
+        board = board_t::board_M5TimerCam;
 
 #endif
+        break;
+      }
     }
 
     { /// setup Internal I2C
       i2c_port_t in_port = I2C_NUM_1;
-      int in_sda = 21;
-      int in_scl = 22;
-      switch (_board)
+      gpio_num_t in_sda = GPIO_NUM_21;
+      gpio_num_t in_scl = GPIO_NUM_22;
+      switch (board)
       {
       case board_t::board_M5ATOM:  // ATOM
-        in_sda = 25;
-        in_scl = 21;
+        in_sda = GPIO_NUM_25;
+        in_scl = GPIO_NUM_21;
+        break;
+
+      case board_t::board_M5TimerCam:
+        in_sda = GPIO_NUM_12;
+        in_scl = GPIO_NUM_14;
         break;
 
       case board_t::board_M5Stack:
-        // M5Stack basic/Fire/GO の内部I2CはGROVEポートと共通のため、I2C_NUM_0を用いる。;
+        // M5Stack Basic/Fire/GO の内部I2CはPortAと共通のため、I2C_NUM_0を用いる。;
         in_port = I2C_NUM_0;
         break;
 
@@ -94,40 +120,31 @@ namespace m5
       In_I2C.begin(in_port, in_sda, in_scl);
     }
 
-    auto wakeup_cause = esp_sleep_get_wakeup_cause();
-    Rtc.begin();
-    if (!Rtc.getIRQstatus()
-      && (wakeup_cause != ESP_SLEEP_WAKEUP_TIMER)
-      && (wakeup_cause != ESP_SLEEP_WAKEUP_EXT0))
-    { /// Does not clear the screen when waking up by timer or sleep release.
-      Display.clear();
-    }
-    Rtc.disableIRQ();
-
     { /// setup External I2C
       i2c_port_t ex_port = I2C_NUM_0;
-      int ex_sda = 32;
-      int ex_scl = 33;
-      switch (_board)
+      gpio_num_t ex_sda = GPIO_NUM_32;
+      gpio_num_t ex_scl = GPIO_NUM_33;
+      switch (board)
       {
       case board_t::board_M5Stack:
-        ex_sda = 21;
-        ex_scl = 22;
+        ex_sda = GPIO_NUM_21;
+        ex_scl = GPIO_NUM_22;
         break;
 
       case board_t::board_M5Paper:
-        ex_sda = 25;
-        ex_scl = 32;
+        ex_sda = GPIO_NUM_25;
+        ex_scl = GPIO_NUM_32;
         break;
 
-      case board_t::board_M5ATOM:  // ATOM
-        ex_sda = 26;
-        ex_scl = 32;
+      case board_t::board_M5ATOM:
+        ex_sda = GPIO_NUM_26;
+        ex_scl = GPIO_NUM_32;
         break;
 
       case board_t::board_M5TimerCam:
-        ex_sda =  4;
-        ex_scl = 13;
+        ex_sda = GPIO_NUM_4;
+        ex_scl = GPIO_NUM_13;
+        break;
 
       default:
         break;
@@ -135,11 +152,62 @@ namespace m5
       Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    if (board == board_t::board_unknown)
+    {
+      board = board_t::board_M5StampC3;
+    }
+
+    {
+      i2c_port_t in_port = I2C_NUM_0;
+      gpio_num_t in_sda = GPIO_NUM_1;
+      gpio_num_t in_scl = GPIO_NUM_0;
+      In_I2C.begin(in_port, in_sda, in_scl);
+    }
+
+    { /// setup External I2C
+      i2c_port_t ex_port = I2C_NUM_0;
+      gpio_num_t ex_sda = GPIO_NUM_1;
+      gpio_num_t ex_scl = GPIO_NUM_0;
+      Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
+    }
+#endif
+
+    return board;
+  }
+
+  void M5Unified::_begin(const config_t& cfg)
+  {
     /// setup power management ic
     Power.begin();
+    Power.setExtPower(cfg.output_power);
+    if (cfg.led_brightness)
+    {
+      M5.Power.setLed(cfg.led_brightness);
+    }
+
+    if (cfg.clear_display)
+    {
+      Display.clear();
+    }
+    if (nullptr != Display.touch())
+    {
+      Touch.begin(&Display);
+    }
+
+#if defined ( ARDUINO )
+
+    if (cfg.serial_baudrate)
+    {
+      Serial.begin(cfg.serial_baudrate);
+    }
+
+#endif
 
     switch (_board) /// setup Hardware Buttons
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5StackCoreInk:
       m5gfx::pinMode(CoreInk_BUTTON_EXT_PIN, m5gfx::pin_mode_t::input); // TopButton
       m5gfx::pinMode(CoreInk_BUTTON_PWR_PIN, m5gfx::pin_mode_t::input); // PowerButton
@@ -148,107 +216,152 @@ namespace m5
     case board_t::board_M5Paper:
     case board_t::board_M5Station:
     case board_t::board_M5Stack:
-      m5gfx::pinMode(38, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_38, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      m5gfx::pinMode(37, m5gfx::pin_mode_t::input);
-      m5gfx::pinMode(39, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5ATOM:
+    case board_t::board_M5StampPico:
+      m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      adc_power_acquire(); /// for GPIO 36,39 Chattering prevention.
+ /// for GPIO 36,39 Chattering prevention.
+#if defined (ESP_IDF_VERSION_VAL)
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(3, 1, 1)
+      adc_power_acquire();
+  #else
+      adc_power_on();
+  #endif
+#else
+      adc_power_on();
+#endif
       break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    case board_t::board_M5StampC3:
+      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input_pullup);
+      break;
+
+#endif
 
     default:
       break;
     }
 
-    Display.endWrite();
-    Display.setBrightness(brightness);
-
-    if (nullptr != Display.touch())
+    if (cfg.external_rtc || cfg.external_imu)
     {
-      Touch.begin(&Display);
+      M5.Ex_I2C.begin();
+    }
+
+    if (cfg.internal_rtc)
+    {
+      M5.Rtc.begin();
+    }
+    if (!M5.Rtc.isEnabled() && cfg.external_rtc)
+    {
+      M5.Rtc.begin(&M5.Ex_I2C);
+    }
+
+    M5.Rtc.setSystemTimeFromRtc();
+
+    if (cfg.internal_imu)
+    {
+      if (M5.Imu.begin())
+      {
+        if (M5.getBoard() == m5::board_t::board_M5ATOM)
+        { // ATOM Matrix's IMU is oriented differently, so change the setting.
+          M5.Imu.setRotation(2);
+        }
+      }
+    }
+    if (!M5.Imu.isEnabled() && cfg.external_imu)
+    {
+      M5.Imu.begin(&M5.Ex_I2C);
     }
   }
 
 
   void M5Unified::update( void )
   {
-    bool btns[5] = { false, false, false, false, false };
     auto ms = m5gfx::millis();
+
     if (Touch.isEnabled())
     {
       Touch.update(ms);
-      switch (_board)
+    }
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
+    uint_fast8_t raw_gpio37_40 = ~GPIO.in1.data >> 5;
+    uint_fast8_t btn_bits = 0;
+    switch (_board)
+    {
+    case board_t::board_M5StackCore2:
       {
-      case board_t::board_M5StackCore2:
+        int i = Touch.getCount();
+        while (--i >= 0)
         {
-          auto count = Touch.getCount();
-          for (size_t i = 0; i < count; ++i)
+          auto det = Touch.getDetail(i);
+          if ((det.state & (touch_state_t::mask_touch | touch_state_t::mask_moving)) == touch_state_t::mask_touch)
           {
-            auto det = Touch.getDetail(i);
-            if ((det.state & touch_state_t::mask_touch)
-             && !(det.state & touch_state_t::mask_moving))
+            auto raw = Touch.getTouchPointRaw(i);
+            if (raw.y > 240)
             {
-              auto raw = Touch.getTouchPointRaw(i);
-              if (raw.y > 240)
+              int x = raw.x;
+              size_t idx = x / 110;
+              if (x - (idx * 110) < 100)
               {
-                size_t idx = raw.x / 110;
-                if (raw.x - (idx * 110) < 100)
-                {
-                  btns[idx] = true;
-                }
+                btn_bits = 1 << idx;
               }
             }
           }
         }
-        break;
-
-      default:
-        break;
       }
-    }
+      break;
 
-    uint32_t raw_gpio0_31 = GPIO.in;
-    uint32_t raw_gpio32_40 = GPIO.in1.data;
-    switch (_board)
-    {
     case board_t::board_M5StackCoreInk:
-      btns[4] = ! (raw_gpio0_31 & (1<<CoreInk_BUTTON_EXT_PIN));
-      btns[3] = ! (raw_gpio0_31 & (1<<CoreInk_BUTTON_PWR_PIN));
+      {
+        uint32_t raw_gpio0_31 = ~GPIO.in;
+        BtnEXT.setRawState(ms, (raw_gpio0_31 & (1 << CoreInk_BUTTON_EXT_PIN)));
+        BtnPWR.setRawState(ms, (raw_gpio0_31 & (1 << CoreInk_BUTTON_PWR_PIN)));
+      }
       NON_BREAK; /// don't break;
 
     case board_t::board_M5Paper:
     case board_t::board_M5Station:
-      btns[0] = ! (raw_gpio32_40 & (1<<5)); // gpio37 A
-      btns[1] = ! (raw_gpio32_40 & (1<<6)); // gpio38 B
-      btns[2] = ! (raw_gpio32_40 & (1<<7)); // gpio39 C
+      btn_bits = raw_gpio37_40 & 0x07; // gpio37 A / gpio38 B / gpio39 C
       break;
 
     case board_t::board_M5Stack:
-      btns[0] = ! (raw_gpio32_40 & (1<<7)); // gpio39 A
-      btns[1] = ! (raw_gpio32_40 & (1<<6)); // gpio38 B
-      btns[2] = ! (raw_gpio32_40 & (1<<5)); // gpio37 C
+      btn_bits = ( raw_gpio37_40 & 0x02)        // gpio38 B
+               + ((raw_gpio37_40 & 0x01) << 2); // gpio37 C
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5ATOM:
+    case board_t::board_M5StampPico:
+      btn_bits += (raw_gpio37_40 & 0x04) >> 2; // gpio39 A
       break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      btns[0] = ! (raw_gpio32_40 & (1<<5)); // gpio37
-      btns[1] = ! (raw_gpio32_40 & (1<<7)); // gpio39
+      btn_bits = ( raw_gpio37_40 & 0x01)        // gpio37 A
+               + ((raw_gpio37_40 & 0x04) >> 1); // gpio39 B
       break;
 
     default:
       break;
     }
 
-    BtnA  .setRawState(ms, btns[0]);
-    BtnB  .setRawState(ms, btns[1]);
-    BtnC  .setRawState(ms, btns[2]);
-    BtnEXT.setRawState(ms, btns[4]);
+    BtnA.setRawState(ms, btn_bits & 1);
+    BtnB.setRawState(ms, btn_bits & 2);
+    BtnC.setRawState(ms, btn_bits & 4);
     if (Power.Axp192.isEnabled())
     {
       auto tmp = Power.Axp192.getPekPress();
@@ -256,9 +369,20 @@ namespace m5
       else if (tmp == 2) { tmp = 1; }
       BtnPWR.setState(ms, tmp);
     }
-    else
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    switch (_board)
     {
-      BtnPWR.setRawState(ms, btns[3]);
+    case board_t::board_M5StampC3:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_3));
+      break;
+
+    default:
+      break;
     }
+
+#endif
+
   }
 }

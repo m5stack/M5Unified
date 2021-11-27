@@ -114,6 +114,30 @@ namespace m5
     }
   }
 
+  /// @param num 0=GPIO0 / 1=GPIO1 / 2=GPIO2
+  void AXP192_Class::_set_GPIO0_2(std::uint8_t num, bool state)
+  {
+    static constexpr uint8_t reg[] = { 0x90, 0x92, 0x93 };
+    writeRegister8(reg[num], state ? 0x06 : 0x05); // floating or LOW
+  }
+
+  /// @param num 0=GPIO3 / 1=GPIO4
+  void AXP192_Class::_set_GPIO3_4(std::uint8_t num, bool state)
+  {
+    uint32_t bit = num ? 2 : 1;
+    if (state)
+    {
+      bitOn(0x96, bit);
+    }
+    else
+    {
+      bitOff(0x96, bit);
+    }
+    uint_fast8_t mask = num ? ~0x0C : ~0x03;
+    uint_fast8_t reg0x95 = readRegister8(0x95) & mask;
+    writeRegister8(0x95, reg0x95 | (num ? 0x84 : 0x81)); // set GPIO mode
+  }
+
   void AXP192_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;

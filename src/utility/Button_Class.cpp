@@ -13,6 +13,7 @@ namespace m5
 
   void Button_Class::setRawState(std::uint32_t msec, bool press)
   {
+    bool disable_db = (msec - _lastMsec) > _msecDebounce;
     _lastMsec = msec;
     _changeState = 0;
     _oldPress = _press;
@@ -21,7 +22,7 @@ namespace m5
       _raw_press = press;
       _lastRawChange = msec;
     }
-    else if (msec - _lastRawChange >= _msecDebounce)
+    if (disable_db || msec - _lastRawChange >= _msecDebounce)
     {
       if (press != (0 != _oldPress))
       {
@@ -49,5 +50,4 @@ namespace m5
       }
     }
   }
-
 }

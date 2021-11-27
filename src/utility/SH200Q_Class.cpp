@@ -5,8 +5,13 @@
 
 namespace m5
 {
-  bool SH200Q_Class::begin(void)
+  bool SH200Q_Class::begin(I2C_Class* i2c)
   {
+    if (i2c)
+    {
+      _i2c = i2c;
+    }
+
     // WHO_AM_I : IMU Check
     if (WhoAmI() != 0x18)
     {
@@ -36,6 +41,7 @@ namespace m5
     , 0x16, 0x01  // ACC_RANGE(0x16) : +-8G
     , 0x2B, 0x00  // GYRO_RANGE(0x2B) : +-2000
     , 0xBA, 0xC0  // REG_SET1(0xBA)
+    , 0xFF, 0xFF
     };
 
     for (int idx = -1;;)
@@ -64,48 +70,53 @@ namespace m5
     return readRegister8(0x30);
   }
 
-  void SH200Q_Class::getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const
+  bool SH200Q_Class::getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const
   {
     std::int16_t buf[3];
-    readRegister(0x00, (std::uint8_t*)buf, 6);
+    bool res = readRegister(0x00, (std::uint8_t*)buf, 6);
     *ax = buf[0];
     *ay = buf[1];
     *az = buf[2];
+    return res;
   }
 
-  void SH200Q_Class::getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const
+  bool SH200Q_Class::getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const
   {
     std::int16_t buf[3];
-    readRegister(0x06, (std::uint8_t*)buf, 6);
+    bool res = readRegister(0x06, (std::uint8_t*)buf, 6);
     *gx = buf[0];
     *gy = buf[1];
     *gz = buf[2];
+    return res;
   }
 
-  void SH200Q_Class::getAccel(float* ax, float* ay, float* az)
+  bool SH200Q_Class::getAccel(float* ax, float* ay, float* az) const
   {
     static constexpr float aRes = 8.0f / 32768.0f;
     std::int16_t buf[3];
-    readRegister(0x00, (std::uint8_t*)buf, 6);
+    bool res = readRegister(0x00, (std::uint8_t*)buf, 6);
     *ax = buf[0] * aRes;
     *ay = buf[1] * aRes;
     *az = buf[2] * aRes;
+    return res;
   }
 
-  void SH200Q_Class::getGyro(float* gx, float* gy, float* gz)
+  bool SH200Q_Class::getGyro(float* gx, float* gy, float* gz) const
   {
     static constexpr float gRes = 2000.0f / 32768.0f;
     std::int16_t buf[3];
-    readRegister(0x06, (std::uint8_t*)buf, 6);
+    bool res = readRegister(0x06, (std::uint8_t*)buf, 6);
     *gx = buf[0] * gRes;
     *gy = buf[1] * gRes;
     *gz = buf[2] * gRes;
+    return res;
   }
 
-  void SH200Q_Class::getTemp(float *t)
+  bool SH200Q_Class::getTemp(float *t) const
   {
     std::int16_t buf;
-    readRegister(0x0C, (std::uint8_t*)&buf, 2);
+    bool res = readRegister(0x0C, (std::uint8_t*)&buf, 2);
     *t = 21.0f + buf / 333.87f;
+    return res;
   }
 }
