@@ -41,11 +41,12 @@ namespace m5
     {
       Wire.begin(sda, scl);
     }
+   #if defined (I2C_NUM_1)
     else if (port_num == I2C_NUM_1)
     {
       Wire1.begin(sda, scl);
     }
-
+   #endif
   #endif
 
     return m5gfx::i2c::init(port_num, sda, scl).has_value();

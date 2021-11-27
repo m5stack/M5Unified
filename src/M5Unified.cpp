@@ -19,7 +19,6 @@ m5::M5Unified M5;
 
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
-#include <esp_efuse.h>
 #include <soc/efuse_reg.h>
 
 namespace m5
