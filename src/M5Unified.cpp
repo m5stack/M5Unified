@@ -17,8 +17,6 @@
 /// global instance.
 m5::M5Unified M5;
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
 #include <esp_efuse.h>
@@ -26,12 +24,14 @@ m5::M5Unified M5;
 
 namespace m5
 {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr gpio_num_t TFCARD_CS_PIN          = GPIO_NUM_4;
   static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
-
+#endif
   board_t M5Unified::_check_boardtype(board_t board)
   {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (board == board_t::board_unknown)
     {
       switch (m5gfx::get_pkg_ver())
@@ -152,6 +152,29 @@ namespace m5
       }
       Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
     }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    if (board == board_t::board_unknown)
+    {
+      board = board_t::board_M5StampC3;
+    }
+
+    {
+      i2c_port_t in_port = I2C_NUM_0;
+      gpio_num_t in_sda = GPIO_NUM_1;
+      gpio_num_t in_scl = GPIO_NUM_0;
+      In_I2C.begin(in_port, in_sda, in_scl);
+    }
+
+    { /// setup External I2C
+      i2c_port_t ex_port = I2C_NUM_0;
+      gpio_num_t ex_sda = GPIO_NUM_1;
+      gpio_num_t ex_scl = GPIO_NUM_0;
+      Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
+    }
+#endif
+
     return board;
   }
 
@@ -160,7 +183,10 @@ namespace m5
     /// setup power management ic
     Power.begin();
     Power.setExtPower(cfg.output_power);
-    M5.Power.setLed(cfg.led_brightness);
+    if (cfg.led_brightness)
+    {
+      M5.Power.setLed(cfg.led_brightness);
+    }
 
     if (cfg.clear_display)
     {
@@ -182,6 +208,7 @@ namespace m5
 
     switch (_board) /// setup Hardware Buttons
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5StackCoreInk:
       m5gfx::pinMode(CoreInk_BUTTON_EXT_PIN, m5gfx::pin_mode_t::input); // TopButton
       m5gfx::pinMode(CoreInk_BUTTON_PWR_PIN, m5gfx::pin_mode_t::input); // PowerButton
@@ -216,6 +243,14 @@ namespace m5
       adc_power_on();
 #endif
       break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    case board_t::board_M5StampC3:
+      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input_pullup);
+      break;
+
+#endif
 
     default:
       break;
@@ -262,6 +297,9 @@ namespace m5
     {
       Touch.update(ms);
     }
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
     uint_fast8_t raw_gpio37_40 = ~GPIO.in1.data >> 5;
     uint_fast8_t btn_bits = 0;
     switch (_board)
@@ -332,105 +370,9 @@ namespace m5
       else if (tmp == 2) { tmp = 1; }
       BtnPWR.setState(ms, tmp);
     }
-  }
-}
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 
-namespace m5
-{
-  board_t M5Unified::_check_boardtype(board_t board)
-  {
-    if (board == board_t::board_unknown)
-    {
-      board = board_t::board_M5StampC3;
-    }
-
-    {
-      i2c_port_t in_port = I2C_NUM_0;
-      gpio_num_t in_sda = GPIO_NUM_1;
-      gpio_num_t in_scl = GPIO_NUM_0;
-      In_I2C.begin(in_port, in_sda, in_scl);
-    }
-
-    { /// setup External I2C
-      i2c_port_t ex_port = I2C_NUM_0;
-      gpio_num_t ex_sda = GPIO_NUM_1;
-      gpio_num_t ex_scl = GPIO_NUM_0;
-      Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
-    }
-    return board;
-  }
-
-  void M5Unified::_begin(const config_t& cfg)
-  {
-    /// setup power management ic
-    Power.begin();
-    Power.setExtPower(cfg.output_power);
-    M5.Power.setLed(cfg.led_brightness);
-
-    if (cfg.clear_display)
-    {
-      Display.clear();
-    }
-    if (nullptr != Display.touch())
-    {
-      Touch.begin(&Display);
-    }
-
-#if defined ( ARDUINO )
-
-    if (cfg.serial_baudrate)
-    {
-      Serial.begin(cfg.serial_baudrate);
-    }
-
-#endif
-
-    switch (_board) /// setup Hardware Buttons
-    {
-    case board_t::board_M5StampC3:
-      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input_pullup);
-      break;
-
-    default:
-      break;
-    }
-
-    if (cfg.external_rtc || cfg.external_imu)
-    {
-      M5.Ex_I2C.begin();
-    }
-
-    if (cfg.internal_rtc)
-    {
-      M5.Rtc.begin();
-    }
-    if (!M5.Rtc.isEnabled() && cfg.external_rtc)
-    {
-      M5.Rtc.begin(&M5.Ex_I2C);
-    }
-
-    M5.Rtc.setSystemTimeFromRtc();
-
-    if (cfg.internal_imu)
-    {
-      M5.Imu.begin();
-    }
-    if (!M5.Imu.isEnabled() && cfg.external_imu)
-    {
-      M5.Imu.begin(&M5.Ex_I2C);
-    }
-  }
-
-  void M5Unified::update( void )
-  {
-    auto ms = m5gfx::millis();
-
-    if (Touch.isEnabled())
-    {
-      Touch.update(ms);
-    }
     switch (_board)
     {
     case board_t::board_M5StampC3:
@@ -440,7 +382,8 @@ namespace m5
     default:
       break;
     }
-  }
-}
 
 #endif
+
+  }
+}

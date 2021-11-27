@@ -180,7 +180,7 @@ namespace m5
         }
       }
 #endif
-      return ((M5GFX_*)&Display)->getBoard();
+      return Display.getBoard();
     }
 
   private:

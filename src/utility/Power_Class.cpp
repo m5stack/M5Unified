@@ -19,22 +19,25 @@
 #include <esp_log.h>
 #include <esp_sleep.h>
 #include <sdkconfig.h>
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>
 
 namespace m5
 {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr int CoreInk_POWER_HOLD_PIN = 12;
   static constexpr int M5Paper_POWER_HOLD_PIN =  2;
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
   static constexpr int TimerCam_LED_PIN = 2;
   static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
+#endif
 
   bool Power_Class::begin(void)
   {
     _pmic = pmic_t::pmic_unknown;
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -240,12 +243,14 @@ namespace m5
         break;
       }
     }
+#endif
 
     return (_pmic != pmic_t::pmic_unknown);
   }
 
   void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
   {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (M5.getBoard())
     {
     case board_t::board_M5Paper:
@@ -277,10 +282,12 @@ namespace m5
     default:
       break;
     }
+#endif
   }
 
   void Power_Class::setLed(uint8_t brightness)
   {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
     switch (M5.getBoard())
@@ -298,9 +305,18 @@ namespace m5
         {
           led.reset(new m5gfx::Light_PWM());
           auto cfg = led->config();
-          cfg.invert = (M5.getBoard() != board_t::board_M5TimerCam);
+
           /// M5StickC,CPlus /CoreInk : LED = GPIO10 / TimerCam:LED = GPIO2
-          cfg.pin_bl = cfg.invert ? 10 : TimerCam_LED_PIN;
+          if (M5.getBoard() == board_t::board_M5TimerCam)
+          {
+            cfg.invert = false;
+            cfg.pin_bl = TimerCam_LED_PIN;
+          }
+          else
+          {
+            cfg.invert = true;
+            cfg.pin_bl = GPIO_NUM_10;
+          }
           cfg.pwm_channel = 7;
           led->config(cfg);
           led->init(brightness);
@@ -312,6 +328,7 @@ namespace m5
     default:
       break;
     }
+#endif
   }
 
   void Power_Class::_powerOff(bool withTimer)
@@ -345,6 +362,7 @@ namespace m5
     M5.Display.sleep();
     M5.Display.waitDisplay();
 
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (M5.getBoard())
     {
     case board_t::board_M5StickC:
@@ -367,6 +385,8 @@ namespace m5
     default:
       break;
     }
+#endif
+
     _powerOff(true);
   }
 
@@ -374,6 +394,9 @@ namespace m5
   {
     M5.Display.sleep();
     ESP_LOGD("Power","deepSleep");
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+
+#else
     if (_pmic == pmic_t::pmic_ip5306)
     {
       Ip5306.setPowerBoostKeepOn(true);
@@ -395,12 +418,16 @@ namespace m5
     {
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     }
+#endif
     esp_deep_sleep_start();
   }
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
     ESP_LOGD("Power","lightSleep");
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+
+#else
     if (_pmic == pmic_t::pmic_ip5306)
     {
       Ip5306.setPowerBoostKeepOn(true);
@@ -420,6 +447,7 @@ namespace m5
     }else{
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     }
+#endif
     esp_light_sleep_start();
   }
 
@@ -452,9 +480,9 @@ namespace m5
     _timerSleep();
   }
 
-
   static std::int32_t getBatteryAdcRaw(adc1_channel_t adc_ch)
   {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static constexpr int BASE_VOLATAGE = 3600;
 
     static esp_adc_cal_characteristics_t* adc_chars = nullptr;
@@ -466,6 +494,9 @@ namespace m5
       esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
     }
     return esp_adc_cal_raw_to_voltage(adc1_get_raw(adc_ch), adc_chars);
+#else
+    return 0;
+#endif
   }
 
   std::int32_t Power_Class::getBatteryLevel(void)
@@ -560,139 +591,4 @@ namespace m5
       return is_charging_t::charge_unknown;
     }
   }
-
 }
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-
-namespace m5
-{
-  bool Power_Class::begin(void)
-  {
-    _pmic = pmic_t::pmic_unknown;
-
-    return (_pmic != pmic_t::pmic_unknown);
-  }
-
-  void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
-  {
-  }
-
-  void Power_Class::setLed(uint8_t brightness)
-  {
-  }
-
-  void Power_Class::_powerOff(bool withTimer)
-  {
-    esp_deep_sleep_start();
-  }
-
-  void Power_Class::_timerSleep(void)
-  {
-    M5.Display.sleep();
-    M5.Display.waitDisplay();
-
-    _powerOff(true);
-  }
-
-  void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
-  {
-    M5.Display.sleep();
-    ESP_LOGD("Power","deepSleep");
-
-    if (touch_wakeup && _wakeupPin >= 0)
-    {
-      esp_deep_sleep_enable_gpio_wakeup(1<<_wakeupPin, esp_deepsleep_gpio_wake_up_mode_t::ESP_GPIO_WAKEUP_GPIO_LOW);
-      esp_sleep_enable_gpio_wakeup();
-      while (m5gfx::gpio_in(_wakeupPin) == false)
-      {
-        m5gfx::delay(10);
-      }
-    }
-    if (micro_seconds > 0)
-    {
-      esp_sleep_enable_timer_wakeup(micro_seconds);
-    }
-    else
-    {
-      esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-    }
-    esp_deep_sleep_start();
-  }
-
-  void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
-  {
-    ESP_LOGD("Power","lightSleep");
-
-    if (touch_wakeup && _wakeupPin >= 0)
-    {
-      esp_deep_sleep_enable_gpio_wakeup(1<<_wakeupPin, esp_deepsleep_gpio_wake_up_mode_t::ESP_GPIO_WAKEUP_GPIO_LOW);
-      esp_sleep_enable_gpio_wakeup();
-      esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
-      while (m5gfx::gpio_in(_wakeupPin) == false)
-      {
-        m5gfx::delay(10);
-      }
-    }
-    if (micro_seconds > 0){
-      esp_sleep_enable_timer_wakeup(micro_seconds);
-    }else{
-      esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-    }
-    esp_light_sleep_start();
-  }
-
-  void Power_Class::powerOff(void)
-  {
-    M5.Display.sleep();
-    M5.Display.waitDisplay();
-    _powerOff(false);
-  }
-
-  void Power_Class::timerSleep( int seconds )
-  {
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(seconds);
-    esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
-    _timerSleep();
-  }
-
-  void Power_Class::timerSleep( const rtc_time_t& time)
-  {
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(time);
-    _timerSleep();
-  }
-
-  void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
-  {
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(date, time);
-    _timerSleep();
-  }
-
-  std::int32_t Power_Class::getBatteryLevel(void)
-  {
-    return -2;
-  }
-
-  void Power_Class::setBatteryCharge(bool enable)
-  {
-  }
-
-  void Power_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
-  }
-
-  void Power_Class::setChargeVoltage(std::uint16_t max_mV)
-  {
-  }
-
-  Power_Class::is_charging_t Power_Class::isCharging(void)
-  {
-    return is_charging_t::charge_unknown;
-  }
-
-}
-
-#endif
