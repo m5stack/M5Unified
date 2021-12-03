@@ -17,9 +17,23 @@
 /// global instance.
 m5::M5Unified M5;
 
-#include <driver/adc.h>
-#include <esp_adc_cal.h>
 #include <soc/efuse_reg.h>
+
+#if __has_include (<driver/adc.h>)
+ #include <driver/adc.h>
+#endif
+
+void __attribute((weak)) adc_power_acquire(void)
+{
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+ #else
+  adc_power_on();
+ #endif
+#else
+ adc_power_on();
+#endif
+}
 
 namespace m5
 {
@@ -232,15 +246,7 @@ namespace m5
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
  /// for GPIO 36,39 Chattering prevention.
-#if defined (ESP_IDF_VERSION_VAL)
-  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(3, 1, 1)
       adc_power_acquire();
-  #else
-      adc_power_on();
-  #endif
-#else
-      adc_power_on();
-#endif
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
