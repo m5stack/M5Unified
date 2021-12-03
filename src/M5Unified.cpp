@@ -26,8 +26,7 @@ m5::M5Unified M5;
 void __attribute((weak)) adc_power_acquire(void)
 {
 #if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
- #else
+ #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(3, 3, 4)
   adc_power_on();
  #endif
 #else
