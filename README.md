@@ -73,52 +73,52 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH>M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
-  <TH>M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
-  <TH> M5Paper </TH>
-  <TH colspan="2"> M5Station </TH>
+  <TH width="20%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
+  <TH width="20%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH width="20%"> M5Paper </TH>
+  <TH width="40%" colspan="2"> M5Station </TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
-  <TD><IMG src="docs/img/M5Stack_PA.png" title="G,V,21,22"><BR>PortA</TD>
-  <TD><IMG src="docs/img/Core2_PA.png" title="G,V,32,33"><BR>PortA</TD>
-  <TD><IMG src="docs/img/Paper_PA.png" title="G,V,25,32"><BR>PortA</TD>
-  <TD colspan="2"><IMG src="docs/img/Station_PA.png" title="G,V,32,33"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_core_porta.svg"    title="G,V,21,22"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_core2_porta.svg"   title="G,V,32,33"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_paper_porta.svg"   title="G,V,25,32"><BR>PortA</TD>
+  <TD colspan="2"><IMG src="docs/img/pin_def_station_porta.svg" title="G,V,32,33"><BR>PortA</TD>
  </TR>
  <TR align="center">
   <TD>PortB</TD>
-  <TD><IMG src="docs/img/M5Stack_PB.png" title="G,V,26,36"><BR>PortB</TD>
-  <TD><IMG src="docs/img/Core2_PB.png" title="G,V,26,36"><BR>PortB</TD>
-  <TD><IMG src="docs/img/Paper_PB.png" title="G,V,26,33"><BR>PortB</TD>
-  <TD><IMG src="docs/img/Station_PB1.png" title="G,V,25,35"><BR>PortB1</TD>
-  <TD><IMG src="docs/img/Station_PB2.png" title="G,V,26,36"><BR>PortB2</TD>
+  <TD><IMG src="docs/img/pin_def_core_portb.svg"     title="G,V,26,36"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portb.svg"    title="G,V,26,36"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_paper_portb.svg"    title="G,V,26,33"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_station_portb1.svg" title="G,V,25,35"><BR>PortB1</TD>
+  <TD><IMG src="docs/img/pin_def_station_portb2.svg" title="G,V,26,36"><BR>PortB2</TD>
  </TR>
  <TR align="center">
   <TD>PortC</TD>
-  <TD><IMG src="docs/img/M5Stack_PC.png" title="G,V,17,16"><BR>PortC</TD>
-  <TD><IMG src="docs/img/Core2_PC.png" title="G,V,14,13"><BR>PortC</TD>
-  <TD><IMG src="docs/img/Paper_PC.png" title="G,V,18,19"><BR>PortC</TD>
-  <TD><IMG src="docs/img/Station_PC1.png" title="G,V,14,13"><BR>PortC1</TD>
-  <TD><IMG src="docs/img/Station_PC2.png" title="G,V,17,16"><BR>PortC2</TD>
+  <TD><IMG src="docs/img/pin_def_core_portc.svg"     title="G,V,17,16"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portc.svg"    title="G,V,14,13"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_paper_portc.svg"    title="G,V,18,19"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_station_portc1.svg" title="G,V,14,13"><BR>PortC1</TD>
+  <TD><IMG src="docs/img/pin_def_station_portc2.svg" title="G,V,17,16"><BR>PortC2</TD>
  </TR>
  <TR align="center">
-  <TD>PortD<BR>(optional)</TD>
-  <TD><IMG src="docs/img/M5Stack_PD.png" title="G,V,35,34"><BR>PortD</TD>
-  <TD><IMG src="docs/img/Core2_PD.png" title="G,V,35,34"><BR>PortD</TD>
+  <TD>PortD</TD>
+  <TD><IMG src="docs/img/pin_def_core_portd.svg"  title="G,V,35,34"><BR>PortD</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portd.svg" title="G,V,35,34"><BR>PortD</TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
  <TR align="center">
-  <TD>PortE<BR>(optional)</TD>
-  <TD><IMG src="docs/img/M5Stack_PE.png" title="G,V,13,5" ><BR>PortE</TD>
-  <TD><IMG src="docs/img/Core2_PE.png" title="G,V,19,27"><BR>PortE / 485</TD>
+  <TD>PortE</TD>
+  <TD><IMG src="docs/img/pin_def_core_porte.svg"  title="G,V,13,5" ><BR>PortE</TD>
+  <TD><IMG src="docs/img/pin_def_core2_porte.svg" title="G,V,19,27"><BR>PortE / 485<BR>※TOUGH485:12V</TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
  <TR align="center">
   <TD>Bus</TD>
-  <TD><IMG src="docs/img/M5Stack_Bus.png" ><BR>M-Bus</TD>
-  <TD><IMG src="docs/img/Core2_Bus.png" ><BR>M-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_core_bus.svg" ><BR>M-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_core2_bus.svg"><BR>M-Bus</TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
@@ -127,48 +127,51 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH>M5Stick<BR>C</TH>
-  <TH>M5Stick<BR>C Plus</TH>
-  <TH>CoreInk</TH>
+  <TH width="24%">M5Stick<BR>C</TH>
+  <TH width="24%">M5Stick<BR>C Plus</TH>
+  <TH width="24%">M5Stack<BR>CoreInk</TH>
+  <TH width="24%">M5Stamp<BR>PICO</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
-  <TD colspan="3"><IMG src="docs/img/M5StickC_PA.png" title="G,V,32,33"></TD>
+  <TD colspan="4"><IMG src="docs/img/pin_def_stickc_porta.svg" title="G,V,32,33"></TD>
  </TR>
  <TR align="center">
   <TD>HAT</TD>
-  <TD><IMG src="docs/img/M5StickC_HAT.png"     title="G,5Vout,26,36,0,BAT,3V,5Vin"></TD>
-  <TD><IMG src="docs/img/M5StickCPlus_HAT.png" title="G,5Vout,26,25/36,0,BAT,3V,5Vin"></TD>
-  <TD><IMG src="docs/img/CoreInk_HAT.png"      title="G,5Vout,26,36,25,BAT,3V,5Vin"></TD>
+  <TD><IMG src="docs/img/pin_def_stickc_hat.svg"   title="G,5Vout,26,36,0,BAT,3V,5Vin"></TD>
+  <TD><IMG src="docs/img/pin_def_stickcplus_hat.svg" title="G,5Vout,26,25/36,0,BAT,3V,5Vin"></TD>
+  <TD><IMG src="docs/img/pin_def_coreink_hat.svg" title="G,5Vout,26,36,25,BAT,3V,5Vin"></TD>
+  <TD></TD>
  </TR>
  <TR align="center">
   <TD>Bus</TD>
   <TD></TD>
   <TD></TD>
-  <TD><IMG src="docs/img/CoreInk_Bus.png" ><BR>MI-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_coreink_bus.svg"><BR>MI-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_stamppico_bus.svg"></TD>
  </TR>
 </TABLE>
 
 <TABLE>
  <TR>
   <TH></TH>
-  <TH>ATOM<BR>Lite</TH>
-  <TH>ATOM<BR>Matrix</TH>
-  <TH>ATOM<BR>ECHO</TH>
-  <TH>ATOM<BR>PSRAM</TH>
-  <TH>ATOM<BR>U</TH>
+  <TH width="19%">ATOM<BR>Lite</TH>
+  <TH width="19%">ATOM<BR>Matrix</TH>
+  <TH width="19%">ATOM<BR>ECHO</TH>
+  <TH width="19%">ATOM<BR>PSRAM</TH>
+  <TH width="19%">ATOM<BR>U</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
-  <TD colspan="5"><IMG src="docs/img/ATOM_PA.png" title="G,V,26,32"></TD>
+  <TD colspan="5"><IMG src="docs/img/pin_def_atom_porta.svg" title="G,V,26,32"></TD>
  </TR>
  <TR align="center">
   <TD>Bus</TD>
-  <TD><IMG src="docs/img/ATOM_Lite.png"></TD>
-  <TD><IMG src="docs/img/ATOM_Matrix.png"></TD>
-  <TD><IMG src="docs/img/ATOM_ECHO.png"></TD>
-  <TD><IMG src="docs/img/ATOM_PSRAM.png"></TD>
-  <TD><IMG src="docs/img/ATOM_U_HAT.png"></TD>
+  <TD><IMG src="docs/img/pin_def_atom_lite.svg"></TD>
+  <TD><IMG src="docs/img/pin_def_atom_matrix.svg"></TD>
+  <TD><IMG src="docs/img/pin_def_atom_echo.svg"></TD>
+  <TD><IMG src="docs/img/pin_def_atom_psram.svg"></TD>
+  <TD><IMG src="docs/img/pin_def_atom_u.svg"></TD>
  </TR>
 </TABLE>
 
