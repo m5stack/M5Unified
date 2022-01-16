@@ -70,14 +70,108 @@
 
 ### PinMap
 
-|               |M5Stack<BR>BASIC<BR>GRAY<BR>GO/FIRE<BR>FACES II|M5Stack<BR>Core2<BR>Tough |M5Stick<BR>C            |M5Stick<BR>CPlus        |M5Stack<BR>CoreInk     |M5Paper                |                |
-|:-------------:|:----------------------------:|:------------------------:|:----------------------:|:----------------------:|:---------------------:|:---------------------:|:--------------:|
-|  PortA        |<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G21</TD></TR><TR><TD bgcolor="#ffffff">G22</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G32</TD></TR><TR><TD bgcolor="#ffffff">G33</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G32</TD></TR><TR><TD bgcolor="#ffffff">G33</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G32</TD></TR><TR><TD bgcolor="#ffffff">G33</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G32</TD></TR><TR><TD bgcolor="#ffffff">G33</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G25</TD></TR><TR><TD bgcolor="#ffffff">G32</TD></TR></TABLE>|PortA|
-|  PortB        |<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G26</TD></TR><TR><TD bgcolor="#ffffff">G36</TD></TR></TABLE>(GO/FIRE/FACES II)| --- | --- | --- | --- |<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G26</TD></TR><TR><TD bgcolor="#ffffff">G33</TD></TR></TABLE>|PortB|
-|  PortC        |<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G17</TD></TR><TR><TD bgcolor="#ffffff">G16</TD></TR></TABLE>(GO/FIRE/FACES II)| --- | --- | --- | --- |<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">G18</TD></TR><TR><TD bgcolor="#ffffff">G19</TD></TR></TABLE>|PortC|
-|  HAT          |---|---|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5Vout</TD></TR><TR><TD bgcolor="#efefef">G26</TD></TR><TR><TD bgcolor="#dfdfdf">G36</TD></TR><TR><TD bgcolor="#efefef">G0</TD></TR><TR><TD bgcolor="#ffbfbf">BAT</TD></TR><TR><TD bgcolor="#ffff7f">3V3</TD></TR><TR><TD bgcolor="#ff9f9f">5Vin</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5Vout</TD></TR><TR><TD bgcolor="#efefef">G26</TD></TR><TR><TD bgcolor="#dfdfdf">G25/G36</TD></TR><TR><TD bgcolor="#efefef">G0</TD></TR><TR><TD bgcolor="#ffbfbf">BAT</TD></TR><TR><TD bgcolor="#ffff7f">3V3</TD></TR><TR><TD bgcolor="#ff9f9f">5Vin</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD></TR><TR><TD bgcolor="#ff7f7f">5Vout</TD></TR><TR><TD bgcolor="#efefef">G26</TD></TR><TR><TD bgcolor="#dfdfdf">G36</TD></TR><TR><TD bgcolor="#efefef">G25</TD></TR><TR><TD bgcolor="#ffbfbf">BAT</TD></TR><TR><TD bgcolor="#ffff7f">3V3</TD></TR><TR><TD bgcolor="#ff9f9f">5Vin</TD></TR></TABLE>|---|HAT|
-|M-Bus<BR>MI-Bus|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9fff9f">G35</TD></TR><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9fff9f">G36</TD></TR><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9f9f9f">EN</TD></TR><TR><TD bgcolor="#cfcfff">G23</TD><TD bgcolor="#ffcfcf">G25</TD></TR><TR><TD bgcolor="#cfcfff">G19</TD><TD bgcolor="#ffcfcf">G26</TD></TR><TR><TD bgcolor="#cfcfff">G18</TD><TD bgcolor="#ff7f7f">3V3</TD></TR><TR><TD bgcolor="#cfffcf">G3</TD><TD bgcolor="#cfffcf">G1</TD></TR><TR><TD bgcolor="#cfffcf">G16</TD><TD bgcolor="#cfffcf">G17</TD></TR><TR><TD bgcolor="#9f9f9f">G21</TD><TD bgcolor="#9f9f9f">G22</TD></TR><TR><TD bgcolor="#9f9fff">G2</TD><TD bgcolor="#9f9fff">G5</TD></TR><TR><TD bgcolor="#efefef">G12</TD><TD bgcolor="#efefef">G13</TD></TR><TR><TD bgcolor="#efefef">G15</TD><TD bgcolor="#efefef">G0</TD></TR><TR><TD bgcolor="#ffff7f">HPWR</TD><TD bgcolor="#efefef">G34</TD></TR><TR><TD bgcolor="#ffff7f">HPWR</TD><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#ffff7f">HPWR</TD><TD bgcolor="#ffbfbf">BAT</TD></TR></TABLE>|<TABLE><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9fff9f">G35</TD></TR><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9fff9f">G36</TD></TR><TR><TD bgcolor="#7f7f7f">GND</TD><TD bgcolor="#9f9f9f">EN</TD></TR><TR><TD bgcolor="#cfcfff">G23</TD><TD bgcolor="#ffcfcf">G25</TD></TR><TR><TD bgcolor="#cfcfff">G38</TD><TD bgcolor="#ffcfcf">G26</TD></TR><TR><TD bgcolor="#cfcfff">G18</TD><TD bgcolor="#ff7f7f">3V3</TD></TR><TR><TD bgcolor="#cfffcf">G3</TD><TD bgcolor="#cfffcf">G1</TD></TR><TR><TD bgcolor="#cfffcf">G13</TD><TD bgcolor="#cfffcf">G14</TD></TR><TR><TD bgcolor="#9f9f9f">G21</TD><TD bgcolor="#9f9f9f">G22</TD></TR><TR><TD bgcolor="#9f9fff">G32</TD><TD bgcolor="#9f9fff">G33</TD></TR><TR><TD bgcolor="#efefef">G27</TD><TD bgcolor="#efefef">G19</TD></TR><TR><TD bgcolor="#efef7f">G2</TD><TD bgcolor="#efef7f">G0</TD></TR><TR><TD bgcolor="#7f7f7f">NC</TD><TD bgcolor="#efef7f">G34</TD></TR><TR><TD bgcolor="#7f7f7f">NC</TD><TD bgcolor="#ff7f7f">5V</TD></TR><TR><TD bgcolor="#7f7f7f">NC</TD><TD bgcolor="#ffbfbf">BAT</TD></TR></TABLE>|---|---|<TABLE><TR><TD bgcolor="#ffcfcf">G25</TD><TD bgcolor="#cfcfff">G23</TD></TR><TR><TD bgcolor="#ffcfcf">G26</TD><TD bgcolor="#cfcfff">G34</TD></TR><TR><TD bgcolor="#ffcfcf">G36</TD><TD bgcolor="#cfcfff">G18</TD></TR><TR><TD bgcolor="#9f9f9f">G22</TD><TD bgcolor="#9f9f9f">G21</TD></TR><TR><TD bgcolor="#cfffcf">G14</TD><TD bgcolor="#cfffcf">G13</TD></TR><TR><TD bgcolor="#ff7f7f">3V3</TD><TD bgcolor="#9f9f9f">RST</TD></TR><TR><TD bgcolor="#ff7f7f">5Vout</TD><TD bgcolor="#9f9f9f">5Vin</TD></TR><TR><TD bgcolor="#ffbfbf">BAT</TD><TD bgcolor="#7f7f7f">GND</TD></TR></TABLE>|---|M-Bus<BR>MI-Bus|
+<TABLE>
+ <TR>
+  <TH></TH>
+  <TH>M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
+  <TH>M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH> M5Paper </TH>
+  <TH colspan="2"> M5Station </TH>
+ </TR>
+<TR align="center">
+ <TD>PortA</TD>
+ <TD><IMG src="docs/img/M5Stack_PA.png" title="G,V,21,22"><BR>PortA</TD>
+ <TD><IMG src="docs/img/Core2_PA.png" title="G,V,32,33"><BR>PortA</TD>
+ <TD><IMG src="docs/img/Paper_PA.png" title="G,V,25,32"><BR>PortA</TD>
+ <TD colspan="2"><IMG src="docs/img/Station_PA.png" title="G,V,32,33"><BR>PortA</TD>
+</TR>
+<TR align="center">
+ <TD>PortB</TD>
+ <TD><IMG src="docs/img/M5Stack_PB.png" title="G,V,26,36"><BR>PortB</TD>
+ <TD><IMG src="docs/img/Core2_PB.png" title="G,V,26,36"><BR>PortB</TD>
+ <TD><IMG src="docs/img/Paper_PB.png" title="G,V,26,33"><BR>PortB</TD>
+ <TD><IMG src="docs/img/Station_PB1.png" title="G,V,25,35"><BR>PortB1</TD>
+ <TD><IMG src="docs/img/Station_PB2.png" title="G,V,26,36"><BR>PortB2</TD>
+</TR>
+<TR align="center">
+ <TD>PortC</TD>
+ <TD><IMG src="docs/img/M5Stack_PC.png" title="G,V,17,16"><BR>PortC</TD>
+ <TD><IMG src="docs/img/Core2_PC.png" title="G,V,14,13"><BR>PortC</TD>
+ <TD><IMG src="docs/img/Paper_PC.png" title="G,V,18,19"><BR>PortC</TD>
+ <TD><IMG src="docs/img/Station_PC1.png" title="G,V,14,13"><BR>PortC1</TD>
+ <TD><IMG src="docs/img/Station_PC2.png" title="G,V,17,16"><BR>PortC2</TD>
+</TR>
+<TR align="center">
+ <TD>PortD<BR>(optional)</TD>
+ <TD><IMG src="docs/img/M5Stack_PD.png" title="G,V,35,34"><BR>PortD</TD>
+ <TD><IMG src="docs/img/Core2_PD.png" title="G,V,35,34"><BR>PortD</TD>
+ <TD></TD>
+ <TD colspan="2"></TD>
+</TR>
+<TR align="center">
+ <TD>PortE<BR>(optional)</TD>
+ <TD><IMG src="docs/img/M5Stack_PE.png" title="G,V,13,5" ><BR>PortE</TD>
+ <TD><IMG src="docs/img/Core2_PE.png" title="G,V,19,27"><BR>PortE / 485</TD>
+ <TD></TD>
+ <TD colspan="2"></TD>
+</TR>
+<TR align="center">
+ <TD>Bus</TD>
+ <TD><IMG src="docs/img/M5Stack_Bus.png" ><BR>M-Bus</TD>
+ <TD><IMG src="docs/img/Core2_Bus.png" ><BR>M-Bus</TD>
+ <TD></TD>
+ <TD colspan="2"></TD>
+</TR>
+</TABLE>
 
+<TABLE>
+ <TR>
+  <TH></TH>
+  <TH>M5Stick<BR>C</TH>
+  <TH>M5Stick<BR>C Plus</TH>
+  <TH>CoreInk</TH>
+ </TR>
+<TR align="center">
+ <TD>PortA</TD>
+ <TD colspan="3"><IMG src="docs/img/M5StickC_PA.png" title="G,V,32,33"></TD>
+</TR>
+<TR align="center">
+ <TD>HAT</TD>
+ <TD><IMG src="docs/img/M5StickC_HAT.png"     title="G,5Vout,26,36,0,BAT,3V,5Vin"></TD>
+ <TD><IMG src="docs/img/M5StickCPlus_HAT.png" title="G,5Vout,26,25/36,0,BAT,3V,5Vin"></TD>
+ <TD><IMG src="docs/img/CoreInk_HAT.png"      title="G,5Vout,26,36,25,BAT,3V,5Vin"></TD>
+</TR>
+<TR align="center">
+ <TD>Bus</TD>
+ <TD></TD>
+ <TD></TD>
+ <TD><IMG src="docs/img/CoreInk_Bus.png" ><BR>MI-Bus</TD>
+</TR>
+<TR align="center">
+</TABLE>
+
+<TABLE>
+ <TR>
+  <TH></TH>
+  <TH>ATOM<BR>Lite</TH>
+  <TH>ATOM<BR>Matrix</TH>
+  <TH>ATOM<BR>ECHO</TH>
+  <TH>ATOM<BR>PSRAM</TH>
+  <TH>ATOM<BR>U</TH>
+ </TR>
+<TR align="center">
+ <TD>PortA</TD>
+ <TD colspan="5"><IMG src="docs/img/ATOM_PA.png" title="G,V,26,32"></TD>
+</TR>
+<TR align="center">
+ <TD>Bus</TD>
+ <TD><IMG src="docs/img/ATOM_Lite.png"></TD>
+ <TD><IMG src="docs/img/ATOM_Matrix.png"></TD>
+ <TD><IMG src="docs/img/ATOM_ECHO.png"></TD>
+ <TD><IMG src="docs/img/ATOM_PSRAM.png"></TD>
+ <TD><IMG src="docs/img/ATOM_U_HAT.png"></TD>
+</TR>
+</TABLE>
 
 
 
