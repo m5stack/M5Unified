@@ -73,10 +73,10 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH width="20%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
-  <TH width="20%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
-  <TH width="20%"> M5Paper </TH>
-  <TH width="40%" colspan="2"> M5Station </TH>
+  <TH width="24%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
+  <TH width="24%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH width="16%"> M5Paper </TH>
+  <TH width="32%" colspan="2"> M5Station </TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
@@ -111,7 +111,7 @@
  <TR align="center">
   <TD>PortE</TD>
   <TD><IMG src="docs/img/pin_def_core_porte.svg"  title="G,V,13,5" ><BR>PortE</TD>
-  <TD><IMG src="docs/img/pin_def_core2_porte.svg" title="G,V,19,27"><BR>PortE / 485<BR>※TOUGH485:12V</TD>
+  <TD><IMG src="docs/img/pin_def_core2_porte.svg" title="G,V,19,27"><BR>PortE / 485<BR>TOUGH485:12V</TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
@@ -127,10 +127,10 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH width="24%">M5Stick<BR>C</TH>
-  <TH width="24%">M5Stick<BR>C Plus</TH>
-  <TH width="24%">M5Stack<BR>CoreInk</TH>
-  <TH width="24%">M5Stamp<BR>PICO</TH>
+  <TH width="20%">M5Stick<BR>C</TH>
+  <TH width="20%">M5Stick<BR>C Plus</TH>
+  <TH width="26%">M5Stack<BR>CoreInk</TH>
+  <TH width="26%">M5Stamp<BR>PICO</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
@@ -155,11 +155,11 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH width="19%">ATOM<BR>Lite</TH>
-  <TH width="19%">ATOM<BR>Matrix</TH>
-  <TH width="19%">ATOM<BR>ECHO</TH>
-  <TH width="19%">ATOM<BR>PSRAM</TH>
-  <TH width="19%">ATOM<BR>U</TH>
+  <TH width="20%">ATOM<BR>Lite</TH>
+  <TH width="20%">ATOM<BR>Matrix</TH>
+  <TH width="20%">ATOM<BR>ECHO</TH>
+  <TH width="20%">ATOM<BR>PSRAM</TH>
+  <TH width="16%">ATOM<BR>U</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
