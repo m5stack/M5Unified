@@ -53,14 +53,15 @@ namespace m5
         break;
 
       case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
-
-#if defined ( ARDUINO_STAMP_PICO )
-        board = board_t::board_M5StampPico;
+        m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
+        board = m5gfx::gpio_in(GPIO_NUM_2)
+              ? board_t::board_M5Atom
+              : board_t::board_M5StampPico;
+        m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pulldown);
         break;
-#endif
 
       case 6: // EFUSE_RD_CHIP_VER_PKG_ESP32PICOV3_02: // ATOM PSRAM
-        board = board_t::board_M5ATOM;
+        board = board_t::board_M5Atom;
         break;
 
       default:
@@ -95,7 +96,7 @@ namespace m5
 
 #elif defined ( ARDUINO_M5Stack_ATOM )
 
-        board = board_t::board_M5ATOM;
+        board = board_t::board_M5Atom;
 
 #elif defined ( ARDUINO_M5Stack_Timer_CAM )
 
@@ -112,7 +113,7 @@ namespace m5
       gpio_num_t in_scl = GPIO_NUM_22;
       switch (board)
       {
-      case board_t::board_M5ATOM:  // ATOM
+      case board_t::board_M5Atom:  // ATOM
         in_sda = GPIO_NUM_25;
         in_scl = GPIO_NUM_21;
         break;
@@ -149,7 +150,7 @@ namespace m5
         ex_scl = GPIO_NUM_32;
         break;
 
-      case board_t::board_M5ATOM:
+      case board_t::board_M5Atom:
         ex_sda = GPIO_NUM_26;
         ex_scl = GPIO_NUM_32;
         break;
@@ -169,7 +170,15 @@ namespace m5
 
     if (board == board_t::board_unknown)
     {
-      board = board_t::board_M5StampC3;
+      m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
+      if (!m5gfx::gpio_in(GPIO_NUM_20))
+      {
+        board = board_t::board_M5StampC3U;
+      }
+      else
+      {
+        board = board_t::board_M5StampC3;
+      }
     }
 
     {
@@ -237,7 +246,7 @@ namespace m5
       m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
 
-    case board_t::board_M5ATOM:
+    case board_t::board_M5Atom:
     case board_t::board_M5StampPico:
       m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
@@ -280,7 +289,7 @@ namespace m5
     {
       if (M5.Imu.begin())
       {
-        if (M5.getBoard() == m5::board_t::board_M5ATOM)
+        if (M5.getBoard() == m5::board_t::board_M5Atom)
         { // ATOM Matrix's IMU is oriented differently, so change the setting.
           M5.Imu.setRotation(2);
         }
@@ -349,7 +358,7 @@ namespace m5
                + ((raw_gpio37_40 & 0x01) << 2); // gpio37 C
       NON_BREAK; /// don't break;
 
-    case board_t::board_M5ATOM:
+    case board_t::board_M5Atom:
     case board_t::board_M5StampPico:
       btn_bits += (raw_gpio37_40 & 0x04) >> 2; // gpio39 A
       break;
@@ -381,6 +390,10 @@ namespace m5
     {
     case board_t::board_M5StampC3:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_3));
+      break;
+
+    case board_t::board_M5StampC3U:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_9));
       break;
 
     default:

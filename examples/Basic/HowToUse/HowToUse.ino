@@ -84,36 +84,48 @@ void setup(void)
   const char* name;
   switch (M5.getBoard())
   {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+  case m5::board_t::board_M5StampC3:
+    name = "StampC3";
+    break;
+  case m5::board_t::board_M5StampC3U:
+    name = "StampC3U";
+    break;
+#else
   case m5::board_t::board_M5Stack:
-    name = "M5Stack";
+    name = "Stack";
     break;
   case m5::board_t::board_M5StackCore2:
-    name = "M5StackCore2";
+    name = "StackCore2";
     break;
   case m5::board_t::board_M5StickC:
-    name = "M5StickC";
+    name = "StickC";
     break;
   case m5::board_t::board_M5StickCPlus:
-    name = "M5StickC-Plus";
+    name = "StickCPlus";
     break;
   case m5::board_t::board_M5StackCoreInk:
-    name = "M5StackCoreInk";
+    name = "CoreInk";
     break;
   case m5::board_t::board_M5Paper:
-    name = "M5Paper";
+    name = "Paper";
     break;
   case m5::board_t::board_M5Tough:
-    name = "M5Tough";
+    name = "Tough";
     break;
   case m5::board_t::board_M5Station:
-    name = "M5Station";
+    name = "Station";
     break;
   case m5::board_t::board_M5ATOM:
-    name = "M5ATOM";
+    name = "ATOM";
     break;
   case m5::board_t::board_M5TimerCam:
     name = "TimerCamera";
     break;
+  case m5::board_t::board_M5StampPico:
+    name = "StampPico";
+    break;
+#endif
   default:
     name = "Who am I ?";
     break;
@@ -121,6 +133,7 @@ void setup(void)
   M5.Display.startWrite();
   M5.Display.print("Core:");
   M5.Display.println(name);
+  ESP_LOGI("setup", "core:%s", name);
 
   // run-time branch : imu model check
   switch (M5.Imu.getType())
@@ -144,6 +157,7 @@ void setup(void)
   M5.Display.print("IMU:");
   M5.Display.println(name);
   M5.Display.endWrite();
+  ESP_LOGI("setup", "imu:%s", name);
 }
 
 void loop(void)
@@ -282,7 +296,7 @@ void loop(void)
 /// In the example above, the date and time are obtained through I2C communication with the RTC.
 /// However, since M5Unified synchronizes the ESP32's internal clock at startup, 
 /// it is also possible to get the date and time, as shown in the example below.
-/// ※ Note that there will be an error of a few seconds per day. 
+/// ※ Note: that there will be an error of a few seconds per day. 
 ///    You may want to call M5.Rtc.setSystemTimeFromRtc() periodically to synchronize.
       auto t = time(nullptr);
       auto time = localtime(&t);
