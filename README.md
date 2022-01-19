@@ -1,17 +1,21 @@
 # M5Unified
 ### M5Stack Series unified library .
 
-# Support framework
+## Support framework
  - ESP-IDF
  - Arduino for ESP32
 
-# Support device
+## Support device (with display)
  - M5Stack BASIC / GRAY / GO / FIRE
  - M5Stack Core2 / Tough
  - M5Stick C / CPlus
  - M5Stack CoreInk
  - M5Paper
+
+## Support device (with Unit LCD / Unit OLED / ATOM Display)
  - M5ATOM Lite / Matrix / ECHO / U
+ - M5STAMP PICO / C3 / C3U
+
 
 
 # H/W infomation
@@ -41,8 +45,8 @@
 |GPIO25<BR>`DAC1`    |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`                                |`HAT`(CPlus)<BR>`PAD`         |`MI-Bus`<BR>`HAT`       |`PORT.A`<BR>I2C0_SDA   |`PORT.B1`              |`Bus`<BR>**I2C1_SDA**                    |                    |GPIO25<BR>`DAC1`    |
 |GPIO26<BR>`DAC2`    |`M-Bus`                            |`M-Bus`<BR>`PORT.B`                |`M-Bus`                                |`HAT`<BR>`PAD`                |`MI-Bus`<BR>`HAT`       |`PORT.B`               |`PORT.B2`              |`PORT.A`<BR>**I2C0_SDA**                 |                    |GPIO26<BR>`DAC2`    |
 |GPIO27<BR>`ADC2_CH7`|**LCD_D/C**                        |**LCD_D/C**                        |`M-Bus`                                |**AXP192 VBUSEN**             |**BTN_PWR**             |**EPD_BUSY**           |**IMU_INT**            |**NEOPIXEL**                             |**NEOPIXEL**        |GPIO27<BR>`ADC2_CH7`|
-|GPIO32<BR>`ADC1_CH4`|**LCD_BL**                         |**LCD_BL**                         |`M-Bus`<BR>`PORT.A`<BR>I2C0_SDA        |`PORT.A`<BR>I2C0_SDA          |`PORT.A`<BR>I2C0_SDA    |`PORT.A`<BR>I2C0_SCL   |`PORT.A`<BR>SDA        |`PORT.A`<BR>**I2C0_SCL**                 |                    |GPIO32<BR>`ADC1_CH4`|
-|GPIO33<BR>`ADC1_CH5`|**LCD_RST**                        |**LCD_RST**                        |`M-Bus`<BR>`PORT.A`<BR>I2C0_SCL        |`PORT.A`<BR>I2C0_SCL          |`PORT.A`<BR>I2C0_SCL    |`PORT.B`               |`PORT.A`<BR>SCL        |`Bus`<BR>**PDM_C**(ECHO)                 |                    |GPIO33<BR>`ADC1_CH5`|
+|GPIO32<BR>`ADC1_CH4`|**LCD_BL**                         |**LCD_BL**                         |`M-Bus`<BR>`PORT.A`<BR>I2C0_SDA        |`PORT.A`<BR>I2C0_SDA          |`PORT.A`<BR>I2C0_SDA    |`PORT.A`<BR>I2C0_SCL   |`PORT.A`<BR>SDA        |`PORT.A`<BR>**I2C0_SCL**                 |`PORT.A`<BR>I2C0_SDA|GPIO32<BR>`ADC1_CH4`|
+|GPIO33<BR>`ADC1_CH5`|**LCD_RST**                        |**LCD_RST**                        |`M-Bus`<BR>`PORT.A`<BR>I2C0_SCL        |`PORT.A`<BR>I2C0_SCL          |`PORT.A`<BR>I2C0_SCL    |`PORT.B`               |`PORT.A`<BR>SCL        |`Bus`<BR>**PDM_C**(ECHO)                 |`PORT.A`<BR>I2C0_SCL|GPIO33<BR>`ADC1_CH5`|
 |GPIO34<BR>`ADC1_CH6`|`M-Bus`<BR>IIS_IN                  |`M-Bus`<BR>**MIC_ADC**<BR>IIS_IN   |`M-Bus`<BR>**PDM_D**(Core2)            |**PDM_D**                     |`MI-Bus`<BR>**SPI_MISO**| ---                   | USB Current?          | ---                                     | ---                |GPIO34<BR>`ADC1_CH6`|
 |GPIO35<BR>`ADC1_CH7`|`M-Bus`                            |`M-Bus`                            |`M-Bus`                                |**RTC_INT**                   |**BAT_V**               |**BAT_V**              |`PORT.B1`              | ---                                     | ---                |GPIO35<BR>`ADC1_CH7`|
 |GPIO36<BR>`ADC1_CH0`|`M-Bus`                            |`M-Bus`<BR>`PORT.B`                |`M-Bus`                                |`HAT`<BR>`PAD`                |`MI-Bus`<BR>`HAT`       |**TP_INT**             |`PORT.B2`              | ---                                     | ---                |GPIO36<BR>`ADC1_CH0`|
