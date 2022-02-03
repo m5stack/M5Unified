@@ -80,7 +80,7 @@ void setup(void)
     while (M5.Sound.isPlaying()) { taskYIELD(); }
 
 
-    M5.Sound.playRAW(wav_8bit_44100, sizeof(wav_8bit_44100), false, 44100);
+    M5.Sound.playRAW(wav_8bit_44100, sizeof(wav_8bit_44100), 44100, false);
   }
 
   if (M5.Rtc.isEnabled())
