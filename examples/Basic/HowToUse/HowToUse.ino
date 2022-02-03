@@ -143,8 +143,14 @@ void setup(void)
   case m5::board_t::board_M5Station:
     name = "Station";
     break;
-  case m5::board_t::board_M5ATOM:
+  case m5::board_t::board_M5Atom:
     name = "ATOM";
+    break;
+  case m5::board_t::board_M5AtomPsram:
+    name = "ATOM PSRAM";
+    break;
+  case m5::board_t::board_M5AtomU:
+    name = "ATOM U";
     break;
   case m5::board_t::board_M5TimerCam:
     name = "TimerCamera";

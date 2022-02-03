@@ -88,15 +88,12 @@ namespace m5
         uint8_t external_spk = 0;
         struct
         {
-          uint8_t enable_flg : 1;
+          uint8_t enabled : 1;
           uint8_t omit_atomic_spk : 1;
           uint8_t omit_spk_hat : 1;
           uint8_t reserve : 5;
         } external_spk_detail;
       };
-      
-      // bool sound = true;
-      // bool atomic_spk = false;
     };
 
     config_t config(void) const { return _cfg; }

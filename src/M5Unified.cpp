@@ -57,7 +57,7 @@ namespace m5
 
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if ((self->_cfg.external_spk & 1) && !self->_cfg.external_spk_detail.omit_spk_hat)
+      if ((self->_cfg.external_spk_detail.enabled) && !self->_cfg.external_spk_detail.omit_spk_hat)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (mode == sound_mode_t::sound_output)
@@ -99,14 +99,15 @@ namespace m5
 
       case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
         m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
+        m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
         board = m5gfx::gpio_in(GPIO_NUM_2)
-              ? board_t::board_M5Atom
+              ? (m5gfx::gpio_in(GPIO_NUM_34) ? board_t::board_M5Atom : board_t::board_M5AtomU)
               : board_t::board_M5StampPico;
         m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pulldown);
         break;
 
       case 6: // EFUSE_RD_CHIP_VER_PKG_ESP32PICOV3_02: // ATOM PSRAM
-        board = board_t::board_M5Atom;
+        board = board_t::board_M5AtomPsram;
         break;
 
       default:
@@ -159,6 +160,8 @@ namespace m5
       switch (board)
       {
       case board_t::board_M5Atom:  // ATOM
+      case board_t::board_M5AtomU:
+      case board_t::board_M5AtomPsram:
         in_sda = GPIO_NUM_25;
         in_scl = GPIO_NUM_21;
         break;
@@ -196,6 +199,8 @@ namespace m5
         break;
 
       case board_t::board_M5Atom:
+      case board_t::board_M5AtomU:
+      case board_t::board_M5AtomPsram:
         ex_sda = GPIO_NUM_26;
         ex_scl = GPIO_NUM_32;
         break;
@@ -268,7 +273,7 @@ namespace m5
 
 #endif
 
-    if (_cfg.internal_spk || _cfg.external_spk || _cfg.internal_mic)
+    if (_cfg.internal_spk || _cfg.external_spk_detail.enabled || _cfg.internal_mic)
     {
       auto sound_cfg = Sound.config();
 
@@ -294,28 +299,24 @@ namespace m5
         case board_t::board_M5Tough:
         case board_t::board_M5StackCore2:
           if (_cfg.internal_mic)
-          { /// internal mic
+          { /// builtin PDM mic
             sound_cfg.pin_data_in = 34;
             sound_cfg.pin_lrck = 0;
           }
           break;
 
-        case board_t::board_M5ATOM:
-          m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-          if (m5gfx::gpio_in(GPIO_NUM_0))  /// for ATOM ECHO or ATOM U
-          {
-            m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
-            if (m5gfx::gpio_in(GPIO_NUM_34))  /// for ATOM ECHO
-            {
-              sound_cfg.pin_lrck = 33;
-              sound_cfg.pin_data_in = 23;
-            }
-            else
-            {
-              sound_cfg.pin_lrck = 5;
-              sound_cfg.pin_data_in = 19;
-              sound_cfg.mic_offset = - 768;
-            }
+        case board_t::board_M5AtomU:
+          { /// ATOM U builtin PDM mic
+            sound_cfg.pin_lrck = 5;
+            sound_cfg.pin_data_in = 19;
+            sound_cfg.mic_offset = - 768;
+          }
+          break;
+
+        case board_t::board_M5Atom:
+          { /// ATOM ECHO builtin PDM mic
+            sound_cfg.pin_lrck = 33;
+            sound_cfg.pin_data_in = 23;
           }
           break;
 #endif
@@ -324,9 +325,9 @@ namespace m5
         }
       }
 
-      if (_cfg.internal_spk || (_cfg.external_spk & 1))
+      if (_cfg.internal_spk || _cfg.external_spk_detail.enabled)
       {
-        sound_cfg.spk_gain = 85;
+        sound_cfg.spk_gain = 127;
         switch (_board)
         {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -348,9 +349,8 @@ namespace m5
             sound_cfg.pin_data_out = 2;
           }
           NON_BREAK;
-
         case board_t::board_M5StickC:
-          if ((_cfg.external_spk & 1) && !_cfg.external_spk_detail.omit_spk_hat)
+          if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_spk_hat)
           { /// for SPK HAT
             gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
             m5gfx::gpio_lo(pin_en);
@@ -365,7 +365,7 @@ namespace m5
           break;
 
         case board_t::board_M5Tough:
-          sound_cfg.spk_gain = 160;
+          sound_cfg.spk_gain = 191;
           NON_BREAK;
         case board_t::board_M5StackCore2:
           if (_cfg.internal_spk)
@@ -376,31 +376,33 @@ namespace m5
           }
           break;
 
-        case board_t::board_M5ATOM:
-          m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-          if (m5gfx::gpio_in(GPIO_NUM_0))
-          { /// for ATOM ECHO or ATOM U
-            m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
-            if (m5gfx::gpio_in(GPIO_NUM_34))
-            { /// for ATOM ECHO
-              if (_cfg.internal_spk)
-              {
-                sound_cfg.pin_bck = 19;
-                sound_cfg.pin_lrck = 33;
-                sound_cfg.pin_data_out = 22;
-              }
-            }
-          }
-          else
+        case board_t::board_M5Atom:
+          if (_cfg.internal_spk)
           {
-            if ((_cfg.external_spk & 1) && !_cfg.external_spk_detail.omit_atomic_spk)
-            { /// for ATOMIC SPK
+            sound_cfg.pin_bck = 19;
+            sound_cfg.pin_lrck = 33;
+            sound_cfg.pin_data_out = 22;
+            sound_cfg.spk_gain = 63;
+          }
+          NON_BREAK;
+        case board_t::board_M5AtomPsram:
+          if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk)
+          { /// for ATOMIC SPK
+            /// 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
+            gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
+            m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown);
+            m5gfx::pinMode(GPIO_NUM_33, m5gfx::pin_mode_t::input_pulldown);
+            m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown);
+            if (m5gfx::gpio_in(GPIO_NUM_19)
+             && m5gfx::gpio_in(GPIO_NUM_33)
+             && m5gfx::gpio_in(pin        ))
+            {
               _cfg.internal_imu = false; /// avoid conflict with i2c
               _cfg.internal_rtc = false; /// avoid conflict with i2c
               sound_cfg.pin_bck = 22;
               sound_cfg.pin_lrck = 21;
               sound_cfg.pin_data_out = 25;
-              sound_cfg.spk_gain = 64;
+              sound_cfg.spk_gain = 63;
             }
           }
           break;
@@ -434,6 +436,8 @@ namespace m5
       NON_BREAK; /// don't break;
 
     case board_t::board_M5Atom:
+    case board_t::board_M5AtomPsram:
+    case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
       m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
@@ -550,6 +554,8 @@ namespace m5
       NON_BREAK; /// don't break;
 
     case board_t::board_M5Atom:
+    case board_t::board_M5AtomPsram:
+    case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
       btn_bits += (raw_gpio37_40 & 0x04) >> 2; // gpio39 A
       break;

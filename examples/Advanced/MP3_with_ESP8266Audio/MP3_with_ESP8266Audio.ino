@@ -1,4 +1,7 @@
 #include <SD.h>
+#include <HTTPClient.h>
+
+/// need ESP8266Audio library. ( URL : https://github.com/earlephilhower/ESP8266Audio/ )
 #include <AudioOutput.h>
 #include <AudioFileSourceSD.h>
 #include <AudioFileSourceID3.h>
@@ -7,6 +10,16 @@
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
 
+/// set your mp3 filename
+static constexpr const char* filename[] =
+{
+  "/mp3/file01.mp3",
+  "/mp3/file02.mp3",
+  "/mp3/file03.mp3",
+  "/mp3/file04.mp3",
+};
+static constexpr const size_t filecount = sizeof(filename) / sizeof(filename[0]);
+
 class AudioOutputM5Sound : public AudioOutput
 {
   public:
@@ -14,29 +27,37 @@ class AudioOutputM5Sound : public AudioOutput
     {
       _m5sound = m5sound;
       _sound_channel = sound_channel;
-      _flip_buffer_index = 0;
-      _flip_index = 0;
+      _tri_buffer_index = 0;
+      _tri_index = 0;
     }
     virtual ~AudioOutputM5Sound(void) override {};
     virtual bool begin(void) override { return true; }
     virtual bool ConsumeSample(int16_t sample[2]) override
     {
-      _flip_buffer[_flip_index][_flip_buffer_index  ] = sample[0];
-      _flip_buffer[_flip_index][_flip_buffer_index+1] = sample[1];
-      _flip_buffer_index += 2;
-      if (_flip_buffer_index < flip_buf_size) { return true; }
+      _tri_buffer[_tri_index][_tri_buffer_index  ] = sample[0];
+      _tri_buffer[_tri_index][_tri_buffer_index+1] = sample[1];
+      _tri_buffer_index += 2;
+
+      if (_tri_buffer_index < flip_buf_size)
+      { /// Return true if the output queue has not been filled.
+        return _m5sound->isPlaying() < 2;
+      }
 
       flush();
       return false;
     }
     virtual void flush(void) override
     {
-      _m5sound->playRAW(_flip_buffer[_flip_index], _flip_buffer_index, true, hertz, 1, _sound_channel);
-      _flip_index = _flip_index < 2 ? _flip_index + 1 : 0;
-      _flip_buffer_index = 0;
+      if (_tri_buffer_index)
+      {
+        while (false == _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _sound_channel)) { delay(1); }
+        _tri_index = _tri_index < 2 ? _tri_index + 1 : 0;
+        _tri_buffer_index = 0;
+      }
     }
     virtual bool stop(void) override
     {
+      flush();
       _m5sound->stopPlay(_sound_channel);
       return true;
     }
@@ -45,19 +66,11 @@ class AudioOutputM5Sound : public AudioOutput
     m5::Sound_Class* _m5sound;
     uint8_t _sound_channel;
     static constexpr size_t flip_buf_size = 512;
-    int16_t _flip_buffer[3][flip_buf_size];
-    size_t _flip_buffer_index;
-    size_t _flip_index = 0;
+    int16_t _tri_buffer[3][flip_buf_size];
+    size_t _tri_buffer_index;
+    size_t _tri_index = 0;
 };
 
-static constexpr const size_t filecount = 4;
-static constexpr const char* filename[filecount] =
-{
-  "/mp3/file01.mp3",
-  "/mp3/file02.mp3",
-  "/mp3/file03.mp3",
-  "/mp3/file04.mp3",
-};
 size_t fileindex = 0;
 AudioFileSourceSD file;
 AudioOutputM5Sound out(&M5.Sound);
@@ -70,6 +83,7 @@ void MDCallback(void *cbData, const char *type, bool isUnicode, const char *stri
   if (string[0] == 0) { return; }
   M5.Display.printf("%s: ", type);
   M5.Display.println(string);
+  if (strcmp(type, "eof") == 0) { M5.Display.display(); }
 }
 
 void stop(void)
@@ -142,6 +156,15 @@ void loop()
     if (v <= 255)
     {
       M5.Sound.setVolume(v);
+    }
+  }
+  if (!M5.Display.displayBusy())
+  {
+    static int prev_volume;
+    uint8_t v = M5.Sound.getVolume();
+    if (prev_volume != v)
+    {
+      prev_volume = v;
       int x = v * (M5.Display.width() - 4) / 255;
       M5.Display.startWrite();
       M5.Display.fillRect(2, 2, x, 6, TFT_GREEN);

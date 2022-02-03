@@ -33,19 +33,19 @@ namespace m5
     /// i2s_lrck
     int pin_lrck = -1;
 
-    int spk_sample_rate = 64000;
+    int spk_sample_rate = 62500;
 
     /// use stereo output
     bool spk_stereo = false;
 
-    /// use single gpio buzzer ( need only pin_data_out )
+    /// use single gpio buzzer, need set pin_data_out.
     bool spk_buzzer = false;
 
-    /// use DAC speaker ( need only pin_data_out = 25 or 26 )
+    /// use DAC speaker, need set pin_data_out ( only 25 or 26 )
     bool spk_dac = false;
 
     /// multiplier for output value
-    uint8_t spk_gain = 128;
+    uint8_t spk_gain = 127;
 
     /// use analog input mic ( need only pin_data_in )
     bool mic_adc = false;
@@ -71,23 +71,40 @@ namespace m5
   friend M5Unified;
 
     static constexpr const size_t sound_channel_max = 8;
-    static constexpr const size_t dma_buf_len = 64;
-    static constexpr const size_t dma_buf_cnt = 10;
 
     static const uint8_t _default_tone_wav[2];
 
   public:
 
-    const sound_config_t& config(void) const { return _cfg; }
+    sound_config_t config(void) const { return _cfg; }
     void config(const sound_config_t& cfg) { _cfg = cfg; }
 
     bool hasSpk(void) const { return _cfg.pin_data_out >= 0; }
     bool hasMic(void) const { return _cfg.pin_data_in  >= 0; }
 
+    /// now in playing or not.
+    /// @return false=not playing / true=playing
+    bool isPlaying(void) const { return _play_channel_bits ? true : false; }
+
+    /// now in playing or not.
+    /// @param channel virtual channel number. (0~7), (default = automatically selected)
+    /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
+    size_t isPlaying(uint8_t channel) const { return _play_channel_bits ? (bool)_ch_info[channel].current_wav.repeat + (bool)_ch_info[channel].next_wav.repeat : 0; }
+
+    /// now in recording or not.
+    /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
+    size_t isRecording(void) const { return _is_recording ? ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length) : 0; }
+
+    void setVolume(uint8_t master_volume) { _master_volume = master_volume; }
+    uint8_t getVolume(void) const { return _master_volume; }
+
+    void setChannelVolume(uint8_t channel, uint8_t volume) { if (channel < sound_channel_max) { _ch_info[channel].volume = volume; } }
+    uint8_t getChannelVolume(uint8_t channel) const { return (channel < sound_channel_max) ? _ch_info[channel].volume : 0; }
+
     /// play simple tone sound.
     /// @param frequency tone frequency (Hz)
     /// @param duration tone duration (msec)
-    /// @param channel virtual channel number. Up to 8, (default = automatically selected)
+    /// @param channel virtual channel number. (0~7), (default = automatically selected)
     /// @param wav_data Single amplitude audio data. 8bit unsigned wav.
     /// @param array_len size of wav_data.
     /// @param stereo true=data is stereo / false=data is mono.
@@ -96,15 +113,41 @@ namespace m5
     /// play simple tone sound.
     /// @param frequency tone frequency (Hz)
     /// @param duration tone duration (msec)
-    /// @param channel virtual channel number. Up to 8, (default = automatically selected)
+    /// @param channel virtual channel number. (0~7), (default = automatically selected)
     bool tone(float frequency, uint32_t duration = ~0u, int channel = -1) { return tone(frequency, duration, channel, _default_tone_wav, sizeof(_default_tone_wav), false); }
 
-    /// for unsigned 8bit wav data
-    bool playRAW(const uint8_t* wav_data, size_t array_len, bool stereo = false, uint32_t sample_rate = 44100, uint32_t repeat_count = 1, int channel = -1);
+    /// play raw sound wave data. (for signed 8bit wav data)
+    /// @param wav_data wave data.
+    /// @param array_len Number of data array elements.
+    /// @param sample_rate the sampling rate (Hz) (default = 44100)
+    /// @param stereo true=data is stereo / false=data is monaural.
+    /// @param repeat : Number of times played repeatedly. (default = 1)
+    /// @param channel : virtual channel number (If omitted, use an available channel.)
+    /// @param stop_current_sound : true=Start a new output without waiting for the current one to finish.
+    bool playRAW(const int8_t* wav_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
 
-    /// for signed 16bit wav data
-    bool playRAW(const int16_t* wav_data, size_t array_len, bool stereo = false, uint32_t sample_rate = 44100, uint32_t repeat_count = 1, int channel = -1);
+    /// play raw sound wave data. (for unsigned 8bit wav data)
+    /// @param wav_data wave data.
+    /// @param array_len Number of data array elements.
+    /// @param sample_rate the sampling rate (Hz) (default = 44100)
+    /// @param stereo true=data is stereo / false=data is monaural.
+    /// @param repeat : Number of times played repeatedly. (default = 1)
+    /// @param channel : virtual channel number (If omitted, use an available channel.)
+    /// @param stop_current_sound : true=Start a new output without waiting for the current one to finish.
+    bool playRAW(const uint8_t* wav_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
 
+    /// play raw sound wave data. (for signed 16bit wav data)
+    /// @param wav_data wave data.
+    /// @param array_len Number of data array elements.
+    /// @param sample_rate the sampling rate (Hz) (default = 44100)
+    /// @param stereo true=data is stereo / false=data is monaural.
+    /// @param repeat : Number of times played repeatedly. (default = 1)
+    /// @param channel : virtual channel number (If omitted, use an available channel.)
+    /// @param stop_current_sound : true=Start a new output without waiting for the current one to finish.
+    bool playRAW(const int16_t* wav_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
+
+    void stopPlay(void);
+    void stopPlay(uint8_t channel);
 
     void setRecordSampleRate(uint32_t sample_rate) { _cfg.mic_sample_rate = sample_rate; }
 
@@ -113,20 +156,10 @@ namespace m5
     bool record(uint8_t* recdata, size_t array_len, uint32_t sample_rate);
     bool record(int16_t* recdata, size_t array_len, uint32_t sample_rate);
 
-    void stopPlay(void);
-    void stopPlay(uint8_t channel);
-
-    void setVolume(uint8_t master_volume) { _master_volume = master_volume; }
-    uint8_t getVolume(void) const { return _master_volume; }
-
-    void setChannelVolume(uint8_t channel, uint8_t volume) { if (channel < sound_channel_max) { _ch_info[channel].volume = volume; } }
-    uint8_t getChannelVolume(uint8_t channel) const { return (channel < sound_channel_max) ? _ch_info[channel].volume : 0; }
-
-    size_t isPlaying(void) const { return _play_channel_bits ? 1 : 0; }
-    size_t isPlaying(uint8_t channel) const { return _play_channel_bits ? (bool)_ch_info[channel].current_wav.repeat + (bool)_ch_info[channel].next_wav.repeat : 0; }
-    size_t isRecording(void) const { return _is_recording ? ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length) : 0; }
 
     void setCallback(void* args, bool(*func)(void*, sound_mode_t)) { _cb_set_mode = func; _cb_set_mode_args = args; }
+
+    bool setMode(sound_mode_t mode);
 
   protected:
 
@@ -136,9 +169,19 @@ namespace m5
       int repeat = 0;   /// -1 mean infinity repeat
       uint32_t sample_rate = 0;
       const void* data = nullptr;
-      bool is_stereo = false;
-      bool is_16bit = false;
-      bool stop_current = false;
+      union
+      {
+        uint8_t flg = 0;
+        struct
+        {
+          uint8_t is_stereo      : 1;
+          uint8_t is_16bit       : 1;
+          uint8_t is_signed      : 1;
+          uint8_t stop_current   : 1;
+          uint8_t no_clear_index : 1;
+        };
+      };
+      
       void clear(void);
     };
 
@@ -148,8 +191,8 @@ namespace m5
       wav_info_t current_wav;
       wav_info_t next_wav;
       size_t index = 0;
-      int diff = 0;
-      uint8_t volume = 128;
+      int32_t diff = 0;
+      uint8_t volume = 128; // channel volume (not master volume)
     };
 
     channel_info_t _ch_info[sound_channel_max];
@@ -167,10 +210,8 @@ namespace m5
     static void input_task(void* args);
 
     int _calc_rec_rate(void) const;
-    bool _set_mode(sound_mode_t mode);
     esp_err_t _setup_i2s(bool mic);
-    esp_err_t _write_i2s(int32_t* value, int32_t volume);
-    bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_stereo, uint32_t sample_rate, uint32_t repeat_count, uint8_t channel);
+    bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
     bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate);
     bool _set_channel(const wav_info_t& info, uint8_t channel);
     uint8_t _autochannel(void);
@@ -179,12 +220,6 @@ namespace m5
     i2s_dac_mode_t _dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE;
 
     sound_config_t _cfg;
-    size_t _sound_buf_index = 0;
-    int16_t _sound_buf[dma_buf_len];
-
-    int32_t _dac_offset = 0;
-    uint16_t _surplus[2] = { 0, 0 };
-
     uint8_t _master_volume = 128;
 
     bool (*_cb_set_mode)(void* args, sound_mode_t mode) = nullptr;
