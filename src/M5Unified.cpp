@@ -327,7 +327,8 @@ namespace m5
 
       if (_cfg.internal_spk || _cfg.external_spk_detail.enabled)
       {
-        sound_cfg.spk_gain = 127;
+        // set default speaker gain.
+        sound_cfg.spk_gain = 32;
         switch (_board)
         {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -347,6 +348,8 @@ namespace m5
           {
             sound_cfg.spk_buzzer = true;
             sound_cfg.pin_data_out = 2;
+            // Since these buzzers are very small, we have set the gain to the maximum value here.
+            sound_cfg.spk_gain = 255;
           }
           NON_BREAK;
         case board_t::board_M5StickC:
@@ -360,12 +363,13 @@ namespace m5
             sound_cfg.pin_data_out = 26;
             sound_cfg.spk_dac = true;
             sound_cfg.spk_buzzer = false;
+            sound_cfg.spk_gain = 128;
           }
-          sound_cfg.spk_gain = 255;
           break;
 
         case board_t::board_M5Tough:
-          sound_cfg.spk_gain = 191;
+          // The gain is set higher than Core2 here because the waterproof case reduces the sound.;
+          sound_cfg.spk_gain = 64;
           NON_BREAK;
         case board_t::board_M5StackCore2:
           if (_cfg.internal_spk)
@@ -378,17 +382,17 @@ namespace m5
 
         case board_t::board_M5Atom:
           if (_cfg.internal_spk)
-          {
+          { // for ATOM ECHO
             sound_cfg.pin_bck = 19;
             sound_cfg.pin_lrck = 33;
             sound_cfg.pin_data_out = 22;
-            sound_cfg.spk_gain = 63;
+            sound_cfg.spk_gain = 16;
           }
           NON_BREAK;
         case board_t::board_M5AtomPsram:
           if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk)
-          { /// for ATOMIC SPK
-            /// 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
+          { // for ATOMIC SPK
+            // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
             gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
             m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown);
             m5gfx::pinMode(GPIO_NUM_33, m5gfx::pin_mode_t::input_pulldown);
@@ -402,7 +406,8 @@ namespace m5
               sound_cfg.pin_bck = 22;
               sound_cfg.pin_lrck = 21;
               sound_cfg.pin_data_out = 25;
-              sound_cfg.spk_gain = 63;
+              sound_cfg.pin_data_in = -1;   // disable mic for ECHO
+              sound_cfg.spk_gain = 32;
             }
           }
           break;

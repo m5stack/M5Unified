@@ -168,6 +168,7 @@ namespace m5
   {
     auto self = (Sound_Class*)args;
 
+    const size_t lr_loop = 1 + self->_cfg.spk_stereo;
     int nodata_count = 0;
     size_t sound_buf_index = 0;
     int16_t sound_buf[dma_buf_len];
@@ -180,6 +181,7 @@ namespace m5
 
       if (self->_play_channel_bits)
       {
+        nodata_count = 0;
         for (size_t idx = 0; idx < sound_channel_max; ++idx)
         {
           if (0 == (self->_play_channel_bits & (1 << idx))) { continue; }
@@ -187,16 +189,17 @@ namespace m5
 
           if (ch_info->current_wav.repeat == 0 || ch_info->next_wav.stop_current)
           {
-            if (ch_info->next_wav.repeat == 0)
+            if (ch_info->next_wav.repeat == 0
+             || !ch_info->next_wav.no_clear_index
+             || (ch_info->next_wav.data != ch_info->current_wav.data))
             {
               ch_info->index = 0;
-              self->_play_channel_bits &= ~(1 << idx);
-              continue;
-            }
-            if (!ch_info->next_wav.no_clear_index
-             || (ch_info->current_wav.data != ch_info->next_wav.data))
-            {
-              ch_info->index = 0;
+              ch_info->diff  = 0;
+              if (ch_info->next_wav.repeat == 0)
+              {
+                self->_play_channel_bits &= ~(1 << idx);
+                continue;
+              }
             }
             ch_info->current_wav = ch_info->next_wav;
             ch_info->next_wav.clear();
@@ -210,34 +213,26 @@ namespace m5
           const void* data = current_wav->data;
           if (current_wav->is_16bit)
           {
-            if (current_wav->is_signed)
+            auto i16wav = (const int16_t*)data;
+            l = i16wav[ch_index         ];
+            r = i16wav[ch_index + stereo];
+            if (!current_wav->is_signed)
             {
-              auto i16wav = (const int16_t*)data;
-              l = i16wav[ch_index         ];
-              r = i16wav[ch_index + stereo];
-            }
-            else
-            {
-              auto u16wav = (const uint16_t*)data;
-              l = (int32_t)u16wav[ch_index         ] + INT16_MIN;
-              r = (int32_t)u16wav[ch_index + stereo] + INT16_MIN;
+              l = (l & 0xFFFF) + INT16_MIN;
+              r = (r & 0xFFFF) + INT16_MIN;
             }
           }
           else
           {
-            if (current_wav->is_signed)
-            {
-              auto i8wav = (const int8_t*)data;
-              l = i8wav[ch_index         ];
-              r = i8wav[ch_index + stereo];
-            }
-            else
-            {
-              auto u8wav = (const uint8_t*)data;
-              l = (int32_t)u8wav[ch_index         ] + INT8_MIN;
-              r = (int32_t)u8wav[ch_index + stereo] + INT8_MIN;
-            }
             ch_v <<= 8;
+            auto i8wav = (const int8_t*)data;
+            l = i8wav[ch_index         ];
+            r = i8wav[ch_index + stereo];
+            if (!current_wav->is_signed)
+            {
+              l = (l & 0xFF) + INT8_MIN;
+              r = (r & 0xFF) + INT8_MIN;
+            }
           }
           value[0] += l * ch_v;
           value[1] += r * ch_v;
@@ -259,35 +254,37 @@ namespace m5
           ch_info->diff = ch_diff;
           ch_info->index = ch_index;
         }
-        nodata_count = 0;
+        int32_t volume = self->_master_volume * self->_cfg.spk_gain;
+        if (self->_cfg.spk_stereo)
+        {
+          value[0] = (volume * (value[0] >> 12)) >> 8;
+          value[1] = (volume * (value[1] >> 12)) >> 8;
+        }
+        else
+        {
+          value[0] = (volume * ((value[0] + value[1]) >> 13)) >> 8;
+        }
       }
       else
+      if (dac_offset)
       {
         dac_offset = (dac_offset * 255) >> 8;
       }
 
       {
-        size_t loop = 1 + self->_cfg.spk_stereo;
-        if (!self->_cfg.spk_stereo)
-        {
-          int32_t v = (value[0] + value[1]) >> 1; 
-          value[0] = v;
-          value[1] = v;
-        }
-
-        int volume = (self->_master_volume + 1) * (self->_cfg.spk_gain + 1);
         size_t lr = 0;
         do
         {
-          int32_t v = ((volume >> 8) * (value[lr] >> 8)) >> 8;
+          int32_t v = value[lr];
           if (self->_cfg.spk_dac)
           {
-            int32_t vabs = abs(v);
+            int32_t vabs = std::min(INT16_MAX, abs(v));
             if (dac_offset < vabs) { dac_offset = vabs; }
             else { dac_offset += ((dac_offset < vabs + 128) ? 1 : -1); }
             v += surplus[lr] + dac_offset;
             surplus[lr] = v & 255;
-            if (v > UINT16_MAX) { v = UINT16_MAX; }
+            if (v < 0) { v = 0; }
+            else if (v > UINT16_MAX) { v = UINT16_MAX; }
             sound_buf[sound_buf_index ^ 1] = v;
           }
           else if (self->_cfg.spk_buzzer)
@@ -308,13 +305,13 @@ namespace m5
             sound_buf[sound_buf_index] = bitdata;
           }
           else
-          { /// ESP32のI2Sはビットずれを起こす不具合があるため最上位ビットを使わないよう15bit分を上限とする;
+          { // The I2S of ESP32 has a bug that causes bit shift. Therefore, to avoid using the most significant bit, the upper limit is 15 bits ;
             if (v < -16384) { v = -16384; }
             else if (v > 16383) { v = 16383; }
             sound_buf[sound_buf_index] = v;
           }
           sound_buf_index++;
-        } while (++lr != loop);
+        } while (++lr != lr_loop);
       }
 
       if (sound_buf_index >= dma_buf_len)
@@ -507,37 +504,7 @@ namespace m5
 
   void Sound_Class::wav_info_t::clear(void)
   {
-    stop_current = false;
-    sample_rate = 0;
-    length = 0;
-    repeat = 0;
-  }
-
-  bool Sound_Class::_set_channel(const Sound_Class::wav_info_t& info, uint8_t channel)
-  {
-    if (_sound_task_handle == nullptr) { return false; }
-    uint8_t chmask = 1 << channel;
-    if (!info.stop_current)
-    {
-      if ((_play_channel_bits & chmask) && _ch_info[channel].next_wav.repeat) { return false; }
-    }
-    _ch_info[channel].next_wav = info;
-    _play_channel_bits |= chmask;
-
-    xTaskNotifyGive(_sound_task_handle);
-    return true;
-  }
-
-  uint8_t Sound_Class::_autochannel(void)
-  {
-    for (int ch = sound_channel_max - 1; ch >= 0; --ch)
-    {
-      if (_ch_info[ch].current_wav.repeat == 0)
-      {
-        return ch;
-      }
-    }
-    return sound_channel_max;
+    memset(this, 0, sizeof(wav_info_t));
   }
 
   bool Sound_Class::tone(float frequency, uint32_t duration, int channel, const uint8_t* wav_data, size_t array_len, bool stereo)
@@ -551,7 +518,15 @@ namespace m5
     if (array_len == 0) { return true; }
     if ((size_t)channel >= sound_channel_max)
     {
-      channel = _autochannel(); 
+      size_t bits = _play_channel_bits;
+      for (int ch = sound_channel_max - 1; ch >= 0; --ch)
+      {
+        if (0 == ((bits >> ch) & 1))
+        {
+          channel = ch;
+          break;
+        }
+      }
       if ((size_t)channel >= sound_channel_max) { return false; }
     }
     wav_info_t info;
@@ -564,20 +539,18 @@ namespace m5
     info.is_signed = flg_signed;
     info.stop_current = stop_current_sound;
     info.no_clear_index = no_clear_index;
-    return _set_channel(info, channel);
-  }
 
-  bool Sound_Class::playRAW(const int8_t* wav, size_t array_len, uint32_t sample_rate, bool stereo, uint32_t repeat_count, int channel, bool stop_current_sound)
-  {
-    return _play_raw(static_cast<const void* >(wav), array_len, false, true, sample_rate, stereo, repeat_count, channel, stop_current_sound, false);
-  }
-  bool Sound_Class::playRAW(const uint8_t* wav, size_t array_len, uint32_t sample_rate, bool stereo, uint32_t repeat_count, int channel, bool stop_current_sound)
-  {
-    return _play_raw(static_cast<const void* >(wav), array_len, false, false, sample_rate, stereo, repeat_count, channel, stop_current_sound, false);
-  }
-  bool Sound_Class::playRAW(const int16_t* wav, size_t array_len, uint32_t sample_rate, bool stereo, uint32_t repeat_count, int channel, bool stop_current_sound)
-  {
-    return _play_raw(static_cast<const void* >(wav), array_len, true, true, sample_rate, stereo, repeat_count, channel, stop_current_sound, false);
+    uint8_t chmask = 1 << channel;
+    if (!stop_current_sound)
+    {
+      if (isPlaying(channel) == 2) { return false; }
+      while ((_play_channel_bits & chmask) && _ch_info[channel].next_wav.repeat) { taskYIELD(); }
+    }
+    _ch_info[channel].next_wav = info;
+    _play_channel_bits |= chmask;
+
+    xTaskNotifyGive(_sound_task_handle);
+    return true;
   }
 
   bool Sound_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
@@ -602,15 +575,5 @@ namespace m5
     _is_recording = true;
     xTaskNotifyGive(this->_sound_task_handle);
     return true;
-  }
-
-  bool Sound_Class::record(uint8_t* recdata, size_t array_len, uint32_t sample_rate)
-  {
-    return _rec_raw(recdata, array_len, false, sample_rate);
-  }
-
-  bool Sound_Class::record(int16_t* recdata, size_t array_len, uint32_t sample_rate)
-  {
-    return _rec_raw(recdata, array_len, true, sample_rate);
   }
 }
