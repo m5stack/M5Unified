@@ -22,6 +22,25 @@
 
 namespace m5
 {
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+  #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
+  #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
+ #endif
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 3)
+  #define SAMPLE_RATE_TYPE uint32_t
+ #endif
+#endif
+
+#ifndef COMM_FORMAT_I2S
+#define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
+#define COMM_FORMAT_MSB (I2S_COMM_FORMAT_I2S_MSB)
+#endif
+
+#ifndef SAMPLE_RATE_TYPE
+#define SAMPLE_RATE_TYPE int
+#endif
+
   static constexpr const size_t dma_buf_len = 64;
   static constexpr const size_t dma_buf_cnt = 4;
 
@@ -39,21 +58,20 @@ namespace m5
 
     if (_cfg.pin_data_in  < 0) { return ESP_FAIL; }
 
-#if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(4, 0, 0)
-  #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
-  uint32_t sample_rate = _calc_rec_rate();
- #endif
-#endif
+    SAMPLE_RATE_TYPE sample_rate = _calc_rec_rate();
 
-#ifndef COMM_FORMAT_I2S
-#define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
-int sample_rate = _calc_rec_rate();
-#endif
+/*
+ ESP-IDF ver4系にて I2S_MODE_ADC_BUILT_IN を使用するとサンプリングレートが正しく反映されない不具合があったため、特殊な対策を実装している。
+ ・指定するサンプリングレートの値を1/16にする
+ ・I2S_MODE_ADC_BUILT_INを使用せずに初期化を行う
+ ・最後にI2S0のレジスタを操作してADCモードを有効にする。
+*/
+    if (_cfg.use_adc) { sample_rate >>= 4; }
 
     i2s_config_t i2s_config = {
       .mode                 = _cfg.use_adc
-                              ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN )
+                           // ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN )
+                              ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
                               : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM ) ,
       .sample_rate          = sample_rate,
       .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
@@ -76,8 +94,6 @@ int sample_rate = _calc_rec_rate();
 
     esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
     if (err != ESP_OK) { return err; }
-
-    // i2s_zero_dma_buffer(_cfg.i2s_port);
 
     err = i2s_set_pin(_cfg.i2s_port, &pin_config);
     if (err != ESP_OK) { return err; }
@@ -124,6 +140,16 @@ int sample_rate = _calc_rec_rate();
       else
       {
         adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_11db);
+      }
+      if (_cfg.i2s_port == I2S_NUM_0)
+      {
+        I2S0.conf2.lcd_en = true;
+        I2S0.conf.rx_right_first = 0;
+        I2S0.conf.rx_msb_shift = 0;
+        I2S0.conf.rx_mono = 0;
+        I2S0.conf.rx_short_sync = 0;
+        I2S0.fifo_conf.rx_fifo_mod = true;
+        I2S0.conf_chan.rx_chan_mod = true;
       }
     }
 

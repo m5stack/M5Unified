@@ -23,6 +23,25 @@
 
 namespace m5
 {
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+  #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
+  #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
+ #endif
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 3)
+  #define SAMPLE_RATE_TYPE uint32_t
+ #endif
+#endif
+
+#ifndef COMM_FORMAT_I2S
+#define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
+#define COMM_FORMAT_MSB (I2S_COMM_FORMAT_I2S_MSB)
+#endif
+
+#ifndef SAMPLE_RATE_TYPE
+#define SAMPLE_RATE_TYPE int
+#endif
+
   static constexpr const size_t dma_buf_len = 128;
   static constexpr const size_t dma_buf_cnt = 8;
   const uint8_t Speaker_Class::_default_tone_wav[2] = { 191, 64 };
@@ -34,29 +53,26 @@ namespace m5
 
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
 
-#if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(4, 0, 0)
-  #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
-  #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
-  uint32_t sample_rate = _cfg.sample_rate;
- #endif
-#endif
+    SAMPLE_RATE_TYPE sample_rate = _cfg.sample_rate;
 
-#ifndef COMM_FORMAT_I2S
-#define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
-#define COMM_FORMAT_MSB (I2S_COMM_FORMAT_I2S_MSB)
-int sample_rate = _cfg.sample_rate;
-#endif
+/*
+ ESP-IDF ver4系にて I2S_MODE_DAC_BUILT_IN を使用するとサンプリングレートが正しく反映されない不具合があったため、特殊な対策を実装している。
+ ・指定するサンプリングレートの値を1/16にする
+ ・I2S_MODE_DAC_BUILT_INを使用せずに初期化を行う
+ ・最後にI2S0のレジスタを操作してDACモードを有効にする。
+*/
+    if (_cfg.use_dac) { sample_rate >>= 4; }
 
     i2s_config_t i2s_config = {
-      .mode                 = _cfg.use_dac
-                              ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN )
-                              : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
+  //  .mode                 = _cfg.use_dac
+  //                          ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN )
+  //                          : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
+      .mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
       .sample_rate          = sample_rate,
       .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format       = _cfg.stereo
                               ? I2S_CHANNEL_FMT_RIGHT_LEFT
-                              : I2S_CHANNEL_FMT_ONLY_LEFT,
+                              : I2S_CHANNEL_FMT_ONLY_RIGHT,
       .communication_format = _cfg.use_dac
                               ? (i2s_comm_format_t)( COMM_FORMAT_MSB )
                               : (i2s_comm_format_t)( COMM_FORMAT_I2S ),
@@ -80,13 +96,9 @@ int sample_rate = _cfg.sample_rate;
 
     i2s_zero_dma_buffer(_cfg.i2s_port);
 
-    err = i2s_set_pin(_cfg.i2s_port, &pin_config);
-    if (err != ESP_OK) { return err; }
-
-    i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE;
     if (_cfg.use_dac)
     {
-      dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
+      i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
       if (!_cfg.stereo)
       {
         err = i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
@@ -95,8 +107,18 @@ int sample_rate = _cfg.sample_rate;
                 : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN; // for GPIO 26
       }
       err = i2s_set_dac_mode(dac_mode);
+      if (_cfg.i2s_port == I2S_NUM_0)
+      {
+        I2S0.conf2.lcd_en = true;
+        I2S0.conf.tx_right_first = true;
+        I2S0.conf.tx_msb_shift = 0;
+        I2S0.conf.tx_short_sync = 0;
+      }
     }
-    // _dac_mode = dac_mode;
+    else
+    {
+      err = i2s_set_pin(_cfg.i2s_port, &pin_config);
+    }
 
     return err;
 #else
