@@ -6,6 +6,7 @@
 #include <AudioFileSourceSD.h>
 #include <AudioFileSourceID3.h>
 #include <AudioGeneratorMP3.h>
+
 #include <M5UnitLCD.h>
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
@@ -20,17 +21,17 @@ static constexpr const char* filename[] =
 };
 static constexpr const size_t filecount = sizeof(filename) / sizeof(filename[0]);
 
-class AudioOutputM5Sound : public AudioOutput
+class AudioOutputM5Speaker : public AudioOutput
 {
   public:
-    AudioOutputM5Sound(m5::Sound_Class* m5sound, uint8_t sound_channel = 0)
+    AudioOutputM5Speaker(m5::Speaker_Class* m5sound, uint8_t sound_channel = 0)
     {
       _m5sound = m5sound;
       _sound_channel = sound_channel;
       _tri_buffer_index = 0;
       _tri_index = 0;
     }
-    virtual ~AudioOutputM5Sound(void) override {};
+    virtual ~AudioOutputM5Speaker(void) override {};
     virtual bool begin(void) override { return true; }
     virtual bool ConsumeSample(int16_t sample[2]) override
     {
@@ -39,8 +40,8 @@ class AudioOutputM5Sound : public AudioOutput
       _tri_buffer_index += 2;
 
       if (_tri_buffer_index < flip_buf_size)
-      { /// Return true if the output queue has not been filled.
-        return _m5sound->isPlaying() < 2;
+      {
+        return true;
       }
 
       flush();
@@ -50,6 +51,7 @@ class AudioOutputM5Sound : public AudioOutput
     {
       if (_tri_buffer_index)
       {
+        /// If there is no room in the play queue, playRAW will return false, so repeat until true is returned.
         while (false == _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _sound_channel)) { delay(1); }
         _tri_index = _tri_index < 2 ? _tri_index + 1 : 0;
         _tri_buffer_index = 0;
@@ -58,12 +60,12 @@ class AudioOutputM5Sound : public AudioOutput
     virtual bool stop(void) override
     {
       flush();
-      _m5sound->stopPlay(_sound_channel);
+      _m5sound->stop(_sound_channel);
       return true;
     }
 
   protected:
-    m5::Sound_Class* _m5sound;
+    m5::Speaker_Class* _m5sound;
     uint8_t _sound_channel;
     static constexpr size_t flip_buf_size = 512;
     int16_t _tri_buffer[3][flip_buf_size];
@@ -73,7 +75,7 @@ class AudioOutputM5Sound : public AudioOutput
 
 size_t fileindex = 0;
 AudioFileSourceSD file;
-AudioOutputM5Sound out(&M5.Sound);
+AudioOutputM5Speaker out(&M5.Speaker);
 AudioGeneratorMP3 mp3;
 AudioFileSourceID3* id3 = nullptr;
 
@@ -116,15 +118,15 @@ void setup()
   M5.begin(cfg);
   SD.begin(GPIO_NUM_4, SPI, 25000000);
 
-  int v = M5.Sound.getVolume();
+  int v = M5.Speaker.getVolume();
   int x = v * (M5.Display.width() - 4) / 255;
   M5.Display.startWrite();
   M5.Display.drawRect(0, 0, M5.Display.width(), 10, TFT_WHITE);
   M5.Display.fillRect(2, 2, x, 6, TFT_GREEN);
   M5.Display.fillRect(2 + x, 2, M5.Display.width() - (x + 4), 6, TFT_BLACK);
   M5.Display.endWrite();
-  M5.Display.setFont(&fonts::efontJA_16);
- 
+  M5.Display.setFont(&fonts::lgfxJapanGothic_12);
+
   play(filename[fileindex]);
 }
 
@@ -142,7 +144,7 @@ void loop()
   M5.update();
   if (M5.BtnA.wasClicked())
   {
-    M5.Sound.tone(440, 100);
+    M5.Speaker.tone(440, 100);
     stop();
     if (++fileindex >= filecount) { fileindex = 0; }
     M5.Display.fillRect(0, 10, M5.Display.width(), M5.Display.height(), TFT_BLACK);
@@ -150,18 +152,18 @@ void loop()
   }
   if (M5.BtnB.isPressed() || M5.BtnC.isPressed())
   {
-    size_t v = M5.Sound.getVolume();
+    size_t v = M5.Speaker.getVolume();
     if (M5.BtnB.isPressed()) { --v; }
     if (M5.BtnC.isPressed()) { ++v; }
     if (v <= 255)
     {
-      M5.Sound.setVolume(v);
+      M5.Speaker.setVolume(v);
     }
   }
   if (!M5.Display.displayBusy())
   {
     static int prev_volume;
-    uint8_t v = M5.Sound.getVolume();
+    uint8_t v = M5.Speaker.getVolume();
     if (prev_volume != v)
     {
       prev_volume = v;
