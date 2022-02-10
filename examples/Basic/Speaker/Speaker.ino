@@ -8,9 +8,9 @@ extern const uint8_t wav_unsigned_8bit_click[46000];
 /// 8bit signed 44.1kHz mono 
 extern const int8_t wav_signed_8bit_bgm[566520];
 
-static int menu_x = 8;
-static int menu_y = 30;
-static int menu_w = 100;
+static int menu_x = 2;
+static int menu_y = 20;
+static int menu_w = 120;
 static int menu_h = 30;
 static int menu_padding = 36;
 
@@ -18,31 +18,44 @@ static void tone_up(bool holding)
 {
   static int tone_hz;
   if (!holding) { tone_hz = 100; }
-  M5.Sound.tone(++tone_hz, 1000, 1);
+  M5.Speaker.tone(++tone_hz, 1000, 1);
 }
 
-static void bgm_play(bool holding = false)
+static void bgm_play_stop(bool holding = false)
 {
   if (holding) { return; }
-  M5.Sound.playRAW(wav_signed_8bit_bgm, sizeof(wav_signed_8bit_bgm), 44100, false, ~0u, 0, true);
+  if (M5.Speaker.isPlaying(0))
+  {
+    M5.Speaker.stop(0);
+  }
+  else
+  {
+    M5.Speaker.playRAW(wav_signed_8bit_bgm, sizeof(wav_signed_8bit_bgm), 44100, false, ~0u, 0, true);
+  }
 }
 
-static void bgm_stop(bool holding = false)
+static void m_volume_up(bool)
 {
-  if (holding) { return; }
-  M5.Sound.stopPlay(0);
+  int v = M5.Speaker.getVolume() + 1;
+  if (v < 256) { M5.Speaker.setVolume(v); }
 }
 
-static void volume_up(bool)
+static void m_volume_down(bool)
 {
-  int v = M5.Sound.getChannelVolume(0) + 1;
-  if (v < 256) { M5.Sound.setChannelVolume(0, v); }
+  int v = M5.Speaker.getVolume() - 1;
+  if (v >= 0) { M5.Speaker.setVolume(v); }
 }
 
-static void volume_down(bool)
+static void c_volume_up(bool)
 {
-  int v = M5.Sound.getChannelVolume(0) - 1;
-  if (v >= 0) { M5.Sound.setChannelVolume(0, v); }
+  int v = M5.Speaker.getChannelVolume(0) + 1;
+  if (v < 256) { M5.Speaker.setChannelVolume(0, v); }
+}
+
+static void c_volume_down(bool)
+{
+  int v = M5.Speaker.getChannelVolume(0) - 1;
+  if (v >= 0) { M5.Speaker.setChannelVolume(0, v); }
 }
 
 struct menu_item_t
@@ -53,11 +66,12 @@ struct menu_item_t
 
 static constexpr const menu_item_t menus[] =
 {
-  { "tone"    , tone_up     },
-  { "play"    , bgm_play    },
-  { "stop"    , bgm_stop    },
-  { "vol up"  , volume_up   },
-  { "vol down", volume_down },
+  { "tone"      , tone_up       },
+  { "play/stop" , bgm_play_stop },
+  { "ms vol u"  , m_volume_up   },
+  { "ms vol d"  , m_volume_down },
+  { "ch vol u"  , c_volume_up   },
+  { "ch vol d"  , c_volume_down },
 };
 static constexpr const size_t menu_count = sizeof(menus) / sizeof(menus[0]);
 
@@ -68,7 +82,8 @@ void draw_menu(size_t index, bool focus)
   M5.Display.startWrite();
   auto baseColor = M5.Display.getBaseColor();
   M5.Display.setColor(focus ? baseColor : ~baseColor);
-  M5.Display.fillRect(menu_x, menu_y + index * menu_padding, menu_w, menu_h);
+  M5.Display.drawRect(menu_x  , menu_y + index * menu_padding  , menu_w  , menu_h  );
+  M5.Display.drawRect(menu_x+1, menu_y + index * menu_padding+1, menu_w-2, menu_h-2);
   M5.Display.setColor(focus ? ~baseColor : baseColor);
   M5.Display.fillRect(menu_x+2, menu_y + index * menu_padding+2, menu_w-4, menu_h-4);
   M5.Display.setTextDatum(textdatum_t::middle_center);
@@ -77,155 +92,9 @@ void draw_menu(size_t index, bool focus)
   M5.Display.endWrite();
 }
 
-#if !defined ( ARDUINO )
-void delay(uint32_t msec)
-{
-  vTaskDelay(msec / portTICK_PERIOD_MS);
-}
-#endif
-
-void setup(void)
-{
-  auto cfg = M5.config();
-
-  cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude atomic spk
-
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude spk hat
-
-
-  M5.begin(cfg);
-
-
-  if (M5.Display.width() < 100)
-  {
-    menu_x = 0;
-    menu_y = 16;
-    menu_w = M5.Display.width() - 8;
-    menu_h = 18;
-    menu_padding = 20;
-  }
-  else
-  {
-    M5.Display.setFont(&fonts::DejaVu18);
-  }
-
-  if (!M5.Sound.hasSpk())
-  {
-    M5.Display.print("Speaker not found...");
-    for (;;) { delay(1); }
-  }
-
-  M5.Sound.setMode(m5::sound_mode_t::sound_output);
-
-  M5.Display.fillScreen(TFT_DARKGRAY);
-  M5.Display.setEpdMode(epd_mode_t::epd_fastest);
-  M5.Display.print("SOUND TEST");
-
-  /// The setVolume function can be set the volume in the range of 0-255. (default=128)
-  M5.Sound.setVolume(50);
-
-  /// play 2000Hz tone sound.
-  M5.Sound.tone(2000);
-
-  delay(100);
-
-  /// play 1000Hz tone sound.
-  M5.Sound.tone(1000);
-
-  delay(100);
-
-  /// stop output sound.
-  M5.Sound.stopPlay();
-
-  delay(500);
-
-  /// The playRAW function can play raw wave data.
-  /// 1st argument : data pointer, (supported  int8_t / uint8_t / int16_t)
-  /// 2nd argument : Number of data array elements.
-  /// 3rd argument : the sampling rate (Hz) (default = 44100)
-  /// 4th argument : true=stereo / false=monaural (default = false)
-  /// 5th argument : repeat count (default = 1)
-  /// 6th argument : virtual channel number (If omitted, use an available channel.)
-  M5.Sound.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
-
-  while (M5.Sound.isPlaying()) { delay(1); } // Wait for the output to finish.
-
-  delay(500);
-
-  // The 2nd argument of the tone function can be used to specify the output time (milliseconds).
-  M5.Sound.tone(440, 1000);  // 440Hz sound  output for 1 seconds.
-
-  while (M5.Sound.isPlaying()) { delay(1); } // Wait for the output to finish.
-
-  delay(500);
-
-  M5.Sound.setVolume(0);
-  M5.Sound.tone(220);  // tone 220Hz sound output. (Keeps output until it stops.)
-  for (int i = 0; i < 64; i++)
-  {
-    M5.Sound.setVolume(i); // Volume can be changed during sound output.
-    delay(20);
-  }
-  M5.Sound.stopPlay();  // stop sound output.
-
-  delay(500);
-
-  // The tone function can specify a virtual channel number as its 3rd argument.
-  // If the tone function is used on the same channel number, the previous tone will be stopped and a new tone will be played.
-  M5.Sound.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
-  delay(200);
-  M5.Sound.tone(329.628, 1000, 1);  // tone 329.628Hz  output for 1 seconds, use channel 1
-  delay(200);
-  M5.Sound.tone(391.995, 1000, 1);  // tone 391.995Hz  output for 1 seconds, use channel 1
-
-  while (M5.Sound.isPlaying()) { delay(1); } // Wait for the output to finish.
-
-  delay(500);
-
-  // By specifying different channels, multiple sounds can be output simultaneously.
-  M5.Sound.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
-  delay(200);
-  M5.Sound.tone(329.628, 1000, 2);  // tone 329.628Hz  output for 1 seconds, use channel 2
-  delay(200);
-  M5.Sound.tone(391.995, 1000, 3);  // tone 391.995Hz  output for 1 seconds, use channel 3
-
-  while (M5.Sound.isPlaying()) { delay(1); } // Wait for the output to finish.
-
-  delay(500);
-
-  /// tone data (8bit unsigned wav)
-  const uint8_t wavdata[64] = { 132,138,143,154,151,139,138,140,144,147,147,147,151,159,184,194,203,222,228,227,210,202,197,181,172,169,177,178,172,151,141,131,107,96,87,77,73,66,42,28,17,10,15,25,55,68,76,82,80,74,61,66,79,107,109,103,81,73,86,94,99,112,121,129 };
-
-  /// Using a single wave of data, you can change the tone.
-  M5.Sound.tone(261.626, 1000, 1, wavdata, sizeof(wavdata));
-  delay(200);
-  M5.Sound.tone(329.628, 1000, 2, wavdata, sizeof(wavdata));
-  delay(200);
-  M5.Sound.tone(391.995, 1000, 3, wavdata, sizeof(wavdata));
-  delay(200);
-
-  while (M5.Sound.isPlaying()) { delay(1); } // Wait for the output to finish.
-
-  if (M5.Sound.config().spk_buzzer)
-  {
-    M5.Sound.setVolume(255);
-  }
-
-  M5.Display.startWrite();
-  for (size_t i = 0; i < menu_count; i++)
-  {
-    draw_menu(i, i == cursor_index);
-  }
-  M5.Display.endWrite();
-
-  bgm_play(false);
-}
-
 void select_menu(size_t index)
 {
-  M5.Sound.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+  M5.Speaker.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
   M5.Display.startWrite();
   draw_menu(cursor_index, false);
   cursor_index = index;
@@ -253,18 +122,173 @@ void hold_menu(bool holding)
   }
 }
 
+#if !defined ( ARDUINO )
+void delay(uint32_t msec)
+{
+  vTaskDelay(msec / portTICK_PERIOD_MS);
+}
+#endif
+
+void setup(void)
+{
+  auto cfg = M5.config();
+
+//cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
+//cfg.external_spk_detail.omit_atomic_spk = true; // exclude atomic spk
+//cfg.external_spk_detail.omit_spk_hat    = true; // exclude spk hat
+
+  M5.begin(cfg);
+
+  M5.Speaker.begin();
+
+  if (M5.Display.width() > M5.Display.height())
+  {
+    M5.Display.setRotation(M5.Display.getRotation() ^ 1);
+  }
+
+  if (M5.Display.width() < 100)
+  {
+    menu_x = 0;
+    menu_y = 10;
+    menu_w = M5.Display.width() - 8;
+  }
+  else
+  {
+    M5.Display.setFont(&fonts::DejaVu18);
+  }
+  menu_padding = (M5.Display.height() - menu_y) / menu_count;
+  menu_h = menu_padding - 2;
+
+  if (!M5.Speaker.isEnabled())
+  {
+    M5.Display.print("Speaker not found...");
+    for (;;) { delay(1); }
+  }
+
+  M5.Display.fillScreen(TFT_DARKGRAY);
+  M5.Display.setEpdMode(epd_mode_t::epd_fastest);
+  M5.Display.print("SOUND TEST");
+
+  /// The setVolume function can be set the master volume in the range of 0-255.
+  M5.Speaker.setVolume(64);
+
+  /// The setAllChannelVolume function can be set the all virtual channel volume in the range of 0-255.
+  M5.Speaker.setAllChannelVolume(64);
+
+  /// The setChannelVolume function can be set the specified virtual channel volume in the range of 0-255.
+  M5.Speaker.setChannelVolume(0, 64);
+
+  /// play 2000Hz tone sound.
+  M5.Speaker.tone(2000);
+
+  delay(100);
+
+  /// play 1000Hz tone sound.
+  M5.Speaker.tone(1000);
+
+  delay(100);
+
+  /// stop output sound.
+  M5.Speaker.stop();
+
+  delay(500);
+
+  /// The playRAW function can play raw wave data.
+  /// 1st argument : data pointer, (supported  int8_t / uint8_t / int16_t)
+  /// 2nd argument : Number of data array elements.
+  /// 3rd argument : the sampling rate (Hz) (default = 44100)
+  /// 4th argument : true=stereo / false=monaural (default = false)
+  /// 5th argument : repeat count (default = 1)
+  /// 6th argument : virtual channel number (If omitted, use an available channel.)
+  M5.Speaker.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+
+  while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  delay(500);
+
+  // The 2nd argument of the tone function can be used to specify the output time (milliseconds).
+  M5.Speaker.tone(440, 1000);  // 440Hz sound  output for 1 seconds.
+
+  while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  delay(500);
+
+  M5.Speaker.setVolume(0);
+  M5.Speaker.tone(220);  // tone 220Hz sound output. (Keeps output until it stops.)
+  for (int i = 0; i <= 64; i++)
+  {
+    M5.Speaker.setVolume(i); // Volume can be changed during sound output.
+    delay(25);
+  }
+  M5.Speaker.stop();  // stop sound output.
+
+  delay(500);
+
+  // The tone function can specify a virtual channel number as its 3rd argument.
+  // If the tone function is used on the same channel number, the previous tone will be stopped and a new tone will be played.
+  M5.Speaker.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  delay(200);
+  M5.Speaker.tone(329.628, 1000, 1);  // tone 329.628Hz  output for 1 seconds, use channel 1
+  delay(200);
+  M5.Speaker.tone(391.995, 1000, 1);  // tone 391.995Hz  output for 1 seconds, use channel 1
+
+  while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  delay(500);
+
+  // By specifying different channels, multiple sounds can be output simultaneously.
+  M5.Speaker.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  delay(200);
+  M5.Speaker.tone(329.628, 1000, 2);  // tone 329.628Hz  output for 1 seconds, use channel 2
+  delay(200);
+  M5.Speaker.tone(391.995, 1000, 3);  // tone 391.995Hz  output for 1 seconds, use channel 3
+
+  while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  delay(500);
+
+  /// tone data (8bit unsigned wav)
+  const uint8_t wavdata[64] = { 132,138,143,154,151,139,138,140,144,147,147,147,151,159,184,194,203,222,228,227,210,202,197,181,172,169,177,178,172,151,141,131,107,96,87,77,73,66,42,28,17,10,15,25,55,68,76,82,80,74,61,66,79,107,109,103,81,73,86,94,99,112,121,129 };
+
+  /// Using a single wave of data, you can change the tone.
+  M5.Speaker.tone(261.626, 1000, 1, true, wavdata, sizeof(wavdata));
+  delay(200);
+  M5.Speaker.tone(329.628, 1000, 2, true, wavdata, sizeof(wavdata));
+  delay(200);
+  M5.Speaker.tone(391.995, 1000, 3, true, wavdata, sizeof(wavdata));
+  delay(200);
+
+  while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  M5.Display.startWrite();
+  for (size_t i = 0; i < menu_count; i++)
+  {
+    draw_menu(i, i == cursor_index);
+  }
+  M5.Display.endWrite();
+
+  bgm_play_stop(false);
+}
+
 void loop(void)
 {
   if (!M5.Display.displayBusy())
   {
     static uint8_t prev_channelvolume;
-    uint8_t vol = M5.Sound.getChannelVolume(0) >> 1;
-    if (prev_channelvolume != vol)
+    static uint8_t prev_mastervolume;
+    int32_t m_vol = (M5.Speaker.getVolume()         * (M5.Lcd.height() - menu_y)) >> 8;
+    int32_t c_vol = (M5.Speaker.getChannelVolume(0) * (M5.Lcd.height() - menu_y)) >> 8;
+    if (prev_mastervolume  != m_vol
+     || prev_channelvolume != c_vol)
     {
-      prev_channelvolume = vol;
+      int32_t b = (255 * (M5.Lcd.height() - menu_y)) >> 8;
+      prev_mastervolume  = m_vol;
+      prev_channelvolume = c_vol;
       M5.Display.startWrite();
-      M5.Display.fillRect(menu_x + menu_w + 5, menu_y, 5, 127 - vol, M5.Display.getBaseColor());
-      M5.Display.fillRect(menu_x + menu_w + 5, menu_y + 127, 5, - vol, ~M5.Display.getBaseColor());
+      M5.Display.fillRect(menu_x + menu_w + 1, menu_y, 3, b - m_vol, M5.Display.getBaseColor());
+      M5.Display.fillRect(menu_x + menu_w + 5, menu_y, 3, b - c_vol, M5.Display.getBaseColor());
+      M5.Display.fillRect(menu_x + menu_w + 1, menu_y + b, 3, - m_vol, ~M5.Display.getBaseColor());
+      M5.Display.fillRect(menu_x + menu_w + 5, menu_y + b, 3, - c_vol, ~M5.Display.getBaseColor());
       M5.Display.endWrite();
     }
   }
@@ -314,8 +338,8 @@ void loop(void)
 
   case m5::board_t::board_M5StickC:
   case m5::board_t::board_M5StickCPlus:
-    if (M5.BtnPWR.wasClicked()) { move_menu(true);  }
-    if (M5.BtnB.wasClicked())   { move_menu(false); }
+    if (M5.BtnPWR.wasClicked()) { move_menu(false); }
+    if (M5.BtnB.wasClicked())   { move_menu(true);  }
     if (M5.BtnA.wasClicked())   { hold_menu(false); }
     if (M5.BtnA.wasHold())      { hold_menu(false); }
     if (M5.BtnA.isHolding())    { hold_menu(true);  }

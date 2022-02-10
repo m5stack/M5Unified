@@ -55,32 +55,32 @@ void setup(void)
   cfg.external_imu  = true;  // default=false. use Unit Accel & Gyro.
   cfg.external_rtc  = true;  // default=false. use Unit RTC.
   cfg.external_spk  = false; // default=false. use SPK_HAT / ATOMIC_SPK
+//cfg.external_spk_detail.omit_atomic_spk = true; // omit ATOMIC SPK
+//cfg.external_spk_detail.omit_spk_hat    = true; // omit SPK HAT
   cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
 
-// cfg.external_spk_detail.omit_atomic_spk = true; // omit ATOMIC SPK
-// cfg.external_spk_detail.omit_spk_hat    = true; // omit SPK HAT
 
   M5.begin(cfg);
 
-  if (M5.Sound.hasSpk())
+  if (M5.Speaker.isEnabled())
   {
     /// set master volume (0~255)
-    M5.Sound.setVolume(64);
+    M5.Speaker.setVolume(64);
 
     /// play beep sound 2000Hz 100msec (background task)
-    M5.Sound.tone(2000, 100);
+    M5.Speaker.tone(2000, 100);
 
     /// wait done
-    while (M5.Sound.isPlaying()) { taskYIELD(); }
+    while (M5.Speaker.isPlaying()) { taskYIELD(); }
 
     /// play beep sound 1000Hz 100msec (background task)
-    M5.Sound.tone(1000, 100);
+    M5.Speaker.tone(1000, 100);
 
     /// wait play beep sound 2000Hz 100msec (background task)
-    while (M5.Sound.isPlaying()) { taskYIELD(); }
+    while (M5.Speaker.isPlaying()) { taskYIELD(); }
 
 
-    M5.Sound.playRAW(wav_8bit_44100, sizeof(wav_8bit_44100), 44100, false);
+    M5.Speaker.playRAW(wav_8bit_44100, sizeof(wav_8bit_44100), 44100, false);
   }
 
   if (M5.Rtc.isEnabled())
@@ -215,18 +215,21 @@ void loop(void)
   static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE };
   static constexpr const char* const names[] = { "none", "wasHold", "wasClicked", "wasPressed", "wasReleased" };
 
-  /// BtnPWR: can "wasClicked"/"wasHold"  can be use.
+  /// BtnPWR: "wasClicked"/"wasHold"  can be use.
+  /// BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
   int state = M5.BtnPWR.wasHold() ? 1
             : M5.BtnPWR.wasClicked() ? 2
+            : M5.BtnPWR.wasPressed() ? 3
+            : M5.BtnPWR.wasReleased() ? 4
             : 0;
   if (state)
   {
-    M5.Sound.tone(391.995, 100);
+    M5.Speaker.tone(391.995, 100);
     ESP_LOGI("loop", "BtnPWR:%s", names[state]);
     M5.Display.fillRect(0, h*2, h, h-1, colors[state]);
   }
 
-  /// BtnA,BtnB,BtnC,BtnEXT, BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
+  /// BtnA,BtnB,BtnC,BtnEXT: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
   state = M5.BtnA.wasHold() ? 1
         : M5.BtnA.wasClicked() ? 2
         : M5.BtnA.wasPressed() ? 3
@@ -234,7 +237,7 @@ void loop(void)
         : 0;
   if (state)
   {
-    M5.Sound.tone(261.626, 100);
+    M5.Speaker.tone(261.626, 100);
     ESP_LOGI("loop", "BtnA:%s", names[state]);
     M5.Display.fillRect(0, h*3, h, h-1, colors[state]);
   }
@@ -246,7 +249,7 @@ void loop(void)
         : 0;
   if (state)
   {
-    M5.Sound.tone(293.665, 100);
+    M5.Speaker.tone(293.665, 100);
     ESP_LOGI("loop", "BtnB:%s", names[state]);
     M5.Display.fillRect(0, h*4, h, h-1, colors[state]);
   }
@@ -258,7 +261,7 @@ void loop(void)
         : 0;
   if (state)
   {
-    M5.Sound.tone(329.628, 100);
+    M5.Speaker.tone(329.628, 100);
     ESP_LOGI("loop", "BtnC:%s", names[state]);
     M5.Display.fillRect(0, h*5, h, h-1, colors[state]);
   }
@@ -270,7 +273,7 @@ void loop(void)
         : 0;
   if (state)
   {
-    M5.Sound.tone(349.228, 100);
+    M5.Speaker.tone(349.228, 100);
     ESP_LOGI("loop", "BtnEXT:%s", names[state]);
     M5.Display.fillRect(0, h*6, h, h-1, colors[state]);
   }

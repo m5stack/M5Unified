@@ -33,7 +33,8 @@
 #include "utility/IMU_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
-#include "utility/Sound_Class.hpp"
+#include "utility/Speaker_Class.hpp"
+#include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
 
 #include <memory>
@@ -159,7 +160,9 @@ namespace m5
     /// for external I2C device (Port.A)
     I2C_Class& Ex_I2C = m5::Ex_I2C;
 
-    Sound_Class Sound;
+    Speaker_Class Speaker;
+
+    Mic_Class Mic;
 
   private:
 
@@ -170,7 +173,9 @@ namespace m5
     void _begin(void);
     board_t _check_boardtype(board_t);
 
-    static bool _sound_set_mode_cb(void* args, m5::sound_mode_t mode);
+    static bool _speaker_enabled_cb(void* args, bool enabled);
+    static bool _microphone_enabled_cb(void* args, bool enabled);
+    // static bool _sound_set_mode_cb(void* args, m5::sound_mode_t mode);
 
     std::unique_ptr<m5gfx::LGFX_Device> _ex_display;
     board_t _switch_display(void)
