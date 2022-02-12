@@ -39,7 +39,7 @@ namespace m5
     bool use_adc = false;
 
     /// background task priority
-    int task_priority = 2;
+    UBaseType_t task_priority = configMAX_PRIORITIES - 4;
 
     /// background task pinned core
     int task_pinned_core = 0;
@@ -132,7 +132,7 @@ namespace m5
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
-    TaskHandle_t _sound_task_handle = nullptr;
+    TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
     volatile bool _is_recording = false;
   };

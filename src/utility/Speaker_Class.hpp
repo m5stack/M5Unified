@@ -24,7 +24,7 @@ namespace m5
     int pin_ws = I2S_PIN_NO_CHANGE;
 
     /// output sampling rate (Hz)
-    uint32_t sample_rate = 50000;
+    uint32_t sample_rate = 48000;
 
     /// use stereo output
     bool stereo = false;
@@ -39,10 +39,7 @@ namespace m5
     uint8_t magnification = 16;
 
     /// background task priority
-    int task_priority = 2;
-
-    /// background task pinned core
-    int task_pinned_core = 0;
+    UBaseType_t task_priority = configMAX_PRIORITIES - 4;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
@@ -211,7 +208,7 @@ namespace m5
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
-    TaskHandle_t _sound_task_handle = nullptr;
+    TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
     volatile uint8_t _play_channel_bits = 0;
   };

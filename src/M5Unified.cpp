@@ -409,7 +409,7 @@ namespace m5
         {
           spk_cfg.buzzer = true;
           spk_cfg.pin_data_out = 2;
-          spk_cfg.magnification = 64;
+          spk_cfg.magnification = 32;
         }
         NON_BREAK;
       case board_t::board_M5StickC:

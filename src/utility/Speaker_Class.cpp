@@ -19,12 +19,11 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 #include <math.h>
-#include <algorithm>
 
 namespace m5
 {
 #if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
   #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
   #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
  #endif
@@ -42,7 +41,7 @@ namespace m5
 #define SAMPLE_RATE_TYPE int
 #endif
 
-  static constexpr const size_t dma_buf_len = 128;
+  static constexpr const size_t dma_buf_len = 64;
   static constexpr const size_t dma_buf_cnt = 8;
   const uint8_t Speaker_Class::_default_tone_wav[2] = { 191, 64 };
 
@@ -64,9 +63,6 @@ namespace m5
     if (_cfg.use_dac) { sample_rate >>= 4; }
 
     i2s_config_t i2s_config = {
-  //  .mode                 = _cfg.use_dac
-  //                          ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN )
-  //                          : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
       .mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
       .sample_rate          = sample_rate,
       .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
@@ -108,7 +104,7 @@ namespace m5
       }
       err = i2s_set_dac_mode(dac_mode);
       if (_cfg.i2s_port == I2S_NUM_0)
-      {
+      { /// レジスタを操作してDACモードの設定を有効にする ;
         I2S0.conf2.lcd_en = true;
         I2S0.conf.tx_right_first = true;
         I2S0.conf.tx_msb_shift = 0;
@@ -254,7 +250,8 @@ namespace m5
             {
               dac_offset = (dac_offset * 255) >> 8;
             }
-            int32_t vabs = std::min<uint32_t>(INT16_MAX, abs(v));
+            int32_t vabs = abs(v);
+            if (vabs > INT16_MAX) { vabs = INT16_MAX; }
             if (dac_offset < vabs) { dac_offset = vabs; }
             else { dac_offset += ((dac_offset < vabs + 128) ? 1 : -1); }
             v += surplus[lr] + dac_offset;
@@ -338,7 +335,7 @@ namespace m5
       m5gfx::pinMode(self->_cfg.pin_data_out, m5gfx::pin_mode_t::output);
     }
 #endif
-    self->_sound_task_handle = nullptr;
+    self->_task_handle = nullptr;
     vTaskDelete(nullptr);
   }
 
@@ -353,7 +350,7 @@ namespace m5
     if (res)
     {
       _task_running = true;
-      xTaskCreatePinnedToCore(output_task, "speaker_task", 2048, this, _cfg.task_priority, &_sound_task_handle, _cfg.task_pinned_core);
+      xTaskCreate(output_task, "speaker_task", 2048, this, _cfg.task_priority, &_task_handle);
     }
 
     return res;
@@ -363,10 +360,10 @@ namespace m5
   {
     if (!_task_running) { return; }
     _task_running = false;
-    if (_sound_task_handle)
+    if (_task_handle)
     {
-      if (_sound_task_handle) { xTaskNotifyGive(_sound_task_handle); }
-      do { vTaskDelay(1); } while (_sound_task_handle);
+      if (_task_handle) { xTaskNotifyGive(_task_handle); }
+      do { vTaskDelay(1); } while (_task_handle);
     }
     stop();
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
@@ -414,7 +411,7 @@ namespace m5
 
   bool Speaker_Class::_play_raw(const void* wav_data, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
-    if (!begin() || (_sound_task_handle == nullptr)) { return true; }
+    if (!begin() || (_task_handle == nullptr)) { return true; }
     if (array_len == 0) { return true; }
     if ((size_t)channel >= sound_channel_max)
     {
@@ -449,7 +446,7 @@ namespace m5
     _ch_info[channel].next_wav = info;
     _play_channel_bits |= chmask;
 
-    xTaskNotifyGive(_sound_task_handle);
+    xTaskNotifyGive(_task_handle);
     return true;
   }
 }

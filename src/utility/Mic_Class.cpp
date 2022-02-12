@@ -23,7 +23,7 @@
 namespace m5
 {
 #if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
   #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
   #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
  #endif
@@ -70,7 +70,6 @@ namespace m5
 
     i2s_config_t i2s_config = {
       .mode                 = _cfg.use_adc
-                           // ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN )
                               ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
                               : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM ) ,
       .sample_rate          = sample_rate,
@@ -142,7 +141,7 @@ namespace m5
         adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_11db);
       }
       if (_cfg.i2s_port == I2S_NUM_0)
-      {
+      { /// レジスタを操作してADCモードの設定を有効にする ;
         I2S0.conf2.lcd_en = true;
         I2S0.conf.rx_right_first = 0;
         I2S0.conf.rx_msb_shift = 0;
@@ -251,7 +250,7 @@ namespace m5
     }
     i2s_stop(self->_cfg.i2s_port);
 
-    self->_sound_task_handle = nullptr;
+    self->_task_handle = nullptr;
     vTaskDelete(nullptr);
   }
 
@@ -270,7 +269,7 @@ namespace m5
     if (res)
     {
       _task_running = true;
-      xTaskCreatePinnedToCore(input_task, "mic_task", 2048, this, _cfg.task_priority, &_sound_task_handle, _cfg.task_pinned_core);
+      xTaskCreate(input_task, "mic_task", 2048, this, _cfg.task_priority, &_task_handle);
     }
 
     return res;
@@ -280,10 +279,10 @@ namespace m5
   {
     if (!_task_running) { return; }
     _task_running = false;
-    if (_sound_task_handle)
+    if (_task_handle)
     {
-      if (_sound_task_handle) { xTaskNotifyGive(_sound_task_handle); }
-      do { vTaskDelay(1); } while (_sound_task_handle);
+      if (_task_handle) { xTaskNotifyGive(_task_handle); }
+      do { vTaskDelay(1); } while (_task_handle);
     }
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
@@ -308,9 +307,9 @@ namespace m5
     while (_rec_info[1].length) { taskYIELD(); }
     _rec_info[1] = info;
     _is_recording = true;
-    if (this->_sound_task_handle)
+    if (this->_task_handle)
     {
-      xTaskNotifyGive(this->_sound_task_handle);
+      xTaskNotifyGive(this->_task_handle);
     }
     return true;
   }
