@@ -196,17 +196,17 @@ void setup(void)
   auto cfg = M5.config();
 
   cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude atomic spk
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude spk hat
+//cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
+//cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
 
   M5.begin(cfg);
 
-  {
-    /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
-    auto spk_cfg = M5.Speaker.config();
-    spk_cfg.sample_rate = 125000;
-    M5.Speaker.config(spk_cfg);
-  }
+
+  /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+  auto spk_cfg = M5.Speaker.config();
+  spk_cfg.sample_rate = 125000; // default:48000 (48kHz)
+  M5.Speaker.config(spk_cfg);
+
 
   if (M5.Display.width() < M5.Display.height())
   {
@@ -215,7 +215,7 @@ void setup(void)
   M5.Display.setFont(&fonts::lgfxJapanGothic_12);
   M5.Display.setEpdMode(epd_mode_t::epd_fastest);
   M5.Display.setCursor(0, 12);
-  M5.Display.startWrite();
+  M5.Display.startWrite(); /// Omit the paired endWrite.
   M5.Display.print("BT A2DP : ");
   M5.Display.println(bt_device_name);
   M5.Display.setTextWrap(false);
@@ -274,6 +274,7 @@ void loop(void)
       M5.Display.fillRect(0, 12 + id * 12, M5.Display.width(), 12, M5.Display.getBaseColor());
       M5.Display.print(a2dp_sink.getMetaData(id));
     }
+    M5.Display.display();
     M5.Display.endWrite();
   }
 
@@ -308,6 +309,7 @@ void loop(void)
     auto data = a2dp_sink.getBuffer();
     if (data)
     {
+      M5.Display.startWrite();
       fft.exec(data);
 
       uint16_t level[2] = { 0, 0 };
@@ -375,6 +377,7 @@ void loop(void)
         }
       }
       M5.Display.display();
+      M5.Display.endWrite();
     }
   }
 }
