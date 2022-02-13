@@ -39,7 +39,7 @@ namespace m5
     uint8_t magnification = 16;
 
     /// background task priority
-    UBaseType_t task_priority = configMAX_PRIORITIES - 4;
+    UBaseType_t task_priority = configMAX_PRIORITIES - 3;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
