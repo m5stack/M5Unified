@@ -23,7 +23,7 @@
 namespace m5
 {
 #if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
   #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
   #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
  #endif
@@ -68,28 +68,23 @@ namespace m5
 */
     if (_cfg.use_adc) { sample_rate >>= 4; }
 
-    i2s_config_t i2s_config = {
-      .mode                 = _cfg.use_adc
-                              ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
-                              : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM ) ,
-      .sample_rate          = sample_rate,
-      .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-      .channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT,
-      .communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S ),
-      .intr_alloc_flags     = 0,
-      .dma_buf_count        = dma_buf_cnt,
-      .dma_buf_len          = dma_buf_len,
-      .use_apll             = false,
-      .tx_desc_auto_clear   = true,
-      .fixed_mclk           = 0
-    };
+    i2s_config_t i2s_config;
+    memset(&i2s_config, 0, sizeof(i2s_config_t));
+    i2s_config.mode                 = _cfg.use_adc
+                                    ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
+                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
+    i2s_config.sample_rate          = sample_rate;
+    i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
+    i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT;
+    i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
+    i2s_config.dma_buf_count        = dma_buf_cnt;
+    i2s_config.dma_buf_len          = dma_buf_len;
+    i2s_config.tx_desc_auto_clear   = true;
 
-    i2s_pin_config_t pin_config = {
-      .bck_io_num     = I2S_PIN_NO_CHANGE,
-      .ws_io_num      = _cfg.pin_ws,
-      .data_out_num   = I2S_PIN_NO_CHANGE,
-      .data_in_num    = _cfg.pin_data_in,
-    };
+    i2s_pin_config_t pin_config;
+    memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
+    pin_config.ws_io_num      = _cfg.pin_ws;
+    pin_config.data_in_num    = _cfg.pin_data_in;
 
     esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
     if (err != ESP_OK) { return err; }

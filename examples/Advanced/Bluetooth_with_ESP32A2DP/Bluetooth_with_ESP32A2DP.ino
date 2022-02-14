@@ -47,19 +47,40 @@ protected:
   char _meta_text[metatext_num][metatext_size];
   uint8_t _meta_bits = 0;
 
+  void clearMetaData(void)
+  {
+    for (int i = 0; i < metatext_num; ++i)
+    {
+      _meta_text[i][0] = 0;
+    }
+    _meta_bits = (1<<metatext_num)-1;
+  }
+
   void av_hdl_avrc_evt(uint16_t event, void *p_param) override
   {
-    if (event == ESP_AVRC_CT_METADATA_RSP_EVT)
+    switch (event)
     {
-      esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
-      uint8_t id = rc->meta_rsp.attr_id;
-      for (size_t i = 0; i < metatext_num; ++i)
+    case ESP_AVRC_CT_METADATA_RSP_EVT:
       {
-        if (0 == (id & (1 << i))) { continue; }
-        strncpy(_meta_text[i], (char*)(rc->meta_rsp.attr_text), metatext_size);
-        _meta_bits |= id;
-        break;
+        esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
+        uint8_t id = rc->meta_rsp.attr_id;
+        for (size_t i = 0; i < metatext_num; ++i)
+        {
+          if (0 == (id & (1 << i))) { continue; }
+          strncpy(_meta_text[i], (char*)(rc->meta_rsp.attr_text), metatext_size);
+          _meta_bits |= id;
+          break;
+        }
       }
+      break;
+
+    case ESP_AVRC_CT_CONNECTION_STATE_EVT:
+    case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
+      clearMetaData();
+      break;
+
+    default:
+      break;
     }
 
     BluetoothA2DPSink::av_hdl_avrc_evt(event, p_param);
@@ -191,6 +212,148 @@ static uint16_t peak_y[(FFT_SIZE/2)+1];
 static int header_height = 0;
 
 
+void drawSetup(LGFX_Device* gfx)
+{
+  if (gfx->width() < gfx->height())
+  {
+    gfx->setRotation(gfx->getRotation()^1);
+  }
+  gfx->setFont(&fonts::lgfxJapanGothic_12);
+  gfx->setEpdMode(epd_mode_t::epd_fastest);
+  gfx->setCursor(0, 12);
+  gfx->startWrite(); /// Omit the paired endWrite.
+  gfx->print("BT A2DP : ");
+  gfx->println(bt_device_name);
+  gfx->setTextWrap(false);
+  gfx->fillRect(0, 8, gfx->width(), 3, TFT_BLACK);
+
+  fft_enabled = !gfx->isEPD();
+}
+
+void drawLoop(LGFX_Device* gfx)
+{
+  auto bits = a2dp_sink.getMetaUpdateInfo();
+  if (bits)
+  {
+    gfx->startWrite();
+    for (int id = 0; id < 8; ++id)
+    {
+      if (0 == (bits & (1<<id))) { continue; }
+      gfx->setCursor(0, 12 + id * 12);
+      gfx->fillRect(0, 12 + id * 12, gfx->width(), 12, gfx->getBaseColor());
+      gfx->print(a2dp_sink.getMetaData(id));
+      gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
+    }
+    gfx->display();
+    gfx->endWrite();
+  }
+
+  if (!gfx->displayBusy())
+  { // draw volume bar
+    static int px;
+    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
+    int x = v * (gfx->width()) >> 8;
+    if (px != x)
+    {
+      gfx->fillRect(x, 8, px - x, 3, px < x ? TFT_GREEN : TFT_BLACK);
+      gfx->display();
+      px = x;
+    }
+  }
+
+  if (fft_enabled && !gfx->displayBusy())
+  {
+    static int prev_x[2];
+    static int peak_x[2];
+    static bool prev_conn;
+    bool connected = a2dp_sink.is_connected();
+    if (prev_conn != connected)
+    {
+      prev_conn = connected;
+      if (!connected)
+      {
+        a2dp_sink.clear();
+      }
+    }
+
+    auto data = a2dp_sink.getBuffer();
+    if (data)
+    {
+      gfx->startWrite();
+
+      // draw stereo level meter
+       uint16_t level[2] = { 0, 0 };
+      for (int i = 0; i < 512; i += 16)
+      {
+        uint32_t lv = abs(data[i]);
+        if (level[0] < lv) { level[0] = lv; }
+        lv = abs(data[i+1]);
+        if (level[1] < lv) { level[1] = lv; }
+      }
+      for (int i = 0; i < 2; ++i)
+      {
+        int x = (level[i] * gfx->width() - 4) / INT16_MAX;
+        int px = prev_x[i];
+        if (px != x)
+        {
+          gfx->fillRect(x, i * 4, px - x, 3, px < x ? 0x0055FFu : 0u);
+          prev_x[i] = x;
+        }
+        px = peak_x[i] - 1;
+        if (px > x)
+        {
+          gfx->writeFastVLine(px + 1, i * 4, 3, TFT_BLACK);
+        }
+        else
+        {
+          px = x + 1;
+        }
+        if (peak_x[i] != px)
+        {
+          peak_x[i] = px;
+          gfx->writeFastVLine(px, i * 4, 3, TFT_WHITE);
+        }
+      }
+      gfx->display();
+
+      // draw FFT level meter
+      fft.exec(data);
+      int dsp_height = gfx->height();
+      int fft_height = dsp_height - header_height;
+      int xe = gfx->width() >> 2;
+      if (xe > (FFT_SIZE/2)+1) { xe = (FFT_SIZE/2)+1; }
+      for (int x = 0; x < xe; ++x)
+      {
+        int32_t f = fft.get(x) * fft_height;
+        int y = dsp_height - std::min(fft_height, f >> 19);
+        int py = prev_y[x];
+        if (y != py)
+        {
+          gfx->fillRect(x*4, y, 3, py - y, (y < py) ? 0x0099FFu : 0u);
+          prev_y[x] = y;
+        }
+        py = peak_y[x] + 1;
+        if (py < y)
+        {
+          gfx->writeFastHLine(x*4, py-1, 3, TFT_BLACK);
+        }
+        else
+        {
+          py = y - 1;
+        }
+        if (peak_y[x] != py)
+        {
+          peak_y[x] = py;
+          gfx->writeFastHLine(x*4, py, 3, TFT_WHITE);
+        }
+      }
+      gfx->display();
+      gfx->endWrite();
+    }
+  }
+}
+
+
 void setup(void)
 {
   auto cfg = M5.config();
@@ -206,37 +369,24 @@ void setup(void)
   auto spk_cfg = M5.Speaker.config();
   spk_cfg.sample_rate = 125000; // default:48000 (48kHz)
   M5.Speaker.config(spk_cfg);
-
-
-  if (M5.Display.width() < M5.Display.height())
-  {
-    M5.Display.setRotation(M5.Display.getRotation()^1);
-  }
-  M5.Display.setFont(&fonts::lgfxJapanGothic_12);
-  M5.Display.setEpdMode(epd_mode_t::epd_fastest);
-  M5.Display.setCursor(0, 12);
-  M5.Display.startWrite(); /// Omit the paired endWrite.
-  M5.Display.print("BT A2DP : ");
-  M5.Display.println(bt_device_name);
-  M5.Display.setTextWrap(false);
-  M5.Display.fillRect(0, 8, M5.Display.width(), 3, TFT_BLACK);
-
   M5.Speaker.begin();
 
-  a2dp_sink.start(bt_device_name, false);
-
   header_height = 48;
-  fft_enabled = !M5.Display.isEPD();
   for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
   {
     prev_y[x] = INT16_MAX;
     peak_y[x] = INT16_MAX;
   }
-}
 
+  a2dp_sink.start(bt_device_name, false);
+
+  drawSetup(&M5.Display);
+}
 
 void loop(void)
 {
+  drawLoop(&M5.Display);
+
   {
     static int prev_frame;
     int frame;
@@ -260,124 +410,6 @@ void loop(void)
     if (v <= 255 || M5.BtnA.isHolding())
     {
       M5.Speaker.setChannelVolume(m5spk_virtual_channel, v);
-    }
-  }
-
-  auto bits = a2dp_sink.getMetaUpdateInfo();
-  if (bits)
-  {
-    M5.Display.startWrite();
-    for (int id = 0; id < 8; ++id)
-    {
-      if (0 == (bits & (1<<id))) { continue; }
-      M5.Display.setCursor(0, 12 + id * 12);
-      M5.Display.fillRect(0, 12 + id * 12, M5.Display.width(), 12, M5.Display.getBaseColor());
-      M5.Display.print(a2dp_sink.getMetaData(id));
-    }
-    M5.Display.display();
-    M5.Display.endWrite();
-  }
-
-  if (!M5.Display.displayBusy())
-  { // draw volume bar
-    static int px;
-    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
-    int x = v * (M5.Display.width()) >> 8;
-    if (px != x)
-    {
-      M5.Display.fillRect(x, 8, px - x, 3, px < x ? TFT_GREEN : TFT_BLACK);
-      M5.Display.display();
-      px = x;
-    }
-  }
-
-  if (fft_enabled && !M5.Display.displayBusy())
-  { // draw stereo level meter
-    static int prev_x[2];
-    static int peak_x[2];
-    static bool prev_conn;
-    bool connected = a2dp_sink.is_connected();
-    if (prev_conn != connected)
-    {
-      prev_conn = connected;
-      if (!connected)
-      {
-        a2dp_sink.clear();
-      }
-    }
-
-    auto data = a2dp_sink.getBuffer();
-    if (data)
-    {
-      M5.Display.startWrite();
-      fft.exec(data);
-
-      uint16_t level[2] = { 0, 0 };
-      for (int i = 0; i < 512; i += 16)
-      {
-        uint32_t lv = abs(data[i]);
-        if (level[0] < lv) { level[0] = lv; }
-        lv = abs(data[i+1]);
-        if (level[1] < lv) { level[1] = lv; }
-      }
-      for (int i = 0; i < 2; ++i)
-      {
-        int x = (level[i] * M5.Display.width() - 4) / INT16_MAX;
-        int px = prev_x[i];
-        if (px != x)
-        {
-          M5.Display.fillRect(x, i * 4, px - x, 3, px < x ? 0x0055FFu : 0u);
-          prev_x[i] = x;
-        }
-        px = peak_x[i] - 1;
-        if (px > x)
-        {
-          M5.Display.writeFastVLine(px + 1, i * 4, 3, TFT_BLACK);
-        }
-        else
-        {
-          px = x + 1;
-        }
-        if (peak_x[i] != px)
-        {
-          peak_x[i] = px;
-          M5.Display.writeFastVLine(px, i * 4, 3, TFT_WHITE);
-        }
-      }
-      M5.Display.display();
-
-      int dsp_height = M5.Display.height();
-      int fft_height = dsp_height - header_height;
-
-      int xe = M5.Display.width() >> 2;
-      if (xe > (FFT_SIZE/2)+1) { xe = (FFT_SIZE/2)+1; }
-      for (int x = 0; x < xe; ++x)
-      {
-        int32_t f = fft.get(x) * fft_height;
-        int y = dsp_height - std::min(fft_height, f >> 19);
-        int py = prev_y[x];
-        if (y != py)
-        {
-          M5.Display.fillRect(x*4, y, 3, py - y, (y < py) ? 0x0099FFu : 0u);
-          prev_y[x] = y;
-        }
-        py = peak_y[x] + 1;
-        if (py < y)
-        {
-          M5.Display.writeFastHLine(x*4, py-1, 3, TFT_BLACK);
-        }
-        else
-        {
-          py = y - 1;
-        }
-        if (peak_y[x] != py)
-        {
-          peak_y[x] = py;
-          M5.Display.writeFastHLine(x*4, py, 3, TFT_WHITE);
-        }
-      }
-      M5.Display.display();
-      M5.Display.endWrite();
     }
   }
 }

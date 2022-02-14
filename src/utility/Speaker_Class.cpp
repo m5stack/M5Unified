@@ -23,7 +23,7 @@
 namespace m5
 {
 #if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
   #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
   #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_STAND_MSB)
  #endif
@@ -62,30 +62,24 @@ namespace m5
 */
     if (_cfg.use_dac) { sample_rate >>= 4; }
 
-    i2s_config_t i2s_config = {
-      .mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX ),
-      .sample_rate          = sample_rate,
-      .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-      .channel_format       = _cfg.stereo
-                              ? I2S_CHANNEL_FMT_RIGHT_LEFT
-                              : I2S_CHANNEL_FMT_ONLY_RIGHT,
-      .communication_format = _cfg.use_dac
-                              ? (i2s_comm_format_t)( COMM_FORMAT_MSB )
-                              : (i2s_comm_format_t)( COMM_FORMAT_I2S ),
-      .intr_alloc_flags     = 0,
-      .dma_buf_count        = dma_buf_cnt,
-      .dma_buf_len          = dma_buf_len,
-      .use_apll             = false,
-      .tx_desc_auto_clear   = true,
-      .fixed_mclk           = 0
-    };
+    i2s_config_t i2s_config;
+    memset(&i2s_config, 0, sizeof(i2s_config_t));
+    i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX );
+    i2s_config.sample_rate          = sample_rate;
+    i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
+    i2s_config.channel_format       = _cfg.stereo
+                                    ? I2S_CHANNEL_FMT_RIGHT_LEFT
+                                    : I2S_CHANNEL_FMT_ONLY_RIGHT;
+    i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
+    i2s_config.dma_buf_count        = dma_buf_cnt;
+    i2s_config.dma_buf_len          = dma_buf_len;
+    i2s_config.tx_desc_auto_clear   = true;
 
-    i2s_pin_config_t pin_config = {
-      .bck_io_num     = _cfg.pin_bck,
-      .ws_io_num      = _cfg.pin_ws,
-      .data_out_num   = _cfg.pin_data_out,
-      .data_in_num    = I2S_PIN_NO_CHANGE,
-    };
+    i2s_pin_config_t pin_config;
+    memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
+    pin_config.bck_io_num     = _cfg.pin_bck;
+    pin_config.ws_io_num      = _cfg.pin_ws;
+    pin_config.data_out_num   = _cfg.pin_data_out;
 
     esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
     if (err != ESP_OK) { return err; }
@@ -97,7 +91,6 @@ namespace m5
       i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
       if (!_cfg.stereo)
       {
-        err = i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
         dac_mode = (_cfg.pin_data_out == GPIO_NUM_25)
                 ? i2s_dac_mode_t::I2S_DAC_CHANNEL_RIGHT_EN // for GPIO 25
                 : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN; // for GPIO 26
