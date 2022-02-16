@@ -56,27 +56,59 @@ protected:
     _meta_bits = (1<<metatext_num)-1;
   }
 
+  void av_hdl_a2d_evt(uint16_t event, void *p_param) override
+  {
+    esp_a2d_cb_param_t* a2d = (esp_a2d_cb_param_t *)(p_param);
+
+    switch (event) {
+    case ESP_A2D_CONNECTION_STATE_EVT:
+      if (ESP_A2D_CONNECTION_STATE_CONNECTED == a2d->conn_stat.state)
+      { // 接続
+
+      }
+      else
+      if (ESP_A2D_CONNECTION_STATE_DISCONNECTED == a2d->conn_stat.state)
+      { // 切断
+
+      }
+      break;
+
+    case ESP_A2D_AUDIO_STATE_EVT:
+      if (ESP_A2D_AUDIO_STATE_STARTED == a2d->audio_stat.state)
+      { // 再生
+
+      } else
+      if ( ESP_A2D_AUDIO_STATE_REMOTE_SUSPEND == a2d->audio_stat.state
+        || ESP_A2D_AUDIO_STATE_STOPPED        == a2d->audio_stat.state )
+      { // 停止
+        clearMetaData();
+      }
+      break;
+    }
+
+    BluetoothA2DPSink::av_hdl_a2d_evt(event, p_param);
+  }
+
   void av_hdl_avrc_evt(uint16_t event, void *p_param) override
   {
+    esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
+
     switch (event)
     {
     case ESP_AVRC_CT_METADATA_RSP_EVT:
+      for (size_t i = 0; i < metatext_num; ++i)
       {
-        esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
-        uint8_t id = rc->meta_rsp.attr_id;
-        for (size_t i = 0; i < metatext_num; ++i)
-        {
-          if (0 == (id & (1 << i))) { continue; }
-          strncpy(_meta_text[i], (char*)(rc->meta_rsp.attr_text), metatext_size);
-          _meta_bits |= id;
-          break;
-        }
+        if (0 == (rc->meta_rsp.attr_id & (1 << i))) { continue; }
+        strncpy(_meta_text[i], (char*)(rc->meta_rsp.attr_text), metatext_size);
+        _meta_bits |= rc->meta_rsp.attr_id;
+        break;
       }
       break;
 
     case ESP_AVRC_CT_CONNECTION_STATE_EVT:
+      break;
+
     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
-      clearMetaData();
       break;
 
     default:
@@ -88,9 +120,10 @@ protected:
 
   void audio_data_callback(const uint8_t *data, uint32_t length) override
   {
-    if (M5.Speaker.isPlaying(m5spk_virtual_channel) == 2)
+    /// When the queue is empty or full, delay processing is performed.
+    if (M5.Speaker.isPlaying(m5spk_virtual_channel) != 1)
     {
-      vTaskDelay(10 / portTICK_RATE_MS);
+      vTaskDelay(5 / portTICK_RATE_MS);
       while (M5.Speaker.isPlaying(m5spk_virtual_channel) == 2) { taskYIELD(); }
     }
     bool flip = !_flip_index;
@@ -212,8 +245,9 @@ static uint16_t peak_y[(FFT_SIZE/2)+1];
 static int header_height = 0;
 
 
-void drawSetup(LGFX_Device* gfx)
+void gfxSetup(LGFX_Device* gfx)
 {
+  if (gfx == nullptr) { return; }
   if (gfx->width() < gfx->height())
   {
     gfx->setRotation(gfx->getRotation()^1);
@@ -230,8 +264,9 @@ void drawSetup(LGFX_Device* gfx)
   fft_enabled = !gfx->isEPD();
 }
 
-void drawLoop(LGFX_Device* gfx)
+void gfxLoop(LGFX_Device* gfx)
 {
+  if (gfx == nullptr) { return; }
   auto bits = a2dp_sink.getMetaUpdateInfo();
   if (bits)
   {
@@ -255,7 +290,7 @@ void drawLoop(LGFX_Device* gfx)
     int x = v * (gfx->width()) >> 8;
     if (px != x)
     {
-      gfx->fillRect(x, 8, px - x, 3, px < x ? TFT_GREEN : TFT_BLACK);
+      gfx->fillRect(x, 8, px - x, 3, px < x ? 0xFFFF99u : 0u);
       gfx->display();
       px = x;
     }
@@ -296,17 +331,18 @@ void drawLoop(LGFX_Device* gfx)
         int px = prev_x[i];
         if (px != x)
         {
-          gfx->fillRect(x, i * 4, px - x, 3, px < x ? 0x0055FFu : 0u);
+          gfx->fillRect(x, i * 4, px - x, 3, px < x ? 0xFF9900u : 0x330000u);
           prev_x[i] = x;
         }
-        px = peak_x[i] - 1;
+        px = peak_x[i];
         if (px > x)
         {
-          gfx->writeFastVLine(px + 1, i * 4, 3, TFT_BLACK);
+          gfx->writeFastVLine(px, i * 4, 3, TFT_BLACK);
+          px--;
         }
         else
         {
-          px = x + 1;
+          px = x;
         }
         if (peak_x[i] != px)
         {
@@ -325,11 +361,13 @@ void drawLoop(LGFX_Device* gfx)
       for (int x = 0; x < xe; ++x)
       {
         int32_t f = fft.get(x) * fft_height;
-        int y = dsp_height - std::min(fft_height, f >> 19);
+        int y = f >> 19;
+        if (y < fft_height) { y = fft_height; }
+        y = dsp_height - y;
         int py = prev_y[x];
         if (y != py)
         {
-          gfx->fillRect(x*4, y, 3, py - y, (y < py) ? 0x0099FFu : 0u);
+          gfx->fillRect(x*4, y, 3, py - y, (y < py) ? 0x99AAFFu : 0x000033u);
           prev_y[x] = y;
         }
         py = peak_y[x] + 1;
@@ -346,6 +384,7 @@ void drawLoop(LGFX_Device* gfx)
           peak_y[x] = py;
           gfx->writeFastHLine(x*4, py, 3, TFT_WHITE);
         }
+        if (x & 1) { gfx->display(); }
       }
       gfx->display();
       gfx->endWrite();
@@ -371,7 +410,7 @@ void setup(void)
   M5.Speaker.config(spk_cfg);
   M5.Speaker.begin();
 
-  header_height = 48;
+  header_height = 49;
   for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
   {
     prev_y[x] = INT16_MAX;
@@ -380,12 +419,12 @@ void setup(void)
 
   a2dp_sink.start(bt_device_name, false);
 
-  drawSetup(&M5.Display);
+  gfxSetup(&M5.Display);
 }
 
 void loop(void)
 {
-  drawLoop(&M5.Display);
+  gfxLoop(&M5.Display);
 
   {
     static int prev_frame;

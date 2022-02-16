@@ -47,7 +47,6 @@ namespace m5
 
   esp_err_t Speaker_Class::_setup_i2s(void)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     i2s_driver_uninstall(_cfg.i2s_port);
 
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
@@ -86,6 +85,7 @@ namespace m5
 
     i2s_zero_dma_buffer(_cfg.i2s_port);
 
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_dac)
     {
       i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
@@ -105,14 +105,12 @@ namespace m5
       }
     }
     else
+#endif
     {
       err = i2s_set_pin(_cfg.i2s_port, &pin_config);
     }
 
     return err;
-#else
-    return ESP_FAIL;
-#endif
   }
 
   void Speaker_Class::output_task(void* args)
@@ -289,7 +287,6 @@ namespace m5
         flg_i2s_started = true;
         i2s_zero_dma_buffer(self->_cfg.i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-
         if (self->_cfg.use_dac)
         {
           i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;

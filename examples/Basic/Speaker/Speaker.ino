@@ -64,7 +64,7 @@ struct menu_item_t
   void (*func)(bool);
 };
 
-static constexpr const menu_item_t menus[] =
+static const menu_item_t menus[] =
 {
   { "tone"      , tone_up       },
   { "play/stop" , bgm_play_stop },
@@ -134,11 +134,27 @@ void setup(void)
   auto cfg = M5.config();
 
 //cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude atomic spk
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude spk hat
+//cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
+//cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
 
   M5.begin(cfg);
 
+/*
+  { /// I2S custom setting
+    auto spk_cfg = M5.Speaker.config();
+    spk_cfg.pin_bck=7;
+    spk_cfg.pin_data_out=8;
+    spk_cfg.pin_ws=10;     // LRCK
+
+    /// use single gpio buzzer, ( need only pin_data_out )
+    spk_cfg.buzzer = false;
+
+    /// use DAC speaker, ( need only pin_data_out ) ( only GPIO_NUM_25 or GPIO_NUM_26 )
+    spk_cfg.use_dac = false;
+
+    M5.Speaker.config(spk_cfg);
+  }
+//*/
   M5.Speaker.begin();
 
   if (M5.Display.width() > M5.Display.height())
@@ -328,9 +344,7 @@ void loop(void)
 
   switch (M5.getBoard())
   {
-  case m5::board_t::board_M5Atom:
-  case m5::board_t::board_M5AtomU:
-  case m5::board_t::board_M5AtomPsram:
+  default:
     if (M5.BtnA.wasClicked())   { move_menu(false); }
     if (M5.BtnA.wasHold())      { hold_menu(false); }
     if (M5.BtnA.isHolding())    { hold_menu(true);  }
@@ -345,7 +359,12 @@ void loop(void)
     if (M5.BtnA.isHolding())    { hold_menu(true);  }
     break;
 
-  default:
+  case m5::board_t::board_M5Stack:
+  case m5::board_t::board_M5StackCore2:
+  case m5::board_t::board_M5Tough:
+  case m5::board_t::board_M5StackCoreInk:
+  case m5::board_t::board_M5Paper:
+  case m5::board_t::board_M5Station:
     if (M5.BtnA.wasClicked() || M5.BtnA.wasHold()) { move_menu(true);  }
     if (M5.BtnC.wasClicked() || M5.BtnC.wasHold()) { move_menu(false); }
     if (M5.BtnB.wasClicked())                      { hold_menu(false); }

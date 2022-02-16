@@ -53,13 +53,11 @@ namespace m5
 
   esp_err_t Mic_Class::_setup_i2s(void)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     i2s_driver_uninstall(_cfg.i2s_port);
 
     if (_cfg.pin_data_in  < 0) { return ESP_FAIL; }
 
     SAMPLE_RATE_TYPE sample_rate = _calc_rec_rate();
-
 /*
  ESP-IDF ver4系にて I2S_MODE_ADC_BUILT_IN を使用するとサンプリングレートが正しく反映されない不具合があったため、特殊な対策を実装している。
  ・指定するサンプリングレートの値を1/16にする
@@ -72,14 +70,14 @@ namespace m5
     memset(&i2s_config, 0, sizeof(i2s_config_t));
     i2s_config.mode                 = _cfg.use_adc
                                     ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
-                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
+                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) );
+                                 // : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
     i2s_config.sample_rate          = sample_rate;
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
-    i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT;
+    i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.dma_buf_count        = dma_buf_cnt;
     i2s_config.dma_buf_len          = dma_buf_len;
-    i2s_config.tx_desc_auto_clear   = true;
 
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
@@ -89,9 +87,7 @@ namespace m5
     esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
     if (err != ESP_OK) { return err; }
 
-    err = i2s_set_pin(_cfg.i2s_port, &pin_config);
-    if (err != ESP_OK) { return err; }
-
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_adc)
     {
         if (((size_t)_cfg.pin_data_in) > 39) { return ESP_FAIL; }
@@ -146,11 +142,13 @@ namespace m5
         I2S0.conf_chan.rx_chan_mod = true;
       }
     }
+    else
+#endif
+    {
+      err = i2s_set_pin(_cfg.i2s_port, &pin_config);
+    }
 
     return err;
-#else
-    return ESP_FAIL;
-#endif
   }
 
   void Mic_Class::input_task(void* args)
