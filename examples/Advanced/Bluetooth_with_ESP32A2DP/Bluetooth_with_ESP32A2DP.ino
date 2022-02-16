@@ -362,7 +362,7 @@ void gfxLoop(LGFX_Device* gfx)
       {
         int32_t f = fft.get(x) * fft_height;
         int y = f >> 19;
-        if (y < fft_height) { y = fft_height; }
+        if (y > fft_height) { y = fft_height; }
         y = dsp_height - y;
         int py = prev_y[x];
         if (y != py)
