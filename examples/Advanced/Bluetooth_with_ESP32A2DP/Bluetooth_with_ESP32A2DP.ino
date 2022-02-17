@@ -371,7 +371,7 @@ void gfxLoop(LGFX_Device* gfx)
       {
         if (((x * bw) & 7) == 0) { gfx->display(); }
         int32_t f = fft.get(x) * fft_height;
-        int y = f >> 19;
+        int y = f >> 18;
         if (y > fft_height) { y = fft_height; }
         y = dsp_height - y;
         int py = prev_y[x];
