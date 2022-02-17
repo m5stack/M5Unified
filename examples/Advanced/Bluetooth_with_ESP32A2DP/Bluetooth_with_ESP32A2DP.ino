@@ -146,7 +146,7 @@ protected:
 };
 
 
-#define FFT_SIZE 512
+#define FFT_SIZE 256
 class fft_t
 {
   float _wr[FFT_SIZE + 1];
@@ -254,14 +254,21 @@ void gfxSetup(LGFX_Device* gfx)
   }
   gfx->setFont(&fonts::lgfxJapanGothic_12);
   gfx->setEpdMode(epd_mode_t::epd_fastest);
-  gfx->setCursor(0, 12);
+  gfx->setCursor(0, 8);
   gfx->startWrite(); /// Omit the paired endWrite.
   gfx->print("BT A2DP : ");
   gfx->println(bt_device_name);
   gfx->setTextWrap(false);
-  gfx->fillRect(0, 8, gfx->width(), 3, TFT_BLACK);
+  gfx->fillRect(0, 6, gfx->width(), 2, TFT_BLACK);
 
+  header_height = 45;
   fft_enabled = !gfx->isEPD();
+
+  for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
+  {
+    prev_y[x] = INT16_MAX;
+    peak_y[x] = INT16_MAX;
+  }
 }
 
 void gfxLoop(LGFX_Device* gfx)
@@ -274,8 +281,8 @@ void gfxLoop(LGFX_Device* gfx)
     for (int id = 0; id < 8; ++id)
     {
       if (0 == (bits & (1<<id))) { continue; }
-      gfx->setCursor(0, 12 + id * 12);
-      gfx->fillRect(0, 12 + id * 12, gfx->width(), 12, gfx->getBaseColor());
+      gfx->setCursor(0, 8 + id * 12);
+      gfx->fillRect(0, 8 + id * 12, gfx->width(), 12, gfx->getBaseColor());
       gfx->print(a2dp_sink.getMetaData(id));
       gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
     }
@@ -290,7 +297,7 @@ void gfxLoop(LGFX_Device* gfx)
     int x = v * (gfx->width()) >> 8;
     if (px != x)
     {
-      gfx->fillRect(x, 8, px - x, 3, px < x ? 0xFFFF99u : 0u);
+      gfx->fillRect(x, 6, px - x, 2, px < x ? 0xAAFFAAu : 0u);
       gfx->display();
       px = x;
     }
@@ -331,13 +338,13 @@ void gfxLoop(LGFX_Device* gfx)
         int px = prev_x[i];
         if (px != x)
         {
-          gfx->fillRect(x, i * 4, px - x, 3, px < x ? 0xFF9900u : 0x330000u);
+          gfx->fillRect(x, i * 3, px - x, 2, px < x ? 0xFF9900u : 0x330000u);
           prev_x[i] = x;
         }
         px = peak_x[i];
         if (px > x)
         {
-          gfx->writeFastVLine(px, i * 4, 3, TFT_BLACK);
+          gfx->writeFastVLine(px, i * 3, 2, TFT_BLACK);
           px--;
         }
         else
@@ -347,19 +354,22 @@ void gfxLoop(LGFX_Device* gfx)
         if (peak_x[i] != px)
         {
           peak_x[i] = px;
-          gfx->writeFastVLine(px, i * 4, 3, TFT_WHITE);
+          gfx->writeFastVLine(px, i * 3, 2, TFT_WHITE);
         }
       }
       gfx->display();
 
       // draw FFT level meter
       fft.exec(data);
+      int bw = gfx->width() / 60;
+      if (bw < 3) { bw = 3; }
       int dsp_height = gfx->height();
       int fft_height = dsp_height - header_height;
-      int xe = gfx->width() >> 2;
-      if (xe > (FFT_SIZE/2)+1) { xe = (FFT_SIZE/2)+1; }
-      for (int x = 0; x < xe; ++x)
+      int xe = gfx->width() / bw;
+      if (xe > (FFT_SIZE/2)) { xe = (FFT_SIZE/2); }
+      for (int x = 0; x <= xe; ++x)
       {
+        if (((x * bw) & 7) == 0) { gfx->display(); }
         int32_t f = fft.get(x) * fft_height;
         int y = f >> 19;
         if (y > fft_height) { y = fft_height; }
@@ -367,13 +377,13 @@ void gfxLoop(LGFX_Device* gfx)
         int py = prev_y[x];
         if (y != py)
         {
-          gfx->fillRect(x*4, y, 3, py - y, (y < py) ? 0x99AAFFu : 0x000033u);
+          gfx->fillRect(x * bw, y, bw - 1, py - y, (y < py) ? 0x99AAFFu : 0x000033u);
           prev_y[x] = y;
         }
         py = peak_y[x] + 1;
         if (py < y)
         {
-          gfx->writeFastHLine(x*4, py-1, 3, TFT_BLACK);
+          gfx->writeFastHLine(x * bw, py - 1, bw - 1, TFT_BLACK);
         }
         else
         {
@@ -382,9 +392,8 @@ void gfxLoop(LGFX_Device* gfx)
         if (peak_y[x] != py)
         {
           peak_y[x] = py;
-          gfx->writeFastHLine(x*4, py, 3, TFT_WHITE);
+          gfx->writeFastHLine(x * bw, py, bw - 1, TFT_WHITE);
         }
-        if (x & 1) { gfx->display(); }
       }
       gfx->display();
       gfx->endWrite();
@@ -409,13 +418,6 @@ void setup(void)
   spk_cfg.sample_rate = 125000; // default:48000 (48kHz)
   M5.Speaker.config(spk_cfg);
   M5.Speaker.begin();
-
-  header_height = 49;
-  for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
-  {
-    prev_y[x] = INT16_MAX;
-    peak_y[x] = INT16_MAX;
-  }
 
   a2dp_sink.start(bt_device_name, false);
 
