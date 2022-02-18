@@ -73,9 +73,9 @@ namespace m5
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
-    i2s_config.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
+    i2s_config.use_apll             = true;
 
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE

@@ -68,9 +68,9 @@ namespace m5
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
                                     : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
-    i2s_config.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
+    i2s_config.use_apll             = true;
     i2s_config.tx_desc_auto_clear   = true;
 
     i2s_pin_config_t pin_config;
@@ -295,7 +295,6 @@ namespace m5
           i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
           if (!self->_cfg.stereo)
           {
-         // i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
             dac_mode = (self->_cfg.pin_data_out == GPIO_NUM_25)
                     ? i2s_dac_mode_t::I2S_DAC_CHANNEL_RIGHT_EN // for GPIO 25
                     : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN; // for GPIO 26
@@ -306,7 +305,7 @@ namespace m5
         i2s_start(self->_cfg.i2s_port);
       }
       size_t write_bytes;
-      i2s_write(self->_cfg.i2s_port, sound_buf, sound_buf_index * 2, &write_bytes, portMAX_DELAY);
+      i2s_write(self->_cfg.i2s_port, sound_buf, dma_buf_len * sizeof(int16_t), &write_bytes, portMAX_DELAY);
 
       if (++nodata_count > self->_cfg.dma_buf_count * 2)
       {

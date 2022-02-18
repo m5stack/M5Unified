@@ -261,6 +261,22 @@ static uint16_t peak_y[(FFT_SIZE/2)+1];
 static int header_height = 0;
 
 
+uint32_t bgcolor(LGFX_Device* gfx, int y)
+{
+  auto h = gfx->height();
+  auto dh = h - header_height;
+  int v = ((h - y)<<5) / dh;
+  if (dh > 40)
+  {
+    int v2 = ((h - y + 1)<<5) / dh;
+    if ((v >> 2) != (v2 >> 2))
+    {
+      return 0x666666u;
+    }
+  }
+  return gfx->color888(v + 2, v, v + 6);
+}
+
 void gfxSetup(LGFX_Device* gfx)
 {
   if (gfx == nullptr) { return; }
@@ -279,6 +295,13 @@ void gfxSetup(LGFX_Device* gfx)
 
   header_height = 45;
   fft_enabled = !gfx->isEPD();
+  if (fft_enabled)
+  {
+    for (int y = header_height; y < gfx->height(); ++y)
+    {
+      gfx->drawFastHLine(0, y, gfx->width(), bgcolor(gfx, y));
+    }
+  }
 
   for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
   {
@@ -380,14 +403,14 @@ void gfxLoop(LGFX_Device* gfx)
       int bw = gfx->width() / 60;
       if (bw < 3) { bw = 3; }
       int dsp_height = gfx->height();
-      int fft_height = dsp_height - header_height;
+      int fft_height = dsp_height - header_height - 1;
       int xe = gfx->width() / bw;
       if (xe > (FFT_SIZE/2)) { xe = (FFT_SIZE/2); }
       for (int x = 0; x <= xe; ++x)
       {
         if (((x * bw) & 7) == 0) { gfx->display(); }
-        int32_t f = fft.get(x) * fft_height;
-        int y = f >> 18;
+        int32_t f = fft.get(x);
+        int y = (f * fft_height) >> 18;
         if (y > fft_height) { y = fft_height; }
         y = dsp_height - y;
         int py = prev_y[x];
@@ -399,7 +422,8 @@ void gfxLoop(LGFX_Device* gfx)
         py = peak_y[x] + 1;
         if (py < y)
         {
-          gfx->writeFastHLine(x * bw, py - 1, bw - 1, TFT_BLACK);
+          gfx->writeFastHLine(x * bw, py - 1, bw - 1, bgcolor(gfx, py - 1));
+          // gfx->writeFastHLine(x * bw, py - 1, bw - 1, TFT_BLACK);
         }
         else
         {
@@ -429,10 +453,14 @@ void setup(void)
   M5.begin(cfg);
 
 
-  /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
-  auto spk_cfg = M5.Speaker.config();
-  spk_cfg.sample_rate = 125000; // default:48000 (48kHz)
-  M5.Speaker.config(spk_cfg);
+  { /// custom setting
+    auto spk_cfg = M5.Speaker.config();
+    /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+    spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
+    M5.Speaker.config(spk_cfg);
+  }
+
+
   M5.Speaker.begin();
 
   a2dp_sink.start(bt_device_name, false);

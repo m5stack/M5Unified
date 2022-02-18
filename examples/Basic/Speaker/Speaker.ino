@@ -142,8 +142,8 @@ void setup(void)
 /*
   { /// I2S custom setting
     auto spk_cfg = M5.Speaker.config();
-    spk_cfg.pin_bck=7;
     spk_cfg.pin_data_out=8;
+    spk_cfg.pin_bck=7;
     spk_cfg.pin_ws=10;     // LRCK
 
     /// use single gpio buzzer, ( need only pin_data_out )
@@ -151,6 +151,10 @@ void setup(void)
 
     /// use DAC speaker, ( need only pin_data_out ) ( only GPIO_NUM_25 or GPIO_NUM_26 )
     spk_cfg.use_dac = false;
+    // spk_cfg.dac_zero_level = 64; // for Unit buzzer with DAC.
+
+    /// Volume Multiplier
+    spk_cfg.magnification = 16;
 
     M5.Speaker.config(spk_cfg);
   }
@@ -181,8 +185,8 @@ void setup(void)
     for (;;) { delay(1); }
   }
 
-  M5.Display.fillScreen(TFT_DARKGRAY);
   M5.Display.setEpdMode(epd_mode_t::epd_fastest);
+  M5.Display.fillScreen(TFT_DARKGRAY);
   M5.Display.print("SOUND TEST");
 
   /// The setVolume function can be set the master volume in the range of 0-255.
