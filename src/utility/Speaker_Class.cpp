@@ -70,7 +70,6 @@ namespace m5
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
-    i2s_config.use_apll             = true;
     i2s_config.tx_desc_auto_clear   = true;
 
     i2s_pin_config_t pin_config;
