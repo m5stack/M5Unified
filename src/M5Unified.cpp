@@ -333,7 +333,6 @@ namespace m5
     {
       auto mic_cfg = Mic.config();
 
-      // mic_cfg.magnification = 4;
       mic_cfg.over_sampling = 2;
       switch (_board)
       {

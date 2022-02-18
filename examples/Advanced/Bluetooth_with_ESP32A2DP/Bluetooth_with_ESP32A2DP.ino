@@ -46,6 +46,7 @@ protected:
   bool _flip_index = 0;
   char _meta_text[metatext_num][metatext_size];
   uint8_t _meta_bits = 0;
+  size_t _sample_rate = 48000;
 
   void clearMetaData(void)
   {
@@ -83,6 +84,21 @@ protected:
       { // 停止
         clearMetaData();
       }
+      break;
+
+    case ESP_A2D_AUDIO_CFG_EVT:
+      {
+        esp_a2d_cb_param_t *a2d = (esp_a2d_cb_param_t *)(p_param);
+        size_t tmp = a2d->audio_cfg.mcc.cie.sbc[0];
+        size_t rate = 16000;
+        if (     tmp & (1 << 6)) { rate = 32000; }
+        else if (tmp & (1 << 5)) { rate = 44100; }
+        else if (tmp & (1 << 4)) { rate = 48000; }
+        _sample_rate = rate;
+      }
+      break;
+
+    default:
       break;
     }
 
@@ -141,7 +157,7 @@ protected:
     }
     memcpy(_flip_buf[flip], data, length);
     _flip_index = flip;
-    M5.Speaker.playRAW(_flip_buf[flip], length >> 1, this->i2s_config.sample_rate, true, 1, m5spk_virtual_channel);
+    M5.Speaker.playRAW(_flip_buf[flip], length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
   }
 };
 

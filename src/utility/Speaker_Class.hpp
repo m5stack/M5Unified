@@ -35,11 +35,23 @@ namespace m5
     /// use DAC speaker, ( need only pin_data_out ) ( only GPIO_NUM_25 or GPIO_NUM_26 )
     bool use_dac = false;
 
+    /// Zero level reference value when using DAC ( 0=Dynamic change )
+    uint8_t dac_zero_level = 0;
+
     /// multiplier for output value
     uint8_t magnification = 16;
 
+    /// for I2S dma_buf_len
+    size_t dma_buf_len = 128;
+
+    /// for I2S dma_buf_count
+    size_t dma_buf_count = 8;
+
     /// background task priority
-    UBaseType_t task_priority = configMAX_PRIORITIES - 3;
+    UBaseType_t task_priority = 2;
+
+    /// background task pinned core
+    BaseType_t task_pinned_core = -1;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;

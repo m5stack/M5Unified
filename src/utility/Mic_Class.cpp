@@ -41,9 +41,6 @@ namespace m5
 #define SAMPLE_RATE_TYPE int
 #endif
 
-  static constexpr const size_t dma_buf_len = 64;
-  static constexpr const size_t dma_buf_cnt = 4;
-
   uint32_t Mic_Class::_calc_rec_rate(void) const
   {
     int rate = (_cfg.sample_rate * _cfg.over_sampling);
@@ -70,14 +67,15 @@ namespace m5
     memset(&i2s_config, 0, sizeof(i2s_config_t));
     i2s_config.mode                 = _cfg.use_adc
                                     ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
-                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) );
+                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) ); // 0x1<<6 is I2S_MODE_PDM
                                  // : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
     i2s_config.sample_rate          = sample_rate;
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
-    i2s_config.dma_buf_count        = dma_buf_cnt;
-    i2s_config.dma_buf_len          = dma_buf_len;
+    i2s_config.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
+    i2s_config.dma_buf_count        = _cfg.dma_buf_count;
+    i2s_config.dma_buf_len          = _cfg.dma_buf_len;
 
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
@@ -163,10 +161,11 @@ namespace m5
     int32_t offset = self->_cfg.input_offset;
     size_t src_idx = ~0u;
     size_t src_len = 0;
-    int16_t src_buf[dma_buf_len];
     int32_t value = 0;
     int32_t prev_value = 0;
     int32_t os_remain = oversampling;
+    const size_t dma_buf_len = self->_cfg.dma_buf_len;
+    int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
 
     while (self->_task_running)
     {
@@ -249,11 +248,16 @@ namespace m5
 
   bool Mic_Class::begin(void)
   {
-    if (_task_running && (_cfg.sample_rate == _rec_sample_rate))
+    if (_task_running)
     {
-      return true;
+      if (_rec_sample_rate == _cfg.sample_rate)
+      {
+        return true;
+      }
+      while (isRecording()) { vTaskDelay(1); }
+      end();
+      _rec_sample_rate = _cfg.sample_rate;
     }
-    if (_task_running) { end(); }
 
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
@@ -261,8 +265,16 @@ namespace m5
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
+      size_t stack_size = 1024+(_cfg.dma_buf_len * sizeof(int16_t));
       _task_running = true;
-      xTaskCreate(input_task, "mic_task", 2048, this, _cfg.task_priority, &_task_handle);
+      if (_cfg.task_pinned_core >= 0 && _cfg.task_pinned_core < portNUM_PROCESSORS)
+      {
+        xTaskCreatePinnedToCore(input_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+      }
+      else
+      {
+        xTaskCreate(input_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
+      }
     }
 
     return res;
@@ -289,19 +301,14 @@ namespace m5
     info.length = array_len;
     info.is_16bit = flg_16bit;
 
-    if (_rec_sample_rate != sample_rate)
-    {
-      _rec_sample_rate = sample_rate;
-      while (isRecording()) { vTaskDelay(1); }
-    }
     _cfg.sample_rate = sample_rate;
 
     if (!begin()) { return false; }
     while (_rec_info[1].length) { taskYIELD(); }
     _rec_info[1] = info;
-    _is_recording = true;
     if (this->_task_handle)
     {
+      _is_recording = true;
       xTaskNotifyGive(this->_task_handle);
     }
     return true;

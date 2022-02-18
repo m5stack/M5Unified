@@ -38,11 +38,17 @@ namespace m5
     /// use analog input mic ( need only pin_data_in )
     bool use_adc = false;
 
+    /// for I2S dma_buf_len
+    size_t dma_buf_len = 64;
+
+    /// for I2S dma_buf_count
+    size_t dma_buf_count = 4;
+
     /// background task priority
-    UBaseType_t task_priority = configMAX_PRIORITIES - 4;
+    UBaseType_t task_priority = 2;
 
     /// background task pinned core
-    int task_pinned_core = 0;
+    BaseType_t task_pinned_core = -1;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;

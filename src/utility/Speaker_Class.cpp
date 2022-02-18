@@ -41,8 +41,6 @@ namespace m5
 #define SAMPLE_RATE_TYPE int
 #endif
 
-  static constexpr const size_t dma_buf_len = 64;
-  static constexpr const size_t dma_buf_cnt = 8;
   const uint8_t Speaker_Class::_default_tone_wav[2] = { 191, 64 };
 
   esp_err_t Speaker_Class::_setup_i2s(void)
@@ -70,8 +68,9 @@ namespace m5
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
                                     : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
-    i2s_config.dma_buf_count        = dma_buf_cnt;
-    i2s_config.dma_buf_len          = dma_buf_len;
+    i2s_config.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
+    i2s_config.dma_buf_count        = _cfg.dma_buf_count;
+    i2s_config.dma_buf_len          = _cfg.dma_buf_len;
     i2s_config.tx_desc_auto_clear   = true;
 
     i2s_pin_config_t pin_config;
@@ -120,10 +119,11 @@ namespace m5
     const size_t lr_loop = 1 + self->_cfg.stereo;
     const int32_t spk_sample_rate = self->_cfg.sample_rate;
     int nodata_count = 0;
-    int16_t sound_buf[dma_buf_len];
-    int32_t dac_offset = 0;
+    int32_t dac_offset = self->_cfg.dac_zero_level << 8;
     int32_t surplus[2] = { 0, 0 };
     bool flg_i2s_started = false;
+    const size_t dma_buf_len = self->_cfg.dma_buf_len;
+    int16_t* sound_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
     while (self->_task_running)
     {
       size_t sound_buf_index = 0;
@@ -237,14 +237,17 @@ namespace m5
           if (self->_cfg.use_dac)
           {
             v >>= 8;
-            if (!self->_play_channel_bits)
+            if (self->_cfg.dac_zero_level == 0)
             {
-              dac_offset = (dac_offset * 255) >> 8;
+              if (!self->_play_channel_bits)
+              {
+                dac_offset = (dac_offset * 255) >> 8;
+              }
+              int32_t vabs = abs(v);
+              if (vabs > INT16_MAX) { vabs = INT16_MAX; }
+              if (dac_offset < vabs) { dac_offset = vabs; }
+              else { dac_offset += ((dac_offset < vabs + 128) ? 1 : -1); }
             }
-            int32_t vabs = abs(v);
-            if (vabs > INT16_MAX) { vabs = INT16_MAX; }
-            if (dac_offset < vabs) { dac_offset = vabs; }
-            else { dac_offset += ((dac_offset < vabs + 128) ? 1 : -1); }
             v += surplus[lr] + dac_offset;
             surplus[lr] = v & 255;
             if (v < 0) { v = 0; }
@@ -280,7 +283,7 @@ namespace m5
           }
           sound_buf_index++;
         } while (++lr != lr_loop);
-      } while (sound_buf_index < dma_buf_len);
+      } while (sound_buf_index < self->_cfg.dma_buf_len);
 
       if (!flg_i2s_started)
       {
@@ -292,7 +295,7 @@ namespace m5
           i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_BOTH_EN;
           if (!self->_cfg.stereo)
           {
-            i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+         // i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
             dac_mode = (self->_cfg.pin_data_out == GPIO_NUM_25)
                     ? i2s_dac_mode_t::I2S_DAC_CHANNEL_RIGHT_EN // for GPIO 25
                     : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN; // for GPIO 26
@@ -303,15 +306,18 @@ namespace m5
         i2s_start(self->_cfg.i2s_port);
       }
       size_t write_bytes;
-      i2s_write(self->_cfg.i2s_port, sound_buf, sizeof(sound_buf), &write_bytes, portMAX_DELAY);
+      i2s_write(self->_cfg.i2s_port, sound_buf, sound_buf_index * 2, &write_bytes, portMAX_DELAY);
 
-      if (++nodata_count > dma_buf_cnt * 2)
+      if (++nodata_count > self->_cfg.dma_buf_count * 2)
       {
         nodata_count = 0;
         flg_i2s_started = false;
         i2s_stop(self->_cfg.i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-        i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+        if (self->_cfg.use_dac)
+        {
+          i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+        }
 #endif
         ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
       }
@@ -339,8 +345,16 @@ namespace m5
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
+      size_t stack_size = 1024+(_cfg.dma_buf_len * sizeof(int16_t));
       _task_running = true;
-      xTaskCreate(output_task, "speaker_task", 2048, this, _cfg.task_priority, &_task_handle);
+      if (_cfg.task_pinned_core >= 0 && _cfg.task_pinned_core < portNUM_PROCESSORS)
+      {
+        xTaskCreatePinnedToCore(output_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+      }
+      else
+      {
+        xTaskCreate(output_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
+      }
     }
 
     return res;
