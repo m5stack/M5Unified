@@ -287,7 +287,6 @@ void gfxSetup(LGFX_Device* gfx)
   gfx->setFont(&fonts::lgfxJapanGothic_12);
   gfx->setEpdMode(epd_mode_t::epd_fastest);
   gfx->setCursor(0, 8);
-  gfx->startWrite(); /// Omit the paired endWrite.
   gfx->print("BT A2DP : ");
   gfx->println(bt_device_name);
   gfx->setTextWrap(false);
@@ -317,7 +316,7 @@ void gfxLoop(LGFX_Device* gfx)
   if (bits)
   {
     gfx->startWrite();
-    for (int id = 0; id < 8; ++id)
+    for (int id = 0; id < a2dp_sink.metatext_num; ++id)
     {
       if (0 == (bits & (1<<id))) { continue; }
       gfx->setCursor(0, 8 + id * 12);
@@ -423,7 +422,6 @@ void gfxLoop(LGFX_Device* gfx)
         if (py < y)
         {
           gfx->writeFastHLine(x * bw, py - 1, bw - 1, bgcolor(gfx, py - 1));
-          // gfx->writeFastHLine(x * bw, py - 1, bw - 1, TFT_BLACK);
         }
         else
         {

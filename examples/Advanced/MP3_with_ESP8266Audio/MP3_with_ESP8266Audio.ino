@@ -32,10 +32,8 @@ class AudioOutputM5Speaker : public AudioOutput
     {
       _m5sound = m5sound;
       _virtual_ch = virtual_sound_channel;
-      _tri_buffer_index = 0;
-      _tri_index = 0;
     }
-    virtual ~AudioOutputM5Speaker(void) override {};
+    virtual ~AudioOutputM5Speaker(void) {};
     virtual bool begin(void) override { return true; }
     virtual bool ConsumeSample(int16_t sample[2]) override
     {
@@ -75,12 +73,12 @@ class AudioOutputM5Speaker : public AudioOutput
     uint8_t _virtual_ch;
     static constexpr size_t flip_buf_size = 1024;
     int16_t _tri_buffer[3][flip_buf_size];
-    size_t _tri_buffer_index;
+    size_t _tri_buffer_index = 0;
     size_t _tri_index = 0;
 };
 
 
-#define FFT_SIZE 512
+#define FFT_SIZE 256
 class fft_t
 {
   float _wr[FFT_SIZE + 1];
@@ -189,9 +187,11 @@ void MDCallback(void *cbData, const char *type, bool isUnicode, const char *stri
   if (strcmp(type, "eof") == 0)
   {
     M5.Display.display();
-    header_height = M5.Display.getCursorY();
     return;
   }
+  int y = M5.Display.getCursorY();
+  if (y >= header_height) { return; }
+  M5.Display.fillRect(0, y, M5.Display.width(), 12, M5.Display.getBaseColor());
   M5.Display.printf("%s: ", type);
   M5.Display.println(string);
 }
@@ -211,7 +211,7 @@ void stop(void)
 void play(const char* fname)
 {
   if (id3 != nullptr) { stop(); }
-  M5.Display.setCursor(0, 12);
+  M5.Display.setCursor(0, 8);
   file.open(fname);
   id3 = new AudioFileSourceID3(&file);
   id3->RegisterMetadataCB(MDCallback, (void*)"ID3TAG");
@@ -219,35 +219,194 @@ void play(const char* fname)
   mp3.begin(id3, &out);
 }
 
-void setup()
+uint32_t bgcolor(LGFX_Device* gfx, int y)
 {
-  auto cfg = M5.config();
-  cfg.external_spk = true;
-  M5.begin(cfg);
-  M5.Display.setEpdMode(epd_mode_t::epd_fastest);
-  if (M5.Display.width() < M5.Display.height())
+  auto h = gfx->height();
+  auto dh = h - header_height;
+  int v = ((h - y)<<5) / dh;
+  if (dh > 40)
   {
-    M5.Display.setRotation(M5.Display.getRotation()^1);
+    int v2 = ((h - y + 1)<<5) / dh;
+    if ((v >> 2) != (v2 >> 2))
+    {
+      return 0x666666u;
+    }
   }
-  fft_enabled = (!M5.Display.isEPD() && M5.Display.getPanel()->bus()->busType() != m5gfx::bus_type_t::bus_i2c);
-  SD.begin(GPIO_NUM_4, SPI, 25000000);
+  return gfx->color888(v + 2, v, v + 6);
+}
 
-  M5.Display.fillRect(0, 8, M5.Display.width(), 3, TFT_BLACK);
-  M5.Display.setFont(&fonts::lgfxJapanGothic_8);
+void gfxSetup(LGFX_Device* gfx)
+{
+  if (gfx == nullptr) { return; }
+  if (gfx->width() < gfx->height())
+  {
+    gfx->setRotation(gfx->getRotation()^1);
+  }
+  gfx->setFont(&fonts::lgfxJapanGothic_12);
+  gfx->setEpdMode(epd_mode_t::epd_fastest);
+  gfx->setCursor(0, 8);
+  gfx->println("MP3 player");
+  gfx->setTextWrap(false);
+  gfx->fillRect(0, 6, gfx->width(), 2, TFT_BLACK);
 
-  header_height = 36;
-  fft_enabled = !M5.Display.isEPD();
+  header_height = 46;
+  fft_enabled = !gfx->isEPD();
+  if (fft_enabled)
+  {
+    for (int y = header_height; y < gfx->height(); ++y)
+    {
+      gfx->drawFastHLine(0, y, gfx->width(), bgcolor(gfx, y));
+    }
+  }
+
   for (int x = 0; x < (FFT_SIZE/2)+1; ++x)
   {
     prev_y[x] = INT16_MAX;
     peak_y[x] = INT16_MAX;
   }
+}
+
+void gfxLoop(LGFX_Device* gfx)
+{
+  if (gfx == nullptr) { return; }
+
+  if (!gfx->displayBusy())
+  { // draw volume bar
+    static int px;
+    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
+    int x = v * (gfx->width()) >> 8;
+    if (px != x)
+    {
+      gfx->fillRect(x, 6, px - x, 2, px < x ? 0xAAFFAAu : 0u);
+      gfx->display();
+      px = x;
+    }
+  }
+
+  if (fft_enabled && !gfx->displayBusy() && M5.Speaker.isPlaying(m5spk_virtual_channel) > 1)
+  {
+    static int prev_x[2];
+    static int peak_x[2];
+
+    auto data = out.getBuffer();
+    if (data)
+    {
+      gfx->startWrite();
+
+      // draw stereo level meter
+       uint16_t level[2] = { 0, 0 };
+      for (int i = 0; i < 512; i += 16)
+      {
+        uint32_t lv = abs(data[i]);
+        if (level[0] < lv) { level[0] = lv; }
+        lv = abs(data[i+1]);
+        if (level[1] < lv) { level[1] = lv; }
+      }
+      for (int i = 0; i < 2; ++i)
+      {
+        int x = (level[i] * gfx->width() - 4) / INT16_MAX;
+        int px = prev_x[i];
+        if (px != x)
+        {
+          gfx->fillRect(x, i * 3, px - x, 2, px < x ? 0xFF9900u : 0x330000u);
+          prev_x[i] = x;
+        }
+        px = peak_x[i];
+        if (px > x)
+        {
+          gfx->writeFastVLine(px, i * 3, 2, TFT_BLACK);
+          px--;
+        }
+        else
+        {
+          px = x;
+        }
+        if (peak_x[i] != px)
+        {
+          peak_x[i] = px;
+          gfx->writeFastVLine(px, i * 3, 2, TFT_WHITE);
+        }
+      }
+      gfx->display();
+
+      // draw FFT level meter
+      fft.exec(data);
+      int bw = gfx->width() / 60;
+      if (bw < 3) { bw = 3; }
+      int dsp_height = gfx->height();
+      int fft_height = dsp_height - header_height - 1;
+      int xe = gfx->width() / bw;
+      if (xe > (FFT_SIZE/2)) { xe = (FFT_SIZE/2); }
+      for (int x = 0; x <= xe; ++x)
+      {
+        if (((x * bw) & 7) == 0) { gfx->display(); }
+        int32_t f = fft.get(x);
+        int y = (f * fft_height) >> 18;
+        if (y > fft_height) { y = fft_height; }
+        y = dsp_height - y;
+        int py = prev_y[x];
+        if (y != py)
+        {
+          gfx->fillRect(x * bw, y, bw - 1, py - y, (y < py) ? 0x99AAFFu : 0x000033u);
+          prev_y[x] = y;
+        }
+        py = peak_y[x] + 1;
+        if (py < y)
+        {
+          gfx->writeFastHLine(x * bw, py - 1, bw - 1, bgcolor(gfx, py - 1));
+        }
+        else
+        {
+          py = y - 1;
+        }
+        if (peak_y[x] != py)
+        {
+          peak_y[x] = py;
+          gfx->writeFastHLine(x * bw, py, bw - 1, TFT_WHITE);
+        }
+      }
+      gfx->display();
+      gfx->endWrite();
+    }
+  }
+}
+
+void setup()
+{
+  auto cfg = M5.config();
+
+  cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
+//cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
+//cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
+
+  M5.begin(cfg);
+
+
+  { /// custom setting
+    auto spk_cfg = M5.Speaker.config();
+    /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+    spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
+    // spk_cfg.dac_zero_level = 44;
+    M5.Speaker.config(spk_cfg);
+  }
+
+
+  M5.Speaker.begin();
+
+  while (false == SD.begin(GPIO_NUM_4, SPI, 25000000))
+  {
+    delay(500);
+  }
+
+  gfxSetup(&M5.Display);
 
   play(filename[fileindex]);
 }
 
 void loop()
 {
+  gfxLoop(&M5.Display);
+
   if (mp3.isRunning())
   {
     if (!mp3.loop()) { mp3.stop(); }
@@ -260,105 +419,19 @@ void loop()
   M5.update();
   if (M5.BtnA.wasClicked())
   {
-    M5.Speaker.tone(440, 100);
+    M5.Speaker.tone(1000, 100);
     stop();
-    M5.Display.fillRect(0, 8, M5.Display.width(), header_height - 8, TFT_BLACK);
     if (++fileindex >= filecount) { fileindex = 0; }
     play(filename[fileindex]);
   }
   else
   if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed())
   {
-    size_t v = M5.Speaker.getVolume();
+    size_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
     if (M5.BtnB.isPressed()) { --v; } else { ++v; }
     if (v <= 255 || M5.BtnA.isHolding())
     {
-      M5.Speaker.setVolume(v);
-    }
-  }
-
-  if (!M5.Display.displayBusy())
-  { // draw volume bar
-    static int px;
-    uint8_t v = M5.Speaker.getVolume();
-    int x = v * (M5.Display.width()) >> 8;
-    if (px != x)
-    {
-      M5.Display.fillRect(x, 8, px - x, 3, px < x ? TFT_GREEN : TFT_BLACK);
-      px = x;
-    }
-  }
-
-  if (fft_enabled && !M5.Display.displayBusy())
-  { // draw stereo level meter
-    static int prev_x[2];
-
-    auto data = out.getBuffer();
-    uint16_t level[2] = { 0, 0 };
-    for (int i = 0; i < FFT_SIZE >> 1; i += 16)
-    {
-      uint32_t lv = abs(data[i]);
-      if (level[0] < lv) { level[0] = lv; }
-      lv = abs(data[i+1]);
-      if (level[1] < lv) { level[1] = lv; }
-    }
-    for (int i = 0; i < 2; ++i)
-    {
-      int x = (level[i] * M5.Display.width()) / INT16_MAX;
-      int px = prev_x[i];
-      if (px != x)
-      {
-        prev_x[i] = x;
-        M5.Display.fillRect(x, i * 4, px - x, 3, px < x ? TFT_BLUE : TFT_BLACK);
-      }
-    }
-  }
-
-  if (fft_enabled && M5.Speaker.isPlaying(m5spk_virtual_channel) == 2)
-  {
-    static bool fft_executed = false;
-    if (!fft_executed)
-    {
-      fft.exec(out.getBuffer());
-      fft_executed = true;
-    }
-
-    if (M5.Speaker.isPlaying(m5spk_virtual_channel) == 2)
-    { // draw fft level meter
-      fft_executed = false;
-
-      int dsp_height = M5.Display.height();
-      int fft_height = dsp_height - header_height;
-
-      M5.Display.startWrite();
-      int xe = M5.Lcd.width() >> 2;
-      if (xe > (FFT_SIZE/2)+1) { xe = (FFT_SIZE/2)+1; }
-      for (int x = 0; x < xe; ++x)
-      {
-        int32_t f = fft.get(x) * fft_height;
-        int y = dsp_height - std::min(fft_height, f >> 19);
-        int py = prev_y[x];
-        if (y != py)
-        {
-          M5.Lcd.fillRect(x*4, y, 3, py - y, (y < py) ? TFT_GREEN : TFT_BLACK);
-          prev_y[x] = y;
-        }
-        py = peak_y[x] + 1;
-        if (py < y)
-        {
-          M5.Lcd.writeFastHLine(x*4, py-1, 3, TFT_BLACK);
-        }
-        else
-        {
-          py = y - 1;
-        }
-        if (peak_y[x] != py)
-        {
-          peak_y[x] = py;
-          M5.Lcd.writeFastHLine(x*4, py, 3, TFT_WHITE);
-        }
-      }
-      M5.Display.endWrite();
+      M5.Speaker.setChannelVolume(m5spk_virtual_channel, v);
     }
   }
 }
