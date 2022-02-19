@@ -26,12 +26,15 @@
 
 #include <M5GFX.h>
 
+#include "gitTagVersion.h"
 #include "utility/RTC8563_Class.hpp"
 #include "utility/AXP192_Class.hpp"
 #include "utility/IP5306_Class.hpp"
 #include "utility/IMU_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
+#include "utility/Speaker_Class.hpp"
+#include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
 
 #include <memory>
@@ -66,6 +69,12 @@ namespace m5
       /// use internal RTC.
       bool internal_rtc  = true;
 
+      /// use mic.
+      bool internal_mic = true;
+
+      /// use speaker.
+      bool internal_spk = true;
+
       /// use Unit Accel & Gyro.
       bool external_imu  = false;
 
@@ -74,20 +83,36 @@ namespace m5
 
       /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
       uint8_t led_brightness = 0;
+
+      union
+      {
+        uint8_t external_spk = 0;
+        struct
+        {
+          uint8_t enabled : 1;
+          uint8_t omit_atomic_spk : 1;
+          uint8_t omit_spk_hat : 1;
+          uint8_t reserve : 5;
+        } external_spk_detail;
+      };
     };
 
-    config_t config(void) const { return config_t(); }
+    config_t config(void) const { return _cfg; }
+
+    void config(const config_t& cfg) { _cfg = cfg; }
 
     /// get the board type of the runtime environment.
     /// @return board type
     board_t getBoard(void) const { return _board; }
 
     /// Perform initialization process at startup.
-    void begin(void)
-    {
-      begin(config_t{});
-    }
     void begin(const config_t& cfg)
+    {
+      _cfg = cfg;
+      begin();
+    }
+
+    void begin(void)
     {
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
@@ -97,13 +122,12 @@ namespace m5
       {
         ((M5GFX_*)&Display)->setBoard(_switch_display());
       }
-      _begin(cfg);
+      _begin();
       Display.setBrightness(brightness);
     }
 
     /// To call this function in a loop function.
     void update(void);
-
 
     M5GFX Display;
     M5GFX &Lcd = Display;
@@ -136,11 +160,22 @@ namespace m5
     /// for external I2C device (Port.A)
     I2C_Class& Ex_I2C = m5::Ex_I2C;
 
+    Speaker_Class Speaker;
+
+    Mic_Class Mic;
+
   private:
+
+    config_t _cfg;
+
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
-    void _begin(const config_t& cfg);
+    void _begin(void);
     board_t _check_boardtype(board_t);
+
+    static bool _speaker_enabled_cb(void* args, bool enabled);
+    static bool _microphone_enabled_cb(void* args, bool enabled);
+    // static bool _sound_set_mode_cb(void* args, m5::sound_mode_t mode);
 
     std::unique_ptr<m5gfx::LGFX_Device> _ex_display;
     board_t _switch_display(void)
@@ -183,7 +218,6 @@ namespace m5
       return Display.getBoard();
     }
 
-  private:
     struct M5GFX_ : public M5GFX
     {
       void setBoard(board_t board) { _board = board; }

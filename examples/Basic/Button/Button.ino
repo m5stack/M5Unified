@@ -36,22 +36,25 @@ void loop(void)
   static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE };
   static constexpr const char* const names[] = { "none", "wasHold", "wasClicked", "wasPressed", "wasReleased" };
 
-  M5.Display.startWrite();
-
-  /// BtnPWR: can "wasClicked"/"wasHold"  can be use.
-  int state = M5.BtnPWR.wasHold() ? 1
-            : M5.BtnPWR.wasClicked() ? 2
-            : 0;
-
   int w = M5.Display.width() / 5;
   int h = M5.Display.height();
+  M5.Display.startWrite();
+
+  /// BtnPWR: "wasClicked"/"wasHold"  can be use.
+  /// BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
+  int state = M5.BtnPWR.wasHold() ? 1
+            : M5.BtnPWR.wasClicked() ? 2
+            : M5.BtnPWR.wasPressed() ? 3
+            : M5.BtnPWR.wasReleased() ? 4
+            : 0;
+
   if (state)
   {
     ESP_LOGI("loop", "BtnPWR:%s", names[state]);
     M5.Display.fillRect(w*0, 0, w-1, h, colors[state]);
   }
 
-  /// BtnA,BtnB,BtnC,BtnEXT, BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
+  /// BtnA,BtnB,BtnC,BtnEXT: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
   state = M5.BtnA.wasHold() ? 1
         : M5.BtnA.wasClicked() ? 2
         : M5.BtnA.wasPressed() ? 3
