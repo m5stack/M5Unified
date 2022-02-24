@@ -77,12 +77,16 @@ namespace m5
 
     /// now in playing or not.
     /// @return false=not playing / true=playing
-    bool isPlaying(void) const volatile { return _play_channel_bits ? true : false; }
+    bool isPlaying(void) const volatile { return _play_channel_bits.load(); }
 
     /// now in playing or not.
     /// @param channel virtual channel number. (0~7), (default = automatically selected)
     /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
     size_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? ((bool)_ch_info[channel].wavinfo[0].repeat) + ((bool)_ch_info[channel].wavinfo[1].repeat) : 0; }
+
+    /// Get the number of channels that are playing.
+    /// @return number of channels that are playing.
+    size_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load()); }
 
     /// sets the output master volume of the sound.
     /// @param master_volume master volume (0~255)
