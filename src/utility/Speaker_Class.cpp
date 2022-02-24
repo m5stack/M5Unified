@@ -41,7 +41,7 @@ namespace m5
 #define SAMPLE_RATE_TYPE int
 #endif
 
-  const uint8_t Speaker_Class::_default_tone_wav[2] = { 191, 64 };
+  const uint8_t Speaker_Class::_default_tone_wav[2] = { 192, 64 }; // square wave data
 
   esp_err_t Speaker_Class::_setup_i2s(void)
   {
@@ -115,179 +115,234 @@ namespace m5
   {
     auto self = (Speaker_Class*)args;
 
-    const size_t lr_loop = 1 + self->_cfg.stereo;
+    const bool out_stereo = self->_cfg.stereo;
     const int32_t spk_sample_rate = self->_cfg.sample_rate;
+    const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
     int nodata_count = 0;
     int32_t dac_offset = self->_cfg.dac_zero_level << 8;
     int32_t surplus[2] = { 0, 0 };
     bool flg_i2s_started = false;
-    const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    int16_t* sound_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
+
+    union
+    {
+      float* float_buf;
+      int16_t* sound_buf;
+    };
+    float_buf = (float*)alloca(dma_buf_len * sizeof(float));
+
     while (self->_task_running)
     {
-      size_t sound_buf_index = 0;
-      do
+      if (++nodata_count > self->_cfg.dma_buf_count * 2)
       {
-        int32_t value[2] = { 0, 0 };
-        if (self->_play_channel_bits)
+        nodata_count = 0;
+        flg_i2s_started = false;
+        i2s_stop(self->_cfg.i2s_port);
+        // i2s_zero_dma_buffer(self->_cfg.i2s_port);
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+        if (self->_cfg.use_dac)
         {
-          nodata_count = 0;
-          for (size_t idx = 0; idx < sound_channel_max; ++idx)
-          {
-            if (0 == (self->_play_channel_bits & (1 << idx))) { continue; }
-            auto ch_info = &(self->_ch_info[idx]);
-
-            if (ch_info->current_wav.repeat == 0 || ch_info->next_wav.stop_current)
-            {
-              if (ch_info->next_wav.repeat == 0
-              || !ch_info->next_wav.no_clear_index
-              || (ch_info->next_wav.data != ch_info->current_wav.data))
-              {
-                ch_info->index = 0;
-                ch_info->diff  = 0;
-                if (ch_info->next_wav.repeat == 0)
-                {
-                  self->_play_channel_bits &= ~(1 << idx);
-                  continue;
-                }
-              }
-              ch_info->current_wav = ch_info->next_wav;
-              ch_info->next_wav.clear();
-            }
-
-            auto current_wav = &(ch_info->current_wav);
-            bool stereo = current_wav->is_stereo;
-            int32_t l, r;
-            int32_t ch_v = ch_info->volume;
-            ch_v *= ch_v;
-            size_t ch_index = ch_info->index;
-            const void* data = current_wav->data;
-            if (current_wav->is_16bit)
-            {
-              auto wav = (const uint16_t*)data;
-              l = wav[ch_index         ];
-              r = wav[ch_index + stereo];
-              if (current_wav->is_signed)
-              {
-                l = (int16_t)l;
-                r = (int16_t)r;
-              }
-              else
-              {
-                l += INT16_MIN;
-                r += INT16_MIN;
-              }
-            }
-            else
-            {
-              ch_v <<= 8;
-              auto wav = (const uint8_t*)data;
-              l = wav[ch_index         ];
-              r = wav[ch_index + stereo];
-              if (current_wav->is_signed)
-              {
-                l = (int8_t)l;
-                r = (int8_t)r;
-              }
-              else
-              {
-                l += INT8_MIN;
-                r += INT8_MIN;
-              }
-            }
-            value[0] += l * ch_v;
-            value[1] += r * ch_v;
-
-            size_t ch_diff = ch_info->diff + current_wav->sample_rate;
-            if (ch_diff >= spk_sample_rate)
-            {
-              size_t tmp = ch_diff / spk_sample_rate;
-              ch_diff -= tmp * spk_sample_rate;
-              ch_index += tmp * (stereo + 1);
-
-              while (ch_index >= current_wav->length)
-              {
-                ch_index -= current_wav->length;
-                if (ch_info->current_wav.repeat != ~0u)
-                {
-                  if (0 == --ch_info->current_wav.repeat) { break; }
-                }
-              }
-            }
-            ch_info->index = ch_index;
-            ch_info->diff = ch_diff;
-          }
-          float volume = ((float)(self->_master_volume * self->_master_volume * self->_cfg.magnification)) / (0x1000000u >> self->_cfg.stereo);
-          if (self->_cfg.stereo)
-          {
-            value[0] = volume * value[0];
-            value[1] = volume * value[1];
-          }
-          else
-          {
-            value[0] = volume * (value[0] + value[1]);
-          }
+          i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
         }
+#endif
+        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+        continue;
+      }
 
-        size_t lr = 0;
+      memset(float_buf, 0, dma_buf_len * sizeof(float));
+
+      for (size_t ch = 0; ch < sound_channel_max; ++ch)
+      {
+        if (0 == (self->_play_channel_bits.load() & (1 << ch))) { continue; }
+        nodata_count = 0;
+
+        size_t idx = 0;
+        auto ch_info = &(self->_ch_info[ch]);
+        wav_info_t* current_wav = &(ch_info->wavinfo[!ch_info->flip]);
+        wav_info_t* next_wav = &(ch_info->wavinfo[ch_info->flip]);
+
+        bool in_stereo = current_wav->is_stereo;
+        int32_t tmp = ch_info->volume;
+        tmp *= tmp;
+        if (!current_wav->is_16bit) { tmp <<= 8; }
+        if (out_stereo) { tmp <<= 1; }
+        float ch_v = tmp;
+        const void* data = current_wav->data;
+        auto in_rate = current_wav->sample_rate;
         do
         {
-          int32_t v = value[lr];
-          if (self->_cfg.use_dac)
+          if (current_wav->repeat == 0 || next_wav->stop_current)
           {
-            v >>= 8;
-            if (self->_cfg.dac_zero_level == 0)
+            bool clear_idx = (next_wav->repeat == 0
+                          || !next_wav->no_clear_index
+                          || (next_wav->data != current_wav->data));
+            current_wav->clear();
+            ch_info->flip = !ch_info->flip;
+            xSemaphoreGive(self->_task_semaphore);
+            std::swap(current_wav, next_wav);
+
+            if (clear_idx)
             {
-              if (!self->_play_channel_bits)
+              ch_info->index = 0;
+              ch_info->diff  = 0;
+              if (current_wav->repeat == 0)
               {
-                dac_offset = (dac_offset * 255) >> 8;
+                self->_play_channel_bits.fetch_and(~(1 << ch));
+                if (current_wav->repeat == 0) { break; }
+                self->_play_channel_bits.fetch_or(1 << ch);
               }
-              int32_t vabs = abs(v);
-              if (vabs > INT16_MAX) { vabs = INT16_MAX; }
-              if (dac_offset < vabs) { dac_offset = vabs; }
-              else { dac_offset += ((dac_offset < vabs + 128) ? 1 : -1); }
             }
-            v += surplus[lr] + dac_offset;
-            surplus[lr] = v & 255;
-            if (v < 0) { v = 0; }
-            else if (v > UINT16_MAX) { v = UINT16_MAX; }
-            sound_buf[sound_buf_index ^ 1] = v;
+            in_stereo = current_wav->is_stereo;
+            int32_t tmp = ch_info->volume;
+            tmp *= tmp;
+            if (!current_wav->is_16bit) { tmp <<= 8; }
+            if (out_stereo) { tmp <<= 1; }
+            ch_v = tmp;
+            data = current_wav->data;
+            in_rate = current_wav->sample_rate;
           }
-          else if (self->_cfg.buzzer)
+
+          int32_t l, r;
+          size_t ch_index = ch_info->index;
+          if (current_wav->is_16bit)
           {
-            v >>= 8;
-            int32_t tmp = surplus[lr];
-            uint_fast16_t bitdata = 0;
-            uint_fast16_t bit = 0x8000;
-            v += 0x8000;
-            do
+            auto wav = (const int16_t*)data;
+            l = wav[ch_index];
+            r = wav[ch_index + in_stereo];
+            if (!current_wav->is_signed)
             {
-              if ((tmp += v) >= 0)
-              {
-                tmp -= 0x10000;
-                bitdata |= bit;
-              }
-            } while (bit >>= 1);
-            surplus[lr] = tmp;
-            sound_buf[sound_buf_index] = bitdata;
+              l = (l & 0xFFFF) + INT16_MIN;
+              r = (r & 0xFFFF) + INT16_MIN;
+            }
           }
           else
           {
-            v += surplus[lr];
-            surplus[lr] = v & 255;
-            v >>= 8;
-            if (v < INT16_MIN) { v = INT16_MIN; }
-            else if (v > INT16_MAX) { v = INT16_MAX; }
-            sound_buf[sound_buf_index] = v;
+            auto wav = (const int8_t*)data;
+            l = wav[ch_index];
+            r = wav[ch_index + in_stereo];
+            if (!current_wav->is_signed)
+            {
+              l = (l & 0xFF) + INT8_MIN;
+              r = (r & 0xFF) + INT8_MIN;
+            }
           }
-          sound_buf_index++;
-        } while (++lr != lr_loop);
-      } while (sound_buf_index < self->_cfg.dma_buf_len);
+
+          size_t ch_diff = ch_info->diff;
+          if (out_stereo)
+          {
+            float fl = l * ch_v;
+            float fr = r * ch_v;
+            do
+            {
+              float_buf[  idx] += fl;
+              float_buf[++idx] += fr;
+              ch_diff += in_rate;
+            } while (++idx < dma_buf_len && ch_diff < spk_sample_rate);
+          }
+          else
+          {
+            float fl = l + r;
+            fl *= ch_v;
+            do
+            {
+              float_buf[idx] += fl;
+              ch_diff += in_rate;
+            } while (++idx < dma_buf_len && ch_diff < spk_sample_rate);
+          }
+
+          if (ch_diff >= spk_sample_rate)
+          {
+            size_t tmp = ch_diff / spk_sample_rate;
+            ch_diff -= tmp * spk_sample_rate;
+            ch_index += tmp * (in_stereo + 1);
+
+            while (ch_index >= current_wav->length)
+            {
+              ch_index -= current_wav->length;
+              if (current_wav->repeat != ~0u)
+              {
+                if (0 == --current_wav->repeat) { break; }
+              }
+            }
+          }
+          ch_info->index = ch_index;
+          ch_info->diff = ch_diff;
+        } while (idx < dma_buf_len);
+      }
+
+      float volume = ((float)(self->_master_volume * self->_master_volume * self->_cfg.magnification)) / 0x2000000u;
+      size_t idx = 0;
+      if (self->_cfg.use_dac)
+      {
+        volume /= 256;
+        const bool zero_bias = (self->_cfg.dac_zero_level == 0);
+        if (zero_bias && nodata_count)
+        {
+          do
+          {
+            dac_offset = (dac_offset * 255) >> 8;
+            int32_t v = dac_offset + surplus[idx & out_stereo];
+            surplus[idx & out_stereo] = v & 255;
+            sound_buf[idx ^ 1] = v;
+          } while (++idx < dma_buf_len);
+        }
+        else
+        {
+          do
+          {
+            int32_t v = volume * float_buf[idx];
+            if (zero_bias)
+            {
+              int32_t vabs = abs(v);
+              if (vabs > INT16_MAX) { vabs = INT16_MAX; }
+              if (--dac_offset < vabs) { dac_offset = vabs; }
+            }
+            v += surplus[idx & out_stereo] + dac_offset;
+            surplus[idx & out_stereo] = v & 255;
+            if (v < 0) { v = 0; }
+            else if (v > UINT16_MAX) { v = UINT16_MAX; }
+            sound_buf[idx ^ 1] = v;
+          } while (++idx < dma_buf_len);
+        }
+      }
+      else if (self->_cfg.buzzer)
+      {
+        volume /= 256;
+        int32_t tmp = surplus[0];
+        do
+        {
+          int32_t v = volume * float_buf[idx];
+          uint_fast16_t bitdata = 0;
+          uint_fast16_t bit = 0x8000;
+          v += 0x8000;
+          do
+          {
+            if ((tmp += v) >= 0)
+            {
+              tmp -= 0x10000;
+              bitdata |= bit;
+            }
+          } while (bit >>= 1);
+          sound_buf[idx] = bitdata;
+        } while (++idx < dma_buf_len);
+        surplus[0] = tmp;
+      }
+      else
+      {
+        do
+        {
+          int32_t v = volume * float_buf[idx];
+          v += surplus[idx & out_stereo];
+          surplus[idx & out_stereo] = v & 255;
+          v >>= 8;
+          if (v < INT16_MIN) { v = INT16_MIN; }
+          else if (v > INT16_MAX) { v = INT16_MAX; }
+          sound_buf[idx] = v;
+        } while (++idx < dma_buf_len);
+      }
 
       if (!flg_i2s_started)
       {
         flg_i2s_started = true;
-        i2s_zero_dma_buffer(self->_cfg.i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
         if (self->_cfg.use_dac)
         {
@@ -303,22 +358,9 @@ namespace m5
 #endif
         i2s_start(self->_cfg.i2s_port);
       }
+
       size_t write_bytes;
       i2s_write(self->_cfg.i2s_port, sound_buf, dma_buf_len * sizeof(int16_t), &write_bytes, portMAX_DELAY);
-
-      if (++nodata_count > self->_cfg.dma_buf_count * 2)
-      {
-        nodata_count = 0;
-        flg_i2s_started = false;
-        i2s_stop(self->_cfg.i2s_port);
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-        if (self->_cfg.use_dac)
-        {
-          i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
-        }
-#endif
-        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-      }
     }
     i2s_stop(self->_cfg.i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -337,13 +379,15 @@ namespace m5
   {
     if (_task_running) { return true; }
 
+    if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
+
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
 
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 1024+(_cfg.dma_buf_len * sizeof(int16_t));
+      size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(float));
       _task_running = true;
       if (_cfg.task_pinned_core >= 0 && _cfg.task_pinned_core < portNUM_PROCESSORS)
       {
@@ -373,12 +417,12 @@ namespace m5
 
   void Speaker_Class::stop(void)
   {
-    _play_channel_bits = 0;
-    for (size_t i = 0; i < sound_channel_max; ++i)
+    wav_info_t tmp;
+    tmp.stop_current = 1;
+    for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
-      _ch_info[i].next_wav.clear();
-      _ch_info[i].current_wav.clear();
-      _ch_info[i].index = 0;
+      auto chinfo = &_ch_info[ch];
+      chinfo->wavinfo[chinfo->flip] = tmp;
     }
   }
 
@@ -390,43 +434,51 @@ namespace m5
     }
     else
     {
-      _play_channel_bits &= ~(1 << ch);
-      _ch_info[ch].next_wav.clear();
-      _ch_info[ch].current_wav.clear();
-      _ch_info[ch].index = 0;
+      wav_info_t tmp;
+      tmp.stop_current = 1;
+      auto chinfo = &_ch_info[ch];
+      chinfo->wavinfo[chinfo->flip] = tmp;
     }
   }
 
   void Speaker_Class::wav_info_t::clear(void)
   {
-    sample_rate = 0;
-    data = nullptr;
-    flg = 0;
     length = 0;
+    data = nullptr;
+    sample_rate = 0;
+    flg = 0;
     repeat = 0;
   }
 
-  bool Speaker_Class::tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* wav_data, size_t array_len, bool stereo)
+  bool Speaker_Class::_set_next_wav(size_t ch, const wav_info_t& wav)
   {
-    return _play_raw(wav_data, array_len, false, false, (int)(frequency * array_len) >> stereo, stereo, (duration != ~0u) ? (duration * frequency / 1000) : ~0u, channel, stop_current_sound, true);
+    auto chinfo = &_ch_info[ch];
+    uint8_t chmask = 1 << ch;
+    if (!wav.stop_current)
+    {
+      if (isPlaying(ch) > 1) { return false; }
+      while ((_play_channel_bits.load() & chmask) && (chinfo->wavinfo[chinfo->flip].repeat)) { xSemaphoreTake(_task_semaphore, 1); }
+    }
+    chinfo->wavinfo[chinfo->flip] = wav;
+    _play_channel_bits.fetch_or(chmask);
+
+    xTaskNotifyGive(_task_handle);
+    return true;
   }
 
   bool Speaker_Class::_play_raw(const void* wav_data, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
     if (!begin() || (_task_handle == nullptr)) { return true; }
     if (array_len == 0) { return true; }
-    if ((size_t)channel >= sound_channel_max)
+    size_t ch = (size_t)channel;
+    if (ch >= sound_channel_max)
     {
-      size_t bits = _play_channel_bits;
-      for (int ch = sound_channel_max - 1; ch >= 0; --ch)
+      size_t bits = _play_channel_bits.load();
+      for (ch = sound_channel_max - 1; ch < sound_channel_max; --ch)
       {
-        if (0 == ((bits >> ch) & 1))
-        {
-          channel = ch;
-          break;
-        }
+        if (0 == ((bits >> ch) & 1)) { break; }
       }
-      if ((size_t)channel >= sound_channel_max) { return true; }
+      if (ch >= sound_channel_max) { return true; }
     }
     wav_info_t info;
     info.data = wav_data;
@@ -439,16 +491,6 @@ namespace m5
     info.stop_current = stop_current_sound;
     info.no_clear_index = no_clear_index;
 
-    uint8_t chmask = 1 << channel;
-    if (!stop_current_sound)
-    {
-      if (isPlaying(channel) == 2) { return false; }
-      while ((_play_channel_bits & chmask) && _ch_info[channel].next_wav.repeat) { taskYIELD(); }
-    }
-    _ch_info[channel].next_wav = info;
-    _play_channel_bits |= chmask;
-
-    xTaskNotifyGive(_task_handle);
-    return true;
+    return _set_next_wav(ch, info);
   }
 }

@@ -139,9 +139,12 @@ void setup(void)
 
   M5.begin(cfg);
 
-/*
   { /// I2S custom setting
     auto spk_cfg = M5.Speaker.config();
+
+    /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+    spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
+/*
     spk_cfg.pin_data_out=8;
     spk_cfg.pin_bck=7;
     spk_cfg.pin_ws=10;     // LRCK
@@ -155,10 +158,9 @@ void setup(void)
 
     /// Volume Multiplier
     spk_cfg.magnification = 16;
-
+//*/
     M5.Speaker.config(spk_cfg);
   }
-//*/
   M5.Speaker.begin();
 
   if (M5.Display.width() > M5.Display.height())
@@ -296,12 +298,12 @@ void loop(void)
   {
     static uint8_t prev_channelvolume;
     static uint8_t prev_mastervolume;
-    int32_t m_vol = (M5.Speaker.getVolume()         * (M5.Lcd.height() - menu_y)) >> 8;
-    int32_t c_vol = (M5.Speaker.getChannelVolume(0) * (M5.Lcd.height() - menu_y)) >> 8;
+    int32_t m_vol = (M5.Speaker.getVolume()         * (M5.Display.height() - menu_y)) >> 8;
+    int32_t c_vol = (M5.Speaker.getChannelVolume(0) * (M5.Display.height() - menu_y)) >> 8;
     if (prev_mastervolume  != m_vol
      || prev_channelvolume != c_vol)
     {
-      int32_t b = (255 * (M5.Lcd.height() - menu_y)) >> 8;
+      int32_t b = (255 * (M5.Display.height() - menu_y)) >> 8;
       prev_mastervolume  = m_vol;
       prev_channelvolume = c_vol;
       M5.Display.startWrite();

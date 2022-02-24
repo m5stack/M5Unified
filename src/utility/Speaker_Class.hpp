@@ -7,6 +7,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/i2s.h>
+#include <atomic>
 
 namespace m5
 {
@@ -60,12 +61,8 @@ namespace m5
   class Speaker_Class
   {
   friend M5Unified;
-
-    static constexpr const size_t sound_channel_max = 8;
-
-    static const uint8_t _default_tone_wav[2];
-
   public:
+    virtual ~Speaker_Class(void) {}
 
     speaker_config_t config(void) const { return _cfg; }
     void config(const speaker_config_t& cfg) { _cfg = cfg; }
@@ -85,7 +82,7 @@ namespace m5
     /// now in playing or not.
     /// @param channel virtual channel number. (0~7), (default = automatically selected)
     /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
-    size_t isPlaying(uint8_t channel) const { return (channel < sound_channel_max) ? (bool)_ch_info[channel].next_wav.repeat + (bool)_ch_info[channel].current_wav.repeat : 0; }
+    volatile size_t isPlaying(uint8_t channel) const { return (channel < sound_channel_max) ? ((bool)_ch_info[channel].wavinfo[0].repeat) + ((bool)_ch_info[channel].wavinfo[1].repeat) : 0; }
 
     /// sets the output master volume of the sound.
     /// @param master_volume master volume (0~255)
@@ -124,7 +121,10 @@ namespace m5
     /// @param wav_data Single amplitude audio data. 8bit unsigned wav.
     /// @param array_len size of wav_data.
     /// @param stereo true=data is stereo / false=data is mono.
-    bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* wav_data, size_t array_len, bool stereo = false);
+    bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* wav_data, size_t array_len, bool stereo = false)
+    {
+      return _play_raw(wav_data, array_len, false, false, (int)(frequency * array_len) >> stereo, stereo, (duration != ~0u) ? (duration * frequency / 1000) : ~0u, channel, stop_current_sound, true);
+    }
 
     /// play simple tone sound.
     /// @param frequency tone frequency (Hz)
@@ -173,17 +173,21 @@ namespace m5
 
   protected:
 
+    static constexpr const size_t sound_channel_max = 8;
+
+    static const uint8_t _default_tone_wav[2];
+
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
     struct wav_info_t
     {
-      size_t length = 0;
-      uint32_t repeat = 0;   /// -1 mean infinity repeat
+      volatile uint32_t repeat = 0;   /// -1 mean infinity repeat
       uint32_t sample_rate = 0;
       const void* data = nullptr;
+      size_t length = 0;
       union
       {
-        uint8_t flg = 0;
+        volatile uint8_t flg = 0;
         struct
         {
           uint8_t is_stereo      : 1;
@@ -193,18 +197,16 @@ namespace m5
           uint8_t no_clear_index : 1;
         };
       };
-      
       void clear(void);
     };
 
     struct channel_info_t
     {
-      bool setWav(const wav_info_t& wav);
-      wav_info_t current_wav;
-      wav_info_t next_wav;
+      wav_info_t wavinfo[2]; // current/next flip info.
       size_t index = 0;
       size_t diff = 0;
-      uint8_t volume = 64; // channel volume (not master volume)
+      volatile uint8_t volume = 64; // channel volume (not master volume)
+      volatile bool flip = false;
     };
 
     channel_info_t _ch_info[sound_channel_max];
@@ -213,16 +215,18 @@ namespace m5
 
     esp_err_t _setup_i2s(void);
     bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
+    bool _set_next_wav(size_t ch, const wav_info_t& wav);
 
     speaker_config_t _cfg;
-    uint8_t _master_volume = 64;
+    volatile uint8_t _master_volume = 64;
 
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
     TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
-    volatile uint8_t _play_channel_bits = 0;
+    volatile SemaphoreHandle_t _task_semaphore = nullptr;
+    std::atomic<uint16_t> _play_channel_bits = { 0 };
   };
 }
 

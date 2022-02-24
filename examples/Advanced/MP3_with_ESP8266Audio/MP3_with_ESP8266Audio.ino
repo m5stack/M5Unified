@@ -371,7 +371,7 @@ void gfxLoop(LGFX_Device* gfx)
   }
 }
 
-void setup()
+void setup(void)
 {
   auto cfg = M5.config();
 
@@ -386,7 +386,6 @@ void setup()
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
-    // spk_cfg.dac_zero_level = 44;
     M5.Speaker.config(spk_cfg);
   }
 
@@ -403,7 +402,7 @@ void setup()
   play(filename[fileindex]);
 }
 
-void loop()
+void loop(void)
 {
   gfxLoop(&M5.Display);
 
