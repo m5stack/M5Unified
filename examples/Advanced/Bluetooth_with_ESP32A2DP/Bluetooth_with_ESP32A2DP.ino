@@ -139,8 +139,7 @@ protected:
     /// When the queue is empty or full, delay processing is performed.
     if (M5.Speaker.isPlaying(m5spk_virtual_channel) != 1)
     {
-      vTaskDelay(5 / portTICK_RATE_MS);
-      while (M5.Speaker.isPlaying(m5spk_virtual_channel) == 2) { taskYIELD(); }
+      do { vTaskDelay(1); } while (M5.Speaker.isPlaying(m5spk_virtual_channel) > 1);
     }
     bool flip = !_flip_index;
     if (_flip_buf_size[flip] < length)
@@ -455,6 +454,8 @@ void setup(void)
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
+    // spk_cfg.task_pinned_core = 0;
+    // spk_cfg.task_priority = configMAX_PRIORITIES - 2;
     M5.Speaker.config(spk_cfg);
   }
 
