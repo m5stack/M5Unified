@@ -12,25 +12,50 @@ static constexpr uint8_t m5spk_virtual_channel = 0;
 static constexpr uint8_t LEN_FRAME = 32;
 
 static uint32_t workbuf[AQ_SIZE_WORKBUF];
-static int16_t wav[3][LEN_FRAME];
-static int tri_index = 0;
+static TaskHandle_t task_handle = nullptr;
+volatile bool is_talking = false;
 
-void playAquesTalk(const char *koe)
+static void talk_task(void*)
 {
+  int16_t wav[3][LEN_FRAME];
+  int tri_index = 0;
+  for (;;)
+  {
+    ulTaskNotifyTake( pdTRUE, portMAX_DELAY ); // wait notify
+    while (is_talking)
+    {
+      uint16_t len;
+      if (CAqTkPicoF_SyntheFrame(wav[tri_index], &len)) { is_talking = false; break; }
+      while (!M5.Speaker.playRAW(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false)) { taskYIELD(); }
+      tri_index = tri_index < 2 ? tri_index + 1 : 0;
+    }
+  }
+}
+
+/// 音声再生の終了を待機する;
+static void waitAquesTalk(void)
+{
+  while (is_talking) { vTaskDelay(1); }
+}
+
+/// 音声再生を停止する;
+static void stopAquesTalk(void)
+{
+  if (is_talking) { is_talking = false; vTaskDelay(1); }
+}
+
+/// 音声再生を開始する。(再生中の場合は中断して新たな音声再生を開始する) ;
+static void playAquesTalk(const char *koe)
+{
+  stopAquesTalk();
+
   M5.Display.printf("Play:%s\n", koe);
 
   int iret = CAqTkPicoF_SetKoe((const uint8_t*)koe, 100, 0xFFu);
   if (iret) { M5.Display.println("ERR:CAqTkPicoF_SetKoe"); }
 
-  for (;;)
-  {
-    uint16_t len;
-    iret = CAqTkPicoF_SyntheFrame(wav[tri_index], &len);
-    if (iret) { return; }
-
-    while (!M5.Speaker.playRAW(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false)) { taskYIELD(); }
-    tri_index = tri_index < 2 ? tri_index + 1 : 0;
-  }
+  is_talking = true;
+  xTaskNotifyGive(task_handle);
 }
 
 void setup(void)
@@ -43,6 +68,7 @@ void setup(void)
 
   M5.begin(cfg);
 
+  xTaskCreate(talk_task, "talk_task", 2048, nullptr, 1, &task_handle);
 /*
   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
   auto spk_cfg = M5.Speaker.config();
@@ -60,6 +86,7 @@ void setup(void)
   }
 
   playAquesTalk("akue_suto'-_ku/kido-shima'_shita.");
+  waitAquesTalk();
   playAquesTalk("botanno/o_shitekudasa'i.");
 }
 
