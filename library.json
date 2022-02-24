@@ -12,10 +12,11 @@
   },
   "dependencies": [
     {
-      "name": "M5GFX"
+      "name": "M5GFX",
+      "version": ">=0.0.18"
     }
   ],
-  "version": "0.0.5",
+  "version": "0.0.6",
   "frameworks": "arduino",
   "platforms": "espressif32",
   "headers": "M5Unified.h"
