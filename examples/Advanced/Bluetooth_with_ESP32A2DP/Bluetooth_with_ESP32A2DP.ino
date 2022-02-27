@@ -453,7 +453,7 @@ void setup(void)
   { /// custom setting
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
-    spk_cfg.sample_rate = 96000; // default:48000 (48kHz)  e.g. 50000 , 80000 , 96000 , 100000 , 144000 , 192000
+    spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
     // spk_cfg.task_pinned_core = 0;
     // spk_cfg.task_priority = configMAX_PRIORITIES - 2;
     M5.Speaker.config(spk_cfg);

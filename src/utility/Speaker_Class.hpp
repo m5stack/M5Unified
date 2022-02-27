@@ -25,7 +25,7 @@ namespace m5
     int pin_ws = I2S_PIN_NO_CHANGE;
 
     /// output sampling rate (Hz)
-    uint32_t sample_rate = 48000;
+    uint32_t sample_rate = 64000;
 
     /// use stereo output
     bool stereo = false;
@@ -179,7 +179,8 @@ namespace m5
 
     static constexpr const size_t sound_channel_max = 8;
 
-    static const uint8_t _default_tone_wav[2];
+    static const uint8_t _default_tone_wav[12];
+    static const uint8_t _sound_off_wav[1];
 
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
@@ -208,9 +209,12 @@ namespace m5
     {
       wav_info_t wavinfo[2]; // current/next flip info.
       size_t index = 0;
-      size_t diff = 0;
+      int diff = 0;
       volatile uint8_t volume = 64; // channel volume (not master volume)
       volatile bool flip = false;
+
+      bool liner_flip = false;
+      float liner_buf[2][2] = { { 0, 0 }, { 0, 0 } };
     };
 
     channel_info_t _ch_info[sound_channel_max];
