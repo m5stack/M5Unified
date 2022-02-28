@@ -499,7 +499,7 @@ label_start:
     return true;
   }
 
-  bool Speaker_Class::_play_raw(const void* wav_data, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
+  bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
     if (!begin() || (_task_handle == nullptr)) { return true; }
     if (array_len == 0) { return true; }
@@ -511,10 +511,10 @@ label_start:
       {
         if (0 == ((bits >> ch) & 1)) { break; }
       }
-      if (ch >= sound_channel_max) { return true; }
+      if (ch >= sound_channel_max) { return false; }
     }
     wav_info_t info;
-    info.data = wav_data;
+    info.data = data;
     info.length = array_len;
     info.repeat = repeat_count ? repeat_count : ~0u;
     info.sample_rate = sample_rate;
@@ -526,4 +526,67 @@ label_start:
 
     return _set_next_wav(ch, info);
   }
+
+  bool Speaker_Class::playWav(const uint8_t* wav_data, size_t data_len, uint32_t repeat, int channel, bool stop_current_sound)
+  {
+    struct __attribute__((packed)) wav_header_t
+    {
+      char RIFF[4];
+      uint32_t chunk_size;
+      char WAVEfmt[8];
+      uint32_t fmt_chunk_size;
+      uint16_t audiofmt;
+      uint16_t channel;
+      uint32_t sample_rate;
+      uint32_t byte_per_sec;
+      uint16_t block_size;
+      uint16_t bit_per_sample;
+      char data[4];
+      uint32_t wav_size;
+    };
+
+    auto wav = (wav_header_t*)wav_data;
+/*
+    ESP_LOGD("wav", "RIFF           : %.4s" , wav->RIFF          );
+    ESP_LOGD("wav", "chunk_size     : %d"   , wav->chunk_size    );
+    ESP_LOGD("wav", "WAVEfmt        : %.8s" , wav->WAVEfmt       );
+    ESP_LOGD("wav", "fmt_chunk_size : %d"   , wav->fmt_chunk_size);
+    ESP_LOGD("wav", "audiofmt       : %d"   , wav->audiofmt      );
+    ESP_LOGD("wav", "channel        : %d"   , wav->channel       );
+    ESP_LOGD("wav", "sample_rate    : %d"   , wav->sample_rate   );
+    ESP_LOGD("wav", "byte_per_sec   : %d"   , wav->byte_per_sec  );
+    ESP_LOGD("wav", "block_size     : %d"   , wav->block_size    );
+    ESP_LOGD("wav", "bit_per_sample : %d"   , wav->bit_per_sample);
+    ESP_LOGD("wav", "data           : %.4s" , wav->data          );
+    ESP_LOGD("wav", "wav_size       : %d"   , wav->wav_size      );
+// */
+    if (memcmp(wav->RIFF, "RIFF", 4)
+     || memcmp(wav->WAVEfmt, "WAVEfmt ", 8)
+     || memcmp(wav->data, "data", 4)
+     || wav->audiofmt != 1
+     || wav->bit_per_sample < 8
+     || wav->bit_per_sample > 16
+     || wav->channel == 0
+     || wav->channel > 2
+     )
+    {
+      return false;
+    }
+
+    data_len = data_len > sizeof(wav_header_t) ? data_len - sizeof(wav_header_t) : 0;
+    if (data_len > wav->wav_size) { data_len = wav->wav_size; }
+    bool flg_16bit = (wav->bit_per_sample >> 4);
+    return _play_raw( &wav_data[sizeof(wav_header_t)]
+                    , data_len >> flg_16bit
+                    , flg_16bit
+                    , flg_16bit
+                    , wav->sample_rate
+                    , wav->channel > 1
+                    , repeat
+                    , channel
+                    , stop_current_sound
+                    , false
+                    );
+  }
+
 }
