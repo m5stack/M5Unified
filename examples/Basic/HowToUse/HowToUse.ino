@@ -209,11 +209,14 @@ void loop(void)
   M5Paper:                     BtnA,BtnB,BtnC
   M5Station:                   BtnA,BtnB,BtnC,BtnPWR
   M5Tough:                                    BtnPWR
-  M5ATOM:                      BtnA
+  M5Atom M5AtomU:              BtnA
+  M5Stamp Pico/C3/C3U:         BtnA
 */
 
-  static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE };
-  static constexpr const char* const names[] = { "none", "wasHold", "wasClicked", "wasPressed", "wasReleased" };
+  static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE, TFT_GREEN };
+  static constexpr const char* const names[] = { "none", "wasHold", "wasClicked", "wasPressed", "wasReleased", "wasDeciedCount" };
+
+  M5.Display.startWrite();
 
   /// BtnPWR: "wasClicked"/"wasHold"  can be use.
   /// BtnPWR of CoreInk: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
@@ -221,12 +224,18 @@ void loop(void)
             : M5.BtnPWR.wasClicked() ? 2
             : M5.BtnPWR.wasPressed() ? 3
             : M5.BtnPWR.wasReleased() ? 4
+            : M5.BtnPWR.wasDeciedClickCount() ? 5
             : 0;
   if (state)
   {
     M5.Speaker.tone(391.995, 100);
-    ESP_LOGI("loop", "BtnPWR:%s", names[state]);
-    M5.Display.fillRect(0, h*2, h, h-1, colors[state]);
+    ESP_LOGI("loop", "BtnPWR:%s  count:%d", names[state], M5.BtnPWR.getClickCount());
+    if (!M5.Display.displayBusy())
+    {
+      M5.Display.fillRect(0, h*2, h, h-1, colors[state]);
+      M5.Display.setCursor(0, h*2);
+      M5.Display.printf("%d", M5.BtnPWR.getClickCount());
+    }
   }
 
   /// BtnA,BtnB,BtnC,BtnEXT: "isPressed"/"wasPressed"/"isReleased"/"wasReleased"/"wasClicked"/"wasHold"/"isHolding"  can be use.
@@ -234,105 +243,133 @@ void loop(void)
         : M5.BtnA.wasClicked() ? 2
         : M5.BtnA.wasPressed() ? 3
         : M5.BtnA.wasReleased() ? 4
+        : M5.BtnA.wasDeciedClickCount() ? 5
         : 0;
   if (state)
   {
     M5.Speaker.tone(261.626, 100);
-    ESP_LOGI("loop", "BtnA:%s", names[state]);
-    M5.Display.fillRect(0, h*3, h, h-1, colors[state]);
+    ESP_LOGI("loop", "BtnA:%s  count:%d", names[state], M5.BtnA.getClickCount());
+    if (!M5.Display.displayBusy())
+    {
+      M5.Display.fillRect(0, h*3, h, h-1, colors[state]);
+      M5.Display.setCursor(0, h*3);
+      M5.Display.printf("%d", M5.BtnA.getClickCount());
+    }
   }
 
   state = M5.BtnB.wasHold() ? 1
         : M5.BtnB.wasClicked() ? 2
         : M5.BtnB.wasPressed() ? 3
         : M5.BtnB.wasReleased() ? 4
+        : M5.BtnB.wasDeciedClickCount() ? 5
         : 0;
   if (state)
   {
     M5.Speaker.tone(293.665, 100);
-    ESP_LOGI("loop", "BtnB:%s", names[state]);
-    M5.Display.fillRect(0, h*4, h, h-1, colors[state]);
+    ESP_LOGI("loop", "BtnB:%s  count:%d", names[state], M5.BtnB.getClickCount());
+    if (!M5.Display.displayBusy())
+    {
+      M5.Display.fillRect(0, h*4, h, h-1, colors[state]);
+      M5.Display.setCursor(0, h*4);
+      M5.Display.printf("%d", M5.BtnB.getClickCount());
+    }
   }
 
   state = M5.BtnC.wasHold() ? 1
         : M5.BtnC.wasClicked() ? 2
         : M5.BtnC.wasPressed() ? 3
         : M5.BtnC.wasReleased() ? 4
+        : M5.BtnC.wasDeciedClickCount() ? 5
         : 0;
   if (state)
   {
     M5.Speaker.tone(329.628, 100);
     ESP_LOGI("loop", "BtnC:%s", names[state]);
-    M5.Display.fillRect(0, h*5, h, h-1, colors[state]);
+    if (!M5.Display.displayBusy())
+    {
+      M5.Display.fillRect(0, h*5, h, h-1, colors[state]);
+      M5.Display.setCursor(0, h*5);
+      M5.Display.printf("%d", M5.BtnC.getClickCount());
+    }
   }
 
   state = M5.BtnEXT.wasHold() ? 1
         : M5.BtnEXT.wasClicked() ? 2
         : M5.BtnEXT.wasPressed() ? 3
         : M5.BtnEXT.wasReleased() ? 4
+        : M5.BtnEXT.wasDeciedClickCount() ? 5
         : 0;
   if (state)
   {
     M5.Speaker.tone(349.228, 100);
     ESP_LOGI("loop", "BtnEXT:%s", names[state]);
-    M5.Display.fillRect(0, h*6, h, h-1, colors[state]);
+    if (!M5.Display.displayBusy())
+    {
+      M5.Display.fillRect(0, h*6, h, h-1, colors[state]);
+      M5.Display.setCursor(0, h*6);
+      M5.Display.printf("%d", M5.BtnEXT.getClickCount());
+    }
   }
 
-  static uint32_t prev_sec;
-  uint32_t sec = m5gfx::millis() / 1000;
-  if (prev_sec != sec)
+  M5.Display.endWrite();
+
+  if (!M5.Display.displayBusy())
   {
-    prev_sec = sec;
+    static uint32_t prev_sec;
+    uint32_t sec = m5gfx::millis() / 1000;
+    if (prev_sec != sec)
+    {
+      prev_sec = sec;
 
 //------------------- Battery level
-    static int prev_battery = INT_MAX;
-    int battery = M5.Power.getBatteryLevel();
-    if (prev_battery != battery)
-    {
-      prev_battery = battery;
-      M5.Display.startWrite();
-      M5.Display.setCursor(0, M5.Display.fontHeight() * 2);
-      M5.Display.print("Bat:");
-      if (battery >= 0)
+      static int prev_battery = INT_MAX;
+      int battery = M5.Power.getBatteryLevel();
+      if (prev_battery != battery)
       {
-        M5.Display.printf("%03d", battery);
-      }
-      else
-      {
-        M5.Display.print("none");
-      }
-      M5.Display.endWrite();
-    }
-//------------------- RTC test
-    if (M5.Rtc.isEnabled())
-    {
-      static constexpr const char* const wd[] = {"Sun","Mon","Tue","Wed","Thr","Fri","Sat","ERR"};
-      char buf[32];
-//*
-      /// Get the date and time from the RTC and display it.
-      m5::rtc_datetime_t dt;
-      if (M5.Rtc.getDateTime(&dt))
-      {
+        prev_battery = battery;
         M5.Display.startWrite();
-        snprintf( buf, 30, "%04d/%02d/%02d(%s)"
-                , dt.date.year
-                , dt.date.month
-                , dt.date.date
-                , wd[dt.date.weekDay & 7]
-                );
-        M5.Display.drawString(buf, M5.Display.width() / 2, 0);
-        snprintf( buf, 30, "%02d:%02d:%02d"
-                , dt.time.hours
-                , dt.time.minutes
-                , dt.time.seconds
-                );
-        M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
+        M5.Display.setCursor(0, M5.Display.fontHeight() * 2);
+        M5.Display.print("Bat:");
+        if (battery >= 0)
+        {
+          M5.Display.printf("%03d", battery);
+        }
+        else
+        {
+          M5.Display.print("none");
+        }
         M5.Display.endWrite();
       }
-      else
+//------------------- RTC test
+      if (M5.Rtc.isEnabled())
       {
-        M5.Display.drawString("RTC error", M5.Display.width() / 2, M5.Display.fontHeight()>>1);
-      }
+        static constexpr const char* const wd[] = {"Sun","Mon","Tue","Wed","Thr","Fri","Sat","ERR"};
+        char buf[32];
+//*
+        /// Get the date and time from the RTC and display it.
+        m5::rtc_datetime_t dt;
+        if (M5.Rtc.getDateTime(&dt))
+        {
+          M5.Display.startWrite();
+          snprintf( buf, 30, "%04d/%02d/%02d(%s)"
+                  , dt.date.year
+                  , dt.date.month
+                  , dt.date.date
+                  , wd[dt.date.weekDay & 7]
+                  );
+          M5.Display.drawString(buf, M5.Display.width() / 2, 0);
+          snprintf( buf, 30, "%02d:%02d:%02d"
+                  , dt.time.hours
+                  , dt.time.minutes
+                  , dt.time.seconds
+                  );
+          M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
+          M5.Display.endWrite();
+        }
+        else
+        {
+          M5.Display.drawString("RTC error", M5.Display.width() / 2, M5.Display.fontHeight()>>1);
+        }
 /*/
 /// In the example above, the date and time are obtained through I2C communication with the RTC.
 /// However, since M5Unified synchronizes the ESP32's internal clock at startup, 
@@ -357,6 +394,7 @@ void loop(void)
       M5.Display.drawString(buf, M5.Display.width() / 2, M5.Display.fontHeight());
       M5.Display.endWrite();
 //*/
+      }
     }
   }
 
