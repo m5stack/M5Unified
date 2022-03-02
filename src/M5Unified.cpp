@@ -93,50 +93,6 @@ namespace m5
     return true;
   }
 
-/*
-  bool M5Unified::_sound_set_mode_cb(void* args, m5::sound_mode_t mode)
-  {
-    auto self = (M5Unified*)args;
-
-    switch (self->getBoard())
-    {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StackCore2:
-    case board_t::board_M5Tough:
-      self->Power.Axp192.setGPIO2(mode == sound_mode_t::sound_output);
-      break;
-
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-      self->Power.Axp192.setLDO0(mode == sound_mode_t::sound_input ? 2800 : 0);
-      NON_BREAK;
-
-    case board_t::board_M5StackCoreInk:
-      /// for SPK HAT
-      if ((self->_cfg.external_spk_detail.enabled) && !self->_cfg.external_spk_detail.omit_spk_hat)
-      {
-        gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
-        if (mode == sound_mode_t::sound_output)
-        {
-          m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
-          m5gfx::gpio_hi(pin_en);
-        }
-        else
-        { m5gfx::gpio_lo(pin_en); }
-      }
-      NON_BREAK;
-
-      break;
-
-#endif
-    default:
-      break;
-    }
-    return true;
-  }
-*/
-
-
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr gpio_num_t TFCARD_CS_PIN          = GPIO_NUM_4;
   static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
@@ -276,11 +232,13 @@ namespace m5
 
     if (board == board_t::board_unknown)
     {
+      uint32_t tmp = *((volatile uint32_t *)(IO_MUX_GPIO20_REG));
       m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
       board = m5gfx::gpio_in(GPIO_NUM_20)
             ? board_t::board_M5StampC3
             : board_t::board_M5StampC3U
             ;
+      *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
     }
 
     {
