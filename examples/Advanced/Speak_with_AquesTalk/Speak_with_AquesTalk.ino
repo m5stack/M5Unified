@@ -68,7 +68,7 @@ void setup(void)
 
   M5.begin(cfg);
 
-  xTaskCreate(talk_task, "talk_task", 2048, nullptr, 1, &task_handle);
+  xTaskCreateUniversal(talk_task, "talk_task", 2048, nullptr, 1, &task_handle, APP_CPU_NUM);
 /*
   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
   auto spk_cfg = M5.Speaker.config();
@@ -114,7 +114,7 @@ extern "C" {
 
   void app_main()
   {
-    xTaskCreatePinnedToCore(loopTask, "loopTask", 8192, NULL, 1, NULL, 1);
+    xTaskCreateUniversal(loopTask, "loopTask", 8192, NULL, 1, NULL, APP_CPU_NUM);
   }
 }
 #endif
