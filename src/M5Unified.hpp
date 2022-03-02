@@ -194,9 +194,9 @@ namespace m5
 #endif
 #endif
 
-#if defined ( __M5GFX_M5UNITLCD__ )
+#if defined ( __M5GFX_M5UNITOLED__ )
       {
-        auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
+        auto dsp = new M5UnitOLED(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
         _ex_display.reset(dsp);
         if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
         {
@@ -205,9 +205,10 @@ namespace m5
       }
 #endif
 
-#if defined ( __M5GFX_M5UNITOLED__ )
-      {
-        auto dsp = new M5UnitOLED(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
+#if defined ( __M5GFX_M5UNITLCD__ )
+      { // The UnitLCD has a delay to wait for the time to start operation after power-on.
+        m5gfx::delay(100);
+        auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
         _ex_display.reset(dsp);
         if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
         {
