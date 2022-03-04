@@ -50,14 +50,14 @@ void setup(void)
   Serial.println("\r\n WiFi Connected.");
 
   time_t t;
-  while ((t = time(nullptr)) < 65536)
+  while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET)
   {
     Serial.print('.');
-    delay(500);
+    delay(1000);
   }
   Serial.println("\r\n NTP Connected.");
 
-  t++; // Advance one second.
+  t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  /// Synchronization in seconds
   M5.Rtc.setDateTime( localtime( &t ) );
 
