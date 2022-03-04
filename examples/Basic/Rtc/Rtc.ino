@@ -22,8 +22,9 @@ void setup(void)
   M5.begin(cfg);
 
   if (!M5.Rtc.isEnabled())
-  { 
+  {
     Serial.println("RTC not found.");
+    M5.Display.println("RTC not found.");
     for (;;) { vTaskDelay(500); }
   }
 
@@ -40,6 +41,7 @@ void setup(void)
 
 /* /// setup RTC ( NTP auto setting )
 
+  M5.Display.print("WiFi:");
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
   configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
   while (WiFi.status() != WL_CONNECTED)
@@ -48,16 +50,16 @@ void setup(void)
     delay(500);
   }
   Serial.println("\r\n WiFi Connected.");
+  M5.Display.print("Connected.");
 
-  time_t t;
-  while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET)
+  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
   {
     Serial.print('.');
     delay(1000);
   }
   Serial.println("\r\n NTP Connected.");
 
-  t = time(nullptr)+1; // Advance one second.
+  time_t t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  /// Synchronization in seconds
   M5.Rtc.setDateTime( localtime( &t ) );
 
@@ -72,7 +74,7 @@ void loop(void)
   delay(500);
 
   auto dt = M5.Rtc.getDateTime();
-  Serial.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d \r\n"
+  Serial.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n"
                , dt.date.year
                , dt.date.month
                , dt.date.date
@@ -81,7 +83,8 @@ void loop(void)
                , dt.time.minutes
                , dt.time.seconds
                );
-  M5.Display.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d \r\n"
+  M5.Display.setCursor(0,0);
+  M5.Display.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d"
                , dt.date.year
                , dt.date.month
                , dt.date.date
@@ -92,21 +95,19 @@ void loop(void)
                );
 
 
-/*
  /// ESP32 internal timer
   auto t = time(nullptr);
   auto tm = localtime(&t);
 
-  Serial.printf("ESP32:%04d/%02d/%02d(%s) %02d:%02d:%02d\r\n",
+  Serial.printf("ESP32:%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n",
         tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
         wd[tm->tm_wday],
         tm->tm_hour, tm->tm_min, tm->tm_sec);
-  M5.Display.printf("ESP32:%04d/%02d/%02d(%s) %02d:%02d:%02d\r\n",
+  M5.Display.setCursor(0,20);
+  M5.Display.printf("ESP32:%04d/%02d/%02d (%s)  %02d:%02d:%02d",
         tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
         wd[tm->tm_wday],
         tm->tm_hour, tm->tm_min, tm->tm_sec);
-
-//*/
 
 }
 //*/
