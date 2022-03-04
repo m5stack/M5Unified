@@ -98,6 +98,7 @@ namespace m5
 
     void begin(m5gfx::LGFX_Device* gfx) { _gfx = gfx; }
     void update(std::uint32_t msec);
+    void end(void) { _gfx = nullptr; }
 
   protected:
     std::int32_t _flickThresh = 8;
