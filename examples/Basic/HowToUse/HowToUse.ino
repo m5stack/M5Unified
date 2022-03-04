@@ -71,13 +71,13 @@ void setup(void)
     M5.Speaker.tone(2000, 100);
 
     /// wait done
-    while (M5.Speaker.isPlaying()) { taskYIELD(); }
+    while (M5.Speaker.isPlaying()) { vTaskDelay(1); }
 
     /// play beep sound 1000Hz 100msec (background task)
     M5.Speaker.tone(1000, 100);
 
     /// wait play beep sound 2000Hz 100msec (background task)
-    while (M5.Speaker.isPlaying()) { taskYIELD(); }
+    while (M5.Speaker.isPlaying()) { vTaskDelay(1); }
 
 
     M5.Speaker.playRAW(wav_8bit_44100, sizeof(wav_8bit_44100), 44100, false);

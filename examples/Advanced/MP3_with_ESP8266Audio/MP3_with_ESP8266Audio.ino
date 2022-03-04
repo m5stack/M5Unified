@@ -54,7 +54,7 @@ class AudioOutputM5Speaker : public AudioOutput
       if (_tri_buffer_index)
       {
         /// If there is no room in the play queue, playRAW will return false, so repeat until true is returned.
-        while (false == _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _virtual_ch)) { taskYIELD(); }
+        while (false == _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _virtual_ch)) { vTaskDelay(1); }
         _tri_index = _tri_index < 2 ? _tri_index + 1 : 0;
         _tri_buffer_index = 0;
       }
