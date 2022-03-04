@@ -270,7 +270,7 @@ namespace m5
   std::uint8_t AXP192_Class::getPekPress(void)
   {
     std::uint8_t val = readRegister8(0x46) & 0x03;
-    writeRegister8(0x46, 0x03);
+    if (val) { writeRegister8(0x46, val); }
     return val;
   }
 
