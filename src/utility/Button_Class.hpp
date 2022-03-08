@@ -53,6 +53,9 @@ namespace m5
     void setState(std::uint32_t msec, button_state_t state);
     std::uint32_t lastChange(void) const { return _lastChange; }
 
+    std::uint32_t getDebounceThresh(void) const { return _msecDebounce; }
+    std::uint32_t getHoldThresh(void) const { return _msecHold; }
+
   private:
     std::uint32_t _lastMsec = 0;
     std::uint32_t _lastChange = 0;

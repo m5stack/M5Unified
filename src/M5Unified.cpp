@@ -268,6 +268,10 @@ namespace m5
     {
       M5.Power.setLed(_cfg.led_brightness);
     }
+    if (Power.getType() == Power_Class::pmic_t::pmic_axp192)
+    { /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
+      BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
+    }
 
     if (_cfg.clear_display)
     {

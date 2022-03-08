@@ -12,18 +12,13 @@ namespace m5
     switch (state)
     {
     case state_nochange:
-      if (flg_timeout && !_press)
+      if (flg_timeout && !_press && _clickCount)
       {
-        switch (_changeState)
+        if (_oldPress == 0 && _changeState == state_nochange)
         {
-        case state_nochange:
-          if (_clickCount) { state = state_decide_click_count; }
-          break;
-
-        default:
-          _clickCount = 0;
-          break;
+          state = state_decide_click_count;
         }
+        else { _clickCount = 0; }
       }
       break;
 
@@ -58,13 +53,14 @@ namespace m5
       {
         _lastChange = msec;
       }
+
       if (press)
       {
         if (!_oldPress)
         {
           _press = 1;
         } else 
-        if (1 == _oldPress && (msec - _lastChange >= _msecHold))
+        if (_oldPress == 1 && (msec - _lastChange >= _msecHold))
         {
           _press = 2;
           state = button_state_t::state_hold;

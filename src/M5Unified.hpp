@@ -216,6 +216,8 @@ namespace m5
         }
       }
 #endif
+      _ex_display.reset(nullptr);
+      ((M5GFX_*)&Display)->init_with_panel(nullptr);
       return Display.getBoard();
     }
 
