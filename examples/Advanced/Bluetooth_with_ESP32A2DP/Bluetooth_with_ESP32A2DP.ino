@@ -23,7 +23,7 @@ public:
   }
 
   // get rawdata buffer for FFT.
-  const int16_t* getBuffer(void) const { return _flip_buf[_flip_index]; }
+  const int16_t* getBuffer(void) const { return _tri_buf[_tri_index]; }
 
   const char* getMetaData(size_t id) { _meta_bits &= ~(1<<id); return (id < metatext_num) ? _meta_text[id] : nullptr; }
 
@@ -31,9 +31,9 @@ public:
 
   void clear(void)
   {
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 3; ++i)
     {
-      if (_flip_buf[i]) { memset(_flip_buf[i], 0, _flip_buf_size[i]); }
+      if (_tri_buf[i]) { memset(_tri_buf[i], 0, _tri_buf_size[i]); }
     }
   }
 
@@ -41,9 +41,9 @@ public:
   static constexpr size_t metatext_num = 3;
 
 protected:
-  int16_t* _flip_buf[2] = { nullptr, nullptr };
-  size_t _flip_buf_size[2] = { 0, 0 };
-  bool _flip_index = 0;
+  int16_t* _tri_buf[3] = { nullptr, nullptr, nullptr };
+  size_t _tri_buf_size[3] = { 0, 0, 0 };
+  size_t _tri_index = 0;
   char _meta_text[metatext_num][metatext_size];
   uint8_t _meta_bits = 0;
   size_t _sample_rate = 48000;
@@ -83,6 +83,7 @@ protected:
         || ESP_A2D_AUDIO_STATE_STOPPED        == a2d->audio_stat.state )
       { // 停止
         clearMetaData();
+        clear();
       }
       break;
 
@@ -134,29 +135,32 @@ protected:
     BluetoothA2DPSink::av_hdl_avrc_evt(event, p_param);
   }
 
-  void audio_data_callback(const uint8_t *data, uint32_t length) override
+  int16_t* get_next_buf(const uint8_t* src_data, uint32_t len)
   {
-    /// When the queue is empty or full, delay processing is performed.
-    if (M5.Speaker.isPlaying(m5spk_virtual_channel) != 1)
+    size_t tri = _tri_index < 2 ? _tri_index + 1 : 0;
+    if (_tri_buf_size[tri] < len)
     {
-      do { vTaskDelay(1); } while (M5.Speaker.isPlaying(m5spk_virtual_channel) > 1);
-    }
-    bool flip = !_flip_index;
-    if (_flip_buf_size[flip] < length)
-    {
-      _flip_buf_size[flip] = length;
-      if (_flip_buf[flip] != nullptr) { heap_caps_free(_flip_buf[flip]); }
-      auto tmp = (int16_t*)heap_caps_malloc(length, MALLOC_CAP_8BIT);
-      _flip_buf[flip] = tmp;
+      _tri_buf_size[tri] = len;
+      if (_tri_buf[tri] != nullptr) { heap_caps_free(_tri_buf[tri]); }
+      auto tmp = (int16_t*)heap_caps_malloc(len, MALLOC_CAP_8BIT);
+      _tri_buf[tri] = tmp;
       if (tmp == nullptr)
       {
-        _flip_buf_size[flip] = 0;
-        return;        
+        _tri_buf_size[tri] = 0;
+        return nullptr;
       }
     }
-    memcpy(_flip_buf[flip], data, length);
-    _flip_index = flip;
-    M5.Speaker.playRAW(_flip_buf[flip], length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
+    memcpy(_tri_buf[tri], src_data, len);
+    _tri_index = tri;
+    return _tri_buf[tri];
+  }
+
+  void audio_data_callback(const uint8_t *data, uint32_t length) override
+  {
+    // Reduce memory requirements by dividing the received data into the first and second halves.
+    length >>= 1;
+    M5.Speaker.playRAW(get_next_buf( data        , length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
+    M5.Speaker.playRAW(get_next_buf(&data[length], length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
   }
 };
 
@@ -265,7 +269,7 @@ uint32_t bgcolor(LGFX_Device* gfx, int y)
   auto h = gfx->height();
   auto dh = h - header_height;
   int v = ((h - y)<<5) / dh;
-  if (dh > 40)
+  if (dh > 32)
   {
     int v2 = ((h - y + 1)<<5) / dh;
     if ((v >> 2) != (v2 >> 2))
@@ -454,8 +458,10 @@ void setup(void)
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
-    // spk_cfg.task_pinned_core = 0;
+    // spk_cfg.task_pinned_core = PRO_CPU_NUM;
     // spk_cfg.task_priority = configMAX_PRIORITIES - 2;
+    // spk_cfg.dma_buf_count = 16;
+    // spk_cfg.dma_buf_len = 256;
     M5.Speaker.config(spk_cfg);
   }
 
@@ -482,16 +488,35 @@ void loop(void)
   }
 
   M5.update();
-  if (M5.BtnA.wasClicked())
+  if (M5.BtnA.wasPressed())
   {
-    M5.Speaker.tone(1000, 100);
-    a2dp_sink.next();
+    M5.Speaker.tone(440, 50);
+  }
+  if (M5.BtnA.wasDeciedClickCount())
+  {
+    switch (M5.BtnA.getClickCount())
+    {
+    case 1:
+      M5.Speaker.tone(1000, 100);
+      a2dp_sink.next();
+      break;
+
+    case 2:
+      M5.Speaker.tone(800, 100);
+      a2dp_sink.previous();
+      break;
+    }
   }
   if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed())
   {
     size_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
-    if (M5.BtnB.isPressed()) { --v; } else { ++v; }
-    if (v <= 255 || M5.BtnA.isHolding())
+    int add = (M5.BtnB.isPressed()) ? -1 : 1;
+    if (M5.BtnA.isHolding())
+    {
+      add = M5.BtnA.getClickCount() ? -1 : 1;
+    }
+    v += add;
+    if (v <= 255)
     {
       M5.Speaker.setChannelVolume(m5spk_virtual_channel, v);
     }

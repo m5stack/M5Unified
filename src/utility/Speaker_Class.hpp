@@ -186,8 +186,7 @@ namespace m5
 
     static constexpr const size_t sound_channel_max = 8;
 
-    static const uint8_t _default_tone_wav[12];
-    static const uint8_t _sound_off_wav[1];
+    static const uint8_t _default_tone_wav[14];
 
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
