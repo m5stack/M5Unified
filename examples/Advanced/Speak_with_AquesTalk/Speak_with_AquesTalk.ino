@@ -26,7 +26,7 @@ static void talk_task(void*)
     {
       uint16_t len;
       if (CAqTkPicoF_SyntheFrame(wav[tri_index], &len)) { is_talking = false; break; }
-      while (!M5.Speaker.playRAW(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false)) { taskYIELD(); }
+      M5.Speaker.playRAW(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false);
       tri_index = tri_index < 2 ? tri_index + 1 : 0;
     }
   }
@@ -68,7 +68,7 @@ void setup(void)
 
   M5.begin(cfg);
 
-  xTaskCreateUniversal(talk_task, "talk_task", 2048, nullptr, 1, &task_handle, APP_CPU_NUM);
+  xTaskCreateUniversal(talk_task, "talk_task", 4096, nullptr, 1, &task_handle, APP_CPU_NUM);
 /*
   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
   auto spk_cfg = M5.Speaker.config();

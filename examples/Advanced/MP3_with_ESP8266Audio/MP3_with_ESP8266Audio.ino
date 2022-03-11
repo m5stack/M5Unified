@@ -37,12 +37,12 @@ class AudioOutputM5Speaker : public AudioOutput
     virtual bool begin(void) override { return true; }
     virtual bool ConsumeSample(int16_t sample[2]) override
     {
-      _tri_buffer[_tri_index][_tri_buffer_index  ] = sample[0];
-      _tri_buffer[_tri_index][_tri_buffer_index+1] = sample[1];
-      _tri_buffer_index += 2;
-
-      if (_tri_buffer_index < flip_buf_size)
+      if (_tri_buffer_index < tri_buf_size)
       {
+        _tri_buffer[_tri_index][_tri_buffer_index  ] = sample[0];
+        _tri_buffer[_tri_index][_tri_buffer_index+1] = sample[1];
+        _tri_buffer_index += 2;
+
         return true;
       }
 
@@ -54,7 +54,7 @@ class AudioOutputM5Speaker : public AudioOutput
       if (_tri_buffer_index)
       {
         /// If there is no room in the play queue, playRAW will return false, so repeat until true is returned.
-        while (false == _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _virtual_ch)) { vTaskDelay(1); }
+        _m5sound->playRAW(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _virtual_ch);
         _tri_index = _tri_index < 2 ? _tri_index + 1 : 0;
         _tri_buffer_index = 0;
       }
@@ -71,8 +71,8 @@ class AudioOutputM5Speaker : public AudioOutput
   protected:
     m5::Speaker_Class* _m5sound;
     uint8_t _virtual_ch;
-    static constexpr size_t flip_buf_size = 1024;
-    int16_t _tri_buffer[3][flip_buf_size];
+    static constexpr size_t tri_buf_size = 1024;
+    int16_t _tri_buffer[3][tri_buf_size];
     size_t _tri_buffer_index = 0;
     size_t _tri_index = 0;
 };

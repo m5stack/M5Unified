@@ -186,7 +186,7 @@ namespace m5
 
     static constexpr const size_t sound_channel_max = 8;
 
-    static const uint8_t _default_tone_wav[14];
+    static const uint8_t _default_tone_wav[16];
 
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
@@ -225,7 +225,7 @@ namespace m5
 
     channel_info_t _ch_info[sound_channel_max];
 
-    static void output_task(void* args);
+    static void spk_task(void* args);
 
     esp_err_t _setup_i2s(void);
     bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);

@@ -148,7 +148,7 @@ namespace m5
     return err;
   }
 
-  void Mic_Class::input_task(void* args)
+  void Mic_Class::mic_task(void* args)
   {
     auto self = (Mic_Class*)args;
 
@@ -168,19 +168,29 @@ namespace m5
 
     while (self->_task_running)
     {
-      self->_rec_info[0] = self->_rec_info[1];
-      self->_rec_info[1].length = 0;
-      size_t dst_remain = self->_rec_info[0].length;
-      if (!dst_remain)
+      bool rec_flip = self->_rec_flip;
+      recording_info_t* current_rec = &(self->_rec_info[!rec_flip]);
+      recording_info_t* next_rec    = &(self->_rec_info[ rec_flip]);
+
+      size_t dst_remain = current_rec->length;
+      if (dst_remain == 0)
       {
-        self->_is_recording = false;
-        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-        i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_RATE_MS);
-        src_idx = 0;
-        src_len = 0;
-        value = 0;
-        continue;
+        rec_flip = !rec_flip;
+        self->_rec_flip = rec_flip;
+        xSemaphoreGive(self->_task_semaphore);
+        std::swap(current_rec, next_rec);
+        dst_remain = current_rec->length;
+        if (dst_remain == 0)
+        {
+          self->_is_recording = false;
+          ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+          src_idx = ~0u;
+          src_len = 0;
+          value = 0;
+          continue;
+        }
       }
+      self->_is_recording = true;
 
       for (;;)
       {
@@ -207,7 +217,7 @@ namespace m5
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
-        if (os_remain) continue;
+        if (os_remain) { continue; }
         os_remain = oversampling;
 
         int32_t noise_filter = self->_cfg.noise_filter_level;
@@ -222,23 +232,27 @@ namespace m5
         if (     value < INT16_MIN) { value = INT16_MIN; }
         else if (value > INT16_MAX) { value = INT16_MAX; }
 
-        auto &rec_info = self->_rec_info[0];
-        if (rec_info.is_16bit)
+        if (current_rec->is_16bit)
         {
-          auto dst = (int16_t*)(rec_info.data);
+          auto dst = (int16_t*)(current_rec->data);
           *dst++ = value;
-          rec_info.data = dst;
+          current_rec->data = dst;
         }
         else
         {
-          auto dst = (uint8_t*)(rec_info.data);
+          auto dst = (uint8_t*)(current_rec->data);
           *dst++ = (value >> 8) + 128;
-          rec_info.data = dst;
+          current_rec->data = dst;
         }
         value = 0;
-        if (--dst_remain == 0) break;
+        if (--dst_remain == 0)
+        {
+          current_rec->length = 0;
+          break;
+        }
       }
     }
+    self->_is_recording = false;
     i2s_stop(self->_cfg.i2s_port);
 
     self->_task_handle = nullptr;
@@ -253,10 +267,12 @@ namespace m5
       {
         return true;
       }
-      while (isRecording()) { vTaskDelay(1); }
+      do { vTaskDelay(1); } while (isRecording());
       end();
       _rec_sample_rate = _cfg.sample_rate;
     }
+
+    if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
 
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
@@ -264,16 +280,9 @@ namespace m5
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 1024+(_cfg.dma_buf_len * sizeof(int16_t));
+      size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(int16_t));
       _task_running = true;
-      if (_cfg.task_pinned_core >= 0 && _cfg.task_pinned_core < portNUM_PROCESSORS)
-      {
-        xTaskCreatePinnedToCore(input_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
-      }
-      else
-      {
-        xTaskCreate(input_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
-      }
+      xTaskCreateUniversal(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
     }
 
     return res;
@@ -294,7 +303,6 @@ namespace m5
 
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
   {
-    if (array_len == 0) { return true; }
     recording_info_t info;
     info.data = recdata;
     info.length = array_len;
@@ -303,11 +311,11 @@ namespace m5
     _cfg.sample_rate = sample_rate;
 
     if (!begin()) { return false; }
-    while (_rec_info[1].length) { taskYIELD(); }
-    _rec_info[1] = info;
+    if (array_len == 0) { return true; }
+    while (_rec_info[_rec_flip].length) { xSemaphoreTake(_task_semaphore, 1); }
+    _rec_info[_rec_flip] = info;
     if (this->_task_handle)
     {
-      _is_recording = true;
       xTaskNotifyGive(this->_task_handle);
     }
     return true;
