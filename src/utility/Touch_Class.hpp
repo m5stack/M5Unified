@@ -36,6 +36,7 @@ namespace m5
   {
   public:
     static constexpr std::size_t TOUCH_MAX_POINTS = 3;
+    static constexpr std::size_t TOUCH_MIN_UPDATE_MSEC = 4;
 
     struct point_t
     {
@@ -46,24 +47,24 @@ namespace m5
     struct touch_detail_t : public m5gfx::touch_point_t
     {
       union
-      {
+      { /// Previous point
+        point_t prev;
         struct
         {
           std::int16_t prev_x;
           std::int16_t prev_y;
         };
-        point_t prev;
       };
       union
-      {
+      { /// Flick start point
+        point_t base;
         struct
         {
           std::int16_t base_x;
           std::int16_t base_y;
         };
-        point_t base;
       };
-      
+
       std::uint32_t base_msec;
       touch_state_t state = touch_state_t::none;
 
@@ -101,6 +102,7 @@ namespace m5
     void end(void) { _gfx = nullptr; }
 
   protected:
+    std::uint32_t _last_msec = 0;
     std::int32_t _flickThresh = 8;
     std::int32_t _msecHold = 500;
     m5gfx::LGFX_Device* _gfx = nullptr;
@@ -109,6 +111,7 @@ namespace m5
     std::uint8_t _touch_count;
 
     bool update_detail(touch_detail_t* dt, std::uint32_t msec, bool pressed, m5gfx::touch_point_t* tp);
+    bool update_detail(touch_detail_t* dt, std::uint32_t msec);
   };
 }
 #endif

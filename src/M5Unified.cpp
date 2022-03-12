@@ -529,6 +529,7 @@ namespace m5
   void M5Unified::update( void )
   {
     auto ms = m5gfx::millis();
+    _updateMsec = ms;
 
     if (Touch.isEnabled())
     {
@@ -603,16 +604,20 @@ namespace m5
     BtnA.setRawState(ms, btn_bits & 1);
     BtnB.setRawState(ms, btn_bits & 2);
     BtnC.setRawState(ms, btn_bits & 4);
-    if (Power.Axp192.isEnabled())
+    if (Power.Axp192.isEnabled() && _cfg.pmic_button)
     {
-      auto tmp = Power.Axp192.getPekPress();
-      static constexpr const Button_Class::button_state_t
-        state_tbl[] = { Button_Class::button_state_t::state_nochange
-                      , Button_Class::button_state_t::state_hold
-                      , Button_Class::button_state_t::state_clicked
-                      , Button_Class::button_state_t::state_nochange
-                      };
-      BtnPWR.setState(ms, state_tbl[tmp]);
+      Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
+      bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= 4;
+      if (read_axp192 || BtnPWR.getState())
+      {
+        switch (Power.Axp192.getPekPress())
+        {
+        case 0: break;
+        case 2:   state = Button_Class::button_state_t::state_clicked; break;
+        default:  state = Button_Class::button_state_t::state_hold;    break;
+        }
+        BtnPWR.setState(ms, state);
+      }
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)

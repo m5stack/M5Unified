@@ -7,10 +7,23 @@ namespace m5
 {
   void Touch_Class::update(std::uint32_t msec)
   {
-    std::size_t count = _gfx->getTouchRaw(_touch_raw, TOUCH_MAX_POINTS);
-    _touch_count = count;
+    if (msec - _last_msec <= TOUCH_MIN_UPDATE_MSEC)  /// Avoid high frequency updates
+    {
+      if (_touch_count == 0) { return; }
+      std::size_t count = 0;
+      for (std::size_t i = 0; i < TOUCH_MAX_POINTS; ++i)
+      {
+        count += update_detail(&_touch_detail[i], msec);
+      }
+      _touch_count = count;
+      return;
+    }
 
-    bool updated[TOUCH_MAX_POINTS] = { false };
+    _last_msec = msec;
+    std::size_t count = _gfx->getTouchRaw(_touch_raw, TOUCH_MAX_POINTS);
+    if (!(count || _touch_count)) { return; }
+
+    uint32_t updated_id = 0;
     if (count)
     {
       m5gfx::touch_point_t tp[TOUCH_MAX_POINTS];
@@ -20,35 +33,37 @@ namespace m5
       {
         if (tp[i].id < TOUCH_MAX_POINTS)
         {
-          updated[tp[i].id] = true;
+          updated_id |= 1 << tp[i].id;
           update_detail(&_touch_detail[tp[i].id], msec, true, &tp[i]);
         }
       }
     }
-    for (std::size_t i = 0; i < TOUCH_MAX_POINTS; ++i)
     {
-      if ((!updated[i])
-       && update_detail(&_touch_detail[i], msec, false, nullptr)
-       && (_touch_count < TOUCH_MAX_POINTS))
+      for (std::size_t i = 0; i < TOUCH_MAX_POINTS; ++i)
       {
-        _touch_raw[_touch_count].id = i;
-        _touch_raw[_touch_count].size = 0;
-        _touch_raw[_touch_count].x = -1;
-        _touch_raw[_touch_count].y = -1;
-        ++_touch_count;
+        if ((!(updated_id & (1 << i)))
+        && update_detail(&_touch_detail[i], msec, false, nullptr)
+        && (count < TOUCH_MAX_POINTS))
+        {
+          ++count;
+        }
       }
     }
+    _touch_count = count;
   }
 
   bool Touch_Class::update_detail(touch_detail_t* det, std::uint32_t msec, bool pressed, m5gfx::touch_point_t* tp)
   {
     touch_state_t tm = det->state;
+    if (tm == touch_state_t::none && !pressed)
+    {
+      return false;
+    }
     tm = static_cast<touch_state_t>(tm & ~touch_state_t::mask_change);
-    if (tm) {
+    if (pressed)
+    {
       det->prev_x = det->x;
       det->prev_y = det->y;
-    }
-    if (pressed) {
       det->size = tp->size;
       det->id   = tp->id;
       if (!(tm & touch_state_t::mask_moving))
@@ -61,17 +76,15 @@ namespace m5
             det->prev = det->base;
             tm = static_cast<touch_state_t>(tm | touch_state_t::flick_begin);
           }
-          else if (!(tm & touch_state_t::mask_holding))
-          { // The hold time has not elapsed.
-            if (msec - det->base_msec > _msecHold)
-            {
-              tm = touch_state_t::hold_begin;
-            }
+          else
+          if ((tm == touch) && (msec - det->base_msec > _msecHold))
+          {
+            tm = touch_state_t::hold_begin;
           }
         }
         else
         {
-          memcpy((void*)det, tp, sizeof(m5gfx::touch_point_t));
+          *(static_cast<m5gfx::touch_point_t*>(det)) = *tp;
           tm = touch_state_t::touch_begin;
           det->base_msec = msec;
           det->base_x = tp->x;
@@ -85,18 +98,36 @@ namespace m5
         det->y = tp->y;
       }
     }
-    else if (tm != touch_state_t::none)
+    else
     {
-      if (tm & touch_state_t::mask_touch)
+      tm = (tm & touch_state_t::mask_touch)
+         ? static_cast<touch_state_t>((tm | touch_state_t::mask_change) & ~touch_state_t::mask_touch)
+         : touch_state_t::none;
+    }
+    det->state = tm;
+    return true;
+  }
+
+  bool Touch_Class::update_detail(touch_detail_t* det, std::uint32_t msec)
+  {
+    touch_state_t tm = det->state;
+    if (tm == touch_state_t::none)
+    {
+      return false;
+    }
+    tm = static_cast<touch_state_t>(tm & ~touch_state_t::mask_change);
+    if (tm & touch)
+    {
+      det->prev_x = det->x;
+      det->prev_y = det->y;
+      if ((tm == touch) && (msec - det->base_msec > _msecHold))
       {
-        tm = static_cast<touch_state_t>((tm | touch_state_t::mask_change) & ~touch_state_t::mask_touch);
-      } else {
-        tm = touch_state_t::none;
+        tm = touch_state_t::hold_begin;
       }
     }
     else
     {
-      return false;
+      tm = touch_state_t::none;
     }
     det->state = tm;
     return true;
