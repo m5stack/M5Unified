@@ -476,7 +476,16 @@ label_continue_sample:
     {
       size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(float));
       _task_running = true;
-      xTaskCreateUniversal(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+#if portNUM_PROCESSORS > 1
+      if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
+      {
+        xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+      }
+      else
+#endif
+      {
+        xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
+      }
     }
 
     return res;

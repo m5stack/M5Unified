@@ -282,7 +282,16 @@ namespace m5
     {
       size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(int16_t));
       _task_running = true;
-      xTaskCreateUniversal(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+#if portNUM_PROCESSORS > 1
+      if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
+      {
+        xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+      }
+      else
+#endif
+      {
+        xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
+      }
     }
 
     return res;
