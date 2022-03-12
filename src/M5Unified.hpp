@@ -171,6 +171,7 @@ namespace m5
     Mic_Class Mic;
 
   private:
+    static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
     std::uint32_t _updateMsec = 0;
     config_t _cfg;

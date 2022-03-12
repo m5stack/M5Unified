@@ -607,7 +607,7 @@ namespace m5
     if (Power.Axp192.isEnabled() && _cfg.pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
-      bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= 4;
+      bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
       if (read_axp192 || BtnPWR.getState())
       {
         switch (Power.Axp192.getPekPress())
