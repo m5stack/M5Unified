@@ -546,17 +546,18 @@ namespace m5
         int i = Touch.getCount();
         while (--i >= 0)
         {
-          auto det = Touch.getDetail(i);
-          if ((det.state & (touch_state_t::mask_touch | touch_state_t::mask_moving)) == touch_state_t::mask_touch)
+          auto raw = Touch.getTouchPointRaw(i);
+          if (raw.y > 240)
           {
-            auto raw = Touch.getTouchPointRaw(i);
-            if (raw.y > 240)
+            auto det = Touch.getDetail(i);
+            if (det.state & touch_state_t::touch)
             {
-              int x = raw.x;
-              size_t idx = x / 110;
-              if (x - (idx * 110) < 100)
+              if (BtnA.isPressed()) { btn_bits |= 1 << 0; }
+              if (BtnB.isPressed()) { btn_bits |= 1 << 1; }
+              if (BtnC.isPressed()) { btn_bits |= 1 << 2; }
+              if (btn_bits || !(det.state & touch_state_t::mask_moving))
               {
-                btn_bits = 1 << idx;
+                btn_bits |= 1 << ((raw.x - 2) / 107);
               }
             }
           }
