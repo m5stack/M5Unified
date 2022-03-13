@@ -25,9 +25,10 @@ public:
   // get rawdata buffer for FFT.
   const int16_t* getBuffer(void) const { return _tri_buf[_export_index]; }
 
-  const char* getMetaData(size_t id) { _meta_bits &= ~(1<<id); return (id < metatext_num) ? _meta_text[id] : nullptr; }
+  const char* getMetaData(size_t id, bool clear_flg = true) { if (clear_flg) { _meta_bits &= ~(1<<id); } return (id < metatext_num) ? _meta_text[id] : nullptr; }
 
   uint8_t getMetaUpdateInfo(void) const { return _meta_bits; }
+  void clearMetaUpdateInfo(void) { _meta_bits = 0; }
 
   void clear(void)
   {
@@ -37,7 +38,7 @@ public:
     }
   }
 
-  static constexpr size_t metatext_size = 80;
+  static constexpr size_t metatext_size = 128;
   static constexpr size_t metatext_num = 3;
 
 protected:
@@ -301,7 +302,7 @@ void gfxSetup(LGFX_Device* gfx)
   gfx->setTextWrap(false);
   gfx->fillRect(0, 6, gfx->width(), 2, TFT_BLACK);
 
-  header_height = (gfx->height() > 80) ? 45 : 33;
+  header_height = (gfx->height() > 80) ? 45 : 21;
   fft_enabled = !gfx->isEPD();
   if (fft_enabled)
   {
@@ -328,24 +329,78 @@ void gfxSetup(LGFX_Device* gfx)
 void gfxLoop(LGFX_Device* gfx)
 {
   if (gfx == nullptr) { return; }
-  auto bits = a2dp_sink.getMetaUpdateInfo();
-  if (bits)
+  if (header_height > 32)
   {
-    gfx->startWrite();
-    for (int id = 0; id < a2dp_sink.metatext_num; ++id)
+    auto bits = a2dp_sink.getMetaUpdateInfo();
+    if (bits)
     {
-      if (0 == (bits & (1<<id))) { continue; }
-      size_t y = id * 12;
-      if (y+12 >= header_height) { continue; }
-      gfx->setCursor(0, 8 + y);
-      gfx->fillRect(0, 8 + y, gfx->width(), 12, gfx->getBaseColor());
-      gfx->print(a2dp_sink.getMetaData(id));
-      gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
+      gfx->startWrite();
+      for (int id = 0; id < a2dp_sink.metatext_num; ++id)
+      {
+        if (0 == (bits & (1<<id))) { continue; }
+        size_t y = id * 12;
+        if (y+12 >= header_height) { continue; }
+        gfx->setCursor(4, 8 + y);
+        gfx->fillRect(0, 8 + y, gfx->width(), 12, gfx->getBaseColor());
+        gfx->print(a2dp_sink.getMetaData(id));
+        gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
+      }
+      gfx->display();
+      gfx->endWrite();
     }
-    gfx->display();
-    gfx->endWrite();
   }
+  else
+  {
+    static int title_x;
+    static int title_id;
+    static int wait = INT16_MAX;
 
+    if (a2dp_sink.getMetaUpdateInfo())
+    {
+      gfx->fillRect(0, 8, gfx->width(), 12, TFT_BLACK);
+      a2dp_sink.clearMetaUpdateInfo();
+      title_x = 4;
+      title_id = 0;
+      wait = 0;
+    }
+
+    if (--wait < 0)
+    {
+      int tx = title_x;
+      int tid = title_id;
+      wait = 3;
+      gfx->startWrite();
+      int no_data = 0;
+      do
+      {
+        if (tx == 4) { wait = 255; }
+        gfx->setCursor(tx, 8);
+        const char* meta = a2dp_sink.getMetaData(tid, false);
+        if (meta[0] != 0)
+        {
+          gfx->print(meta);
+          gfx->print("  /  ");
+          tx = gfx->getCursorX();
+          if (++tid == a2dp_sink.metatext_num) { tid = 0; }
+          if (tx <= 4)
+          {
+            title_x = tx;
+            title_id = tid;
+          }
+        }
+        else
+        {
+          if (++no_data == a2dp_sink.metatext_num)
+          {
+            break;
+          }
+        }
+      } while (tx < gfx->width());
+      --title_x;
+      gfx->display();
+      gfx->endWrite();
+    }
+  }
   if (!gfx->displayBusy())
   { // draw volume bar
     static int px;
