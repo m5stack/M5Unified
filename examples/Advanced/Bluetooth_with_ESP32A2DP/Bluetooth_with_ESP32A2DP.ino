@@ -23,7 +23,7 @@ public:
   }
 
   // get rawdata buffer for FFT.
-  const int16_t* getBuffer(void) const { return _tri_buf[_tri_index]; }
+  const int16_t* getBuffer(void) const { return _tri_buf[_export_index]; }
 
   const char* getMetaData(size_t id) { _meta_bits &= ~(1<<id); return (id < metatext_num) ? _meta_text[id] : nullptr; }
 
@@ -44,6 +44,7 @@ protected:
   int16_t* _tri_buf[3] = { nullptr, nullptr, nullptr };
   size_t _tri_buf_size[3] = { 0, 0, 0 };
   size_t _tri_index = 0;
+  size_t _export_index = 0;
   char _meta_text[metatext_num][metatext_size];
   uint8_t _meta_bits = 0;
   size_t _sample_rate = 48000;
@@ -161,6 +162,7 @@ protected:
     length >>= 1;
     M5.Speaker.playRAW(get_next_buf( data        , length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
     M5.Speaker.playRAW(get_next_buf(&data[length], length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
+    _export_index = _tri_index;
   }
 };
 
@@ -255,12 +257,16 @@ public:
   }
 };
 
-
+static constexpr size_t WAVE_SIZE = 320;
 static BluetoothA2DPSink_M5Speaker a2dp_sink = { &M5.Speaker, m5spk_virtual_channel };
 static fft_t fft;
 static bool fft_enabled = false;
-static uint16_t prev_y[(FFT_SIZE/2)+1];
-static uint16_t peak_y[(FFT_SIZE/2)+1];
+static bool wave_enabled = false;
+static uint16_t prev_y[(FFT_SIZE / 2)+1];
+static uint16_t peak_y[(FFT_SIZE / 2)+1];
+static int16_t wave_y[WAVE_SIZE];
+static int16_t wave_h[WAVE_SIZE];
+static int16_t raw_data[WAVE_SIZE * 2];
 static int header_height = 0;
 
 
@@ -269,9 +275,9 @@ uint32_t bgcolor(LGFX_Device* gfx, int y)
   auto h = gfx->height();
   auto dh = h - header_height;
   int v = ((h - y)<<5) / dh;
-  if (dh > 32)
+  if (dh > 44)
   {
-    int v2 = ((h - y + 1)<<5) / dh;
+    int v2 = ((h - y - 1)<<5) / dh;
     if ((v >> 2) != (v2 >> 2))
     {
       return 0x666666u;
@@ -295,10 +301,12 @@ void gfxSetup(LGFX_Device* gfx)
   gfx->setTextWrap(false);
   gfx->fillRect(0, 6, gfx->width(), 2, TFT_BLACK);
 
-  header_height = 45;
+  header_height = (gfx->height() > 80) ? 45 : 33;
   fft_enabled = !gfx->isEPD();
   if (fft_enabled)
   {
+    wave_enabled = (gfx->getBoard() != m5gfx::board_M5UnitLCD);
+
     for (int y = header_height; y < gfx->height(); ++y)
     {
       gfx->drawFastHLine(0, y, gfx->width(), bgcolor(gfx, y));
@@ -309,6 +317,11 @@ void gfxSetup(LGFX_Device* gfx)
   {
     prev_y[x] = INT16_MAX;
     peak_y[x] = INT16_MAX;
+  }
+  for (int x = 0; x < WAVE_SIZE; ++x)
+  {
+    wave_y[x] = gfx->height();
+    wave_h[x] = 0;
   }
 }
 
@@ -322,8 +335,10 @@ void gfxLoop(LGFX_Device* gfx)
     for (int id = 0; id < a2dp_sink.metatext_num; ++id)
     {
       if (0 == (bits & (1<<id))) { continue; }
-      gfx->setCursor(0, 8 + id * 12);
-      gfx->fillRect(0, 8 + id * 12, gfx->width(), 12, gfx->getBaseColor());
+      size_t y = id * 12;
+      if (y+12 >= header_height) { continue; }
+      gfx->setCursor(0, 8 + y);
+      gfx->fillRect(0, 8 + y, gfx->width(), 12, gfx->getBaseColor());
       gfx->print(a2dp_sink.getMetaData(id));
       gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
     }
@@ -359,24 +374,24 @@ void gfxLoop(LGFX_Device* gfx)
       }
     }
 
-    auto data = a2dp_sink.getBuffer();
-    if (data)
+    auto buf = a2dp_sink.getBuffer();
+    if (buf)
     {
+      memcpy(raw_data, buf, WAVE_SIZE * 2 * sizeof(int16_t)); // stereo data copy
       gfx->startWrite();
 
       // draw stereo level meter
-       uint16_t level[2] = { 0, 0 };
-      for (int i = 0; i < 512; i += 16)
+      for (size_t i = 0; i < 2; ++i)
       {
-        uint32_t lv = abs(data[i]);
-        if (level[0] < lv) { level[0] = lv; }
-        lv = abs(data[i+1]);
-        if (level[1] < lv) { level[1] = lv; }
-      }
-      for (int i = 0; i < 2; ++i)
-      {
-        int x = (level[i] * gfx->width() - 4) / INT16_MAX;
-        int px = prev_x[i];
+        int32_t level = 0;
+        for (size_t j = i; j < 640; j += 32)
+        {
+          uint32_t lv = abs(raw_data[j]);
+          if (level < lv) { level = lv; }
+        }
+
+        int32_t x = (level * gfx->width()) / INT16_MAX;
+        int32_t px = prev_x[i];
         if (px != x)
         {
           gfx->fillRect(x, i * 3, px - x, 2, px < x ? 0xFF9900u : 0x330000u);
@@ -401,39 +416,93 @@ void gfxLoop(LGFX_Device* gfx)
       gfx->display();
 
       // draw FFT level meter
-      fft.exec(data);
-      int bw = gfx->width() / 60;
+      fft.exec(raw_data);
+      size_t bw = gfx->width() / 60;
       if (bw < 3) { bw = 3; }
-      int dsp_height = gfx->height();
-      int fft_height = dsp_height - header_height - 1;
-      int xe = gfx->width() / bw;
+      int32_t dsp_height = gfx->height();
+      int32_t fft_height = dsp_height - header_height - 1;
+      size_t xe = gfx->width() / bw;
       if (xe > (FFT_SIZE/2)) { xe = (FFT_SIZE/2); }
-      for (int x = 0; x <= xe; ++x)
+      int32_t wave_next = ((header_height + dsp_height) >> 1) + (((256 - (raw_data[0] + raw_data[1])) * fft_height) >> 17);
+
+      uint32_t bar_color[2] = { 0x000033u, 0x99AAFFu };
+
+      for (size_t bx = 0; bx <= xe; ++bx)
       {
-        if (((x * bw) & 7) == 0) { gfx->display(); }
-        int32_t f = fft.get(x);
-        int y = (f * fft_height) >> 18;
+        size_t x = bx * bw;
+        if ((x & 7) == 0) { gfx->display(); taskYIELD(); }
+        int32_t f = fft.get(bx);
+        int32_t y = (f * fft_height) >> 18;
         if (y > fft_height) { y = fft_height; }
         y = dsp_height - y;
-        int py = prev_y[x];
+        int32_t py = prev_y[bx];
         if (y != py)
         {
-          gfx->fillRect(x * bw, y, bw - 1, py - y, (y < py) ? 0x99AAFFu : 0x000033u);
-          prev_y[x] = y;
+          gfx->fillRect(x, y, bw - 1, py - y, bar_color[(y < py)]);
+          prev_y[bx] = y;
         }
-        py = peak_y[x] + 1;
+        py = peak_y[bx] + 1;
         if (py < y)
         {
-          gfx->writeFastHLine(x * bw, py - 1, bw - 1, bgcolor(gfx, py - 1));
+          gfx->writeFastHLine(x, py - 1, bw - 1, bgcolor(gfx, py - 1));
         }
         else
         {
           py = y - 1;
         }
-        if (peak_y[x] != py)
+        if (peak_y[bx] != py)
         {
-          peak_y[x] = py;
-          gfx->writeFastHLine(x * bw, py, bw - 1, TFT_WHITE);
+          peak_y[bx] = py;
+          gfx->writeFastHLine(x, py, bw - 1, TFT_WHITE);
+        }
+
+
+        if (wave_enabled)
+        {
+          for (size_t bi = 0; bi < bw; ++bi)
+          {
+            size_t i = x + bi;
+            if (i >= gfx->width() || i >= WAVE_SIZE) { break; }
+            y = wave_y[i];
+            int32_t h = wave_h[i];
+            bool use_bg = (bi+1 == bw);
+            if (h>0)
+            { /// erase previous wave.
+              gfx->setAddrWindow(i, y, 1, h);
+              h += y;
+              do
+              {
+                uint32_t bg = (use_bg || y < peak_y[bx]) ? bgcolor(gfx, y)
+                            : (y == peak_y[bx]) ? 0xFFFFFFu
+                            : bar_color[(y >= prev_y[bx])];
+                gfx->writeColor(bg, 1);
+              } while (++y < h);
+            }
+            size_t i2 = i << 1;
+            int32_t y1 = wave_next;
+            wave_next = ((header_height + dsp_height) >> 1) + (((256 - (raw_data[i2] + raw_data[i2 + 1])) * fft_height) >> 17);
+            int32_t y2 = wave_next;
+            if (y1 > y2)
+            {
+              int32_t tmp = y1;
+              y1 = y2;
+              y2 = tmp;
+            }
+            y = y1;
+            h = y2 + 1 - y;
+            wave_y[i] = y;
+            wave_h[i] = h;
+            if (h>0)
+            { /// draw new wave.
+              gfx->setAddrWindow(i, y, 1, h);
+              h += y;
+              do
+              {
+                uint32_t bg = (y < prev_y[bx]) ? 0xFFCC33u : 0xFFFFFFu;
+                gfx->writeColor(bg, 1);
+              } while (++y < h);
+            }
+          }
         }
       }
       gfx->display();
@@ -458,10 +527,10 @@ void setup(void)
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
-    // spk_cfg.task_pinned_core = PRO_CPU_NUM;
+    spk_cfg.task_pinned_core = APP_CPU_NUM;
     // spk_cfg.task_priority = configMAX_PRIORITIES - 2;
-    // spk_cfg.dma_buf_count = 16;
-    // spk_cfg.dma_buf_len = 256;
+    spk_cfg.dma_buf_count = 20;
+    // spk_cfg.dma_buf_len = 512;
     M5.Speaker.config(spk_cfg);
   }
 
@@ -480,10 +549,10 @@ void loop(void)
   {
     static int prev_frame;
     int frame;
-    while (prev_frame == (frame = millis() >> 3)) /// 8 msec cycle wait
+    do
     {
       vTaskDelay(1);
-    }
+    } while (prev_frame == (frame = millis() >> 3)); /// 8 msec cycle wait
     prev_frame = frame;
   }
 
