@@ -370,7 +370,7 @@ void gfxLoop(LGFX_Device* gfx)
       int tid = title_id;
       wait = 3;
       gfx->startWrite();
-      int no_data = 0;
+      uint_fast8_t no_data_bits = 0;
       do
       {
         if (tx == 4) { wait = 255; }
@@ -390,10 +390,11 @@ void gfxLoop(LGFX_Device* gfx)
         }
         else
         {
-          if (++no_data == a2dp_sink.metatext_num)
+          if ((no_data_bits |= 1 << tid) == ((1 << a2dp_sink.metatext_num) - 1))
           {
             break;
           }
+          if (++tid == a2dp_sink.metatext_num) { tid = 0; }
         }
       } while (tx < gfx->width());
       --title_x;
