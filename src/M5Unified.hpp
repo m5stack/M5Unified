@@ -63,6 +63,9 @@ namespace m5
       /// use external port 5V output.
       bool output_power  = true;
 
+      /// use PMIC(AXP192) pek for M5.BtnPWR.
+      bool pmic_button   = true;
+
       /// use internal IMU.
       bool internal_imu  = true;
 
@@ -129,6 +132,9 @@ namespace m5
     /// To call this function in a loop function.
     void update(void);
 
+    /// milli seconds at the time the update was called
+    std::uint32_t getUpdateMsec(void) const { return _updateMsec; }
+
     M5GFX Display;
     M5GFX &Lcd = Display;
 
@@ -165,9 +171,10 @@ namespace m5
     Mic_Class Mic;
 
   private:
+    static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
+    std::uint32_t _updateMsec = 0;
     config_t _cfg;
-
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
     void _begin(void);
@@ -194,17 +201,6 @@ namespace m5
 #endif
 #endif
 
-#if defined ( __M5GFX_M5UNITLCD__ )
-      {
-        auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
-        _ex_display.reset(dsp);
-        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
-        {
-          return dsp->getBoard();
-        }
-      }
-#endif
-
 #if defined ( __M5GFX_M5UNITOLED__ )
       {
         auto dsp = new M5UnitOLED(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
@@ -215,6 +211,20 @@ namespace m5
         }
       }
 #endif
+
+#if defined ( __M5GFX_M5UNITLCD__ )
+      { // The UnitLCD has a delay to wait for the time to start operation after power-on.
+        m5gfx::delay(100);
+        auto dsp = new M5UnitLCD(Ex_I2C.getSDA(), Ex_I2C.getSCL(), 400000, Ex_I2C.getPort());
+        _ex_display.reset(dsp);
+        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
+        {
+          return dsp->getBoard();
+        }
+      }
+#endif
+      _ex_display.reset(nullptr);
+      ((M5GFX_*)&Display)->init_with_panel(nullptr);
       return Display.getBoard();
     }
 

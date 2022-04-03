@@ -11,11 +11,29 @@ namespace m5
   class Button_Class
   {
   public:
+    enum button_state_t : std::uint8_t
+    { state_nochange
+    , state_clicked
+    , state_hold
+    , state_decide_click_count
+    };
+
     /// Returns true when the button is pressed briefly and released.
-    bool wasClicked(void)  const { return _changeState == 1; }
+    bool wasClicked(void)  const { return _changeState == state_clicked; }
 
     /// Returns true when the button has been held pressed for a while.
-    bool wasHold(void)     const { return _changeState == 2; }
+    bool wasHold(void)     const { return _changeState == state_hold; }
+
+    /// Returns true when some time has passed since the button was single clicked.
+    bool wasSingleClicked(void) const { return _changeState == state_decide_click_count && _clickCount == 1; }
+
+    /// Returns true when some time has passed since the button was double clicked.
+    bool wasDoubleClicked(void) const { return _changeState == state_decide_click_count && _clickCount == 2; }
+
+    /// Returns true when some time has passed since the button was multiple clicked.
+    bool wasDeciedClickCount(void) const { return _changeState == state_decide_click_count; }
+
+    std::uint8_t getClickCount(void) const { return _clickCount; }
 
     /// Returns true if the button is currently held pressed.
     bool isHolding(void)   const { return _oldPress == 2 && _press == 2; }
@@ -28,24 +46,30 @@ namespace m5
     bool pressedFor(std::uint32_t ms)  const { return (_press  && _lastMsec - _lastChange >= ms); }
     bool releasedFor(std::uint32_t ms) const { return (!_press && _lastMsec - _lastChange >= ms); }
 
-
     void setDebounceThresh(std::uint32_t msec) { _msecDebounce = msec; }
     void setHoldThresh(std::uint32_t msec) { _msecHold = msec; }
 
     void setRawState(std::uint32_t msec, bool press);
-    void setState(std::uint32_t msec, std::uint8_t state);
+    void setState(std::uint32_t msec, button_state_t state);
+    button_state_t getState(void) const { return _changeState; }
     std::uint32_t lastChange(void) const { return _lastChange; }
 
+    std::uint32_t getDebounceThresh(void) const { return _msecDebounce; }
+    std::uint32_t getHoldThresh(void) const { return _msecHold; }
+
+    std::uint32_t getUpdateMsec(void) const { return _lastMsec; }
   private:
     std::uint32_t _lastMsec = 0;
     std::uint32_t _lastChange = 0;
     std::uint32_t _lastRawChange = 0;
+    std::uint32_t _lastClicked = 0;
+    button_state_t _changeState = state_nochange; // 0:nochange  1:click  2:hold
     std::uint16_t _msecDebounce = 10;
     std::uint16_t _msecHold = 500;
     bool _raw_press = false;
-    std::uint8_t _changeState = 0; // 0:nochange  1:click  2:hold
     std::uint8_t _press = 0;     // 0:release  1:click  2:holding
     std::uint8_t _oldPress = 0;
+    std::uint8_t _clickCount = 0;
   };
 
 }

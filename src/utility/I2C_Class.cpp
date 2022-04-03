@@ -32,24 +32,7 @@ namespace m5
   bool I2C_Class::begin(void)
   {
     auto port_num = _port_num;
-    auto sda = _pin_sda;
-    auto scl = _pin_scl;
-
-  #if defined ( ARDUINO )
-
-    if (port_num == I2C_NUM_0)
-    {
-      Wire.begin(sda, scl);
-    }
-   #if defined (I2C_NUM_1)
-    else if (port_num == I2C_NUM_1)
-    {
-      Wire1.begin(sda, scl);
-    }
-   #endif
-  #endif
-
-    return m5gfx::i2c::init(port_num, sda, scl).has_value();
+    return m5gfx::i2c::init(port_num, (int)_pin_sda, (int)_pin_scl).has_value();
   }
 
   bool I2C_Class::release(void) const

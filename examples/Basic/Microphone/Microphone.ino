@@ -6,11 +6,11 @@ static constexpr const size_t record_number = 256;
 static constexpr const size_t record_length = 200;
 static constexpr const size_t record_size = record_number * record_length;
 static constexpr const size_t record_samplerate = 16000;
-int16_t prev_y[record_length];
-int16_t prev_h[record_length];
-size_t rec_record_idx = 2;
-size_t draw_record_idx = 0;
-int16_t *rec_data;
+static int16_t prev_y[record_length];
+static int16_t prev_h[record_length];
+static size_t rec_record_idx = 2;
+static size_t draw_record_idx = 0;
+static int16_t *rec_data;
 
 #if !defined ( ARDUINO )
  void delay(uint32_t msec) { vTaskDelay(msec / portTICK_PERIOD_MS ); }
@@ -107,11 +107,11 @@ void loop(void)
       int start_pos = rec_record_idx * record_length;
       if (start_pos < record_size)
       {
-        M5.Speaker.playRAW(&rec_data[start_pos], record_size - start_pos, record_samplerate, false, 1, 0);
+        M5.Speaker.playRaw(&rec_data[start_pos], record_size - start_pos, record_samplerate, false, 1, 0);
       }
       if (start_pos > 0)
       {
-        M5.Speaker.playRAW(rec_data, start_pos, record_samplerate, false, 1, 0);
+        M5.Speaker.playRaw(rec_data, start_pos, record_samplerate, false, 1, 0);
       }
       do
       {

@@ -1,29 +1,43 @@
-#include <SD.h>
+
+
+#define WIFI_SSID "SET YOUR WIFI SSID"
+#define WIFI_PASS "SET YOUR WIFI PASS"
+
+
 #include <HTTPClient.h>
 #include <math.h>
 
 /// need ESP8266Audio library. ( URL : https://github.com/earlephilhower/ESP8266Audio/ )
 #include <AudioOutput.h>
-#include <AudioFileSourceSD.h>
-#include <AudioFileSourceID3.h>
+#include <AudioFileSourceICYStream.h>
+#include <AudioFileSource.h>
+#include <AudioFileSourceBuffer.h>
 #include <AudioGeneratorMP3.h>
+#include <AudioOutputI2S.h>
 
 #include <M5UnitLCD.h>
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
 
+static constexpr const int bufferSize = 64 * 1024; // buffer size in byte
+
 /// set M5Speaker virtual channel (0-7)
 static constexpr uint8_t m5spk_virtual_channel = 0;
 
-/// set your mp3 filename
-static constexpr const char* filename[] =
+/// set web radio station url
+static constexpr const char* station_list[][2] =
 {
-  "/mp3/file01.mp3",
-  "/mp3/file02.mp3",
-  "/mp3/file03.mp3",
-  "/mp3/file04.mp3",
+  {"MAXXED Out"        , "http://149.56.195.94:8015/steam"},
+  {"Asia Dream"        , "http://igor.torontocast.com:1025/;.-mp3"},
+  {"thejazzstream"     , "http://wbgo.streamguys.net/thejazzstream"},
+  {"181-beatles_128k"  , "http://listen.181fm.com/181-beatles_128k.mp3"},
+  {"illstreet-128-mp3" , "http://ice1.somafm.com/illstreet-128-mp3"},
+  {"bootliquor-128-mp3", "http://ice1.somafm.com/bootliquor-128-mp3"},
+  {"dronezone-128-mp3" , "http://ice1.somafm.com/dronezone-128-mp3"},
+  {"Lite Favorites"    , "http://naxos.cdnstream.com:80/1255_128"},
+  {"Classic FM"        , "http://media-ice.musicradio.com:80/ClassicFMMP3"},
 };
-static constexpr const size_t filecount = sizeof(filename) / sizeof(filename[0]);
+static constexpr const size_t stations = sizeof(station_list) / sizeof(station_list[0]);
 
 class AudioOutputM5Speaker : public AudioOutput
 {
@@ -56,24 +70,32 @@ class AudioOutputM5Speaker : public AudioOutput
         _m5sound->playRaw(_tri_buffer[_tri_index], _tri_buffer_index, hertz, true, 1, _virtual_ch);
         _tri_index = _tri_index < 2 ? _tri_index + 1 : 0;
         _tri_buffer_index = 0;
+        ++_update_count;
       }
     }
     virtual bool stop(void) override
     {
       flush();
       _m5sound->stop(_virtual_ch);
+      for (size_t i = 0; i < 3; ++i)
+      {
+        memset(_tri_buffer[i], 0, tri_buf_size);
+      }
+      ++_update_count;
       return true;
     }
 
     const int16_t* getBuffer(void) const { return _tri_buffer[(_tri_index + 2) % 3]; }
+    const uint32_t getUpdateCount(void) const { return _update_count; }
 
   protected:
     m5::Speaker_Class* _m5sound;
     uint8_t _virtual_ch;
-    static constexpr size_t tri_buf_size = 1536;
+    static constexpr size_t tri_buf_size = 640;
     int16_t _tri_buffer[3][tri_buf_size];
     size_t _tri_buffer_index = 0;
     size_t _tri_index = 0;
+    size_t _update_count = 0;
 };
 
 
@@ -168,10 +190,10 @@ public:
 };
 
 static constexpr size_t WAVE_SIZE = 320;
-static AudioFileSourceSD file;
 static AudioOutputM5Speaker out(&M5.Speaker, m5spk_virtual_channel);
-static AudioGeneratorMP3 mp3;
-static AudioFileSourceID3* id3 = nullptr;
+static AudioGeneratorMP3 *mp3 = nullptr;
+static AudioFileSourceICYStream *filemp3 = nullptr;
+static AudioFileSourceBuffer *buffmp3 = nullptr;
 static fft_t fft;
 static bool fft_enabled = false;
 static bool wave_enabled = false;
@@ -181,45 +203,57 @@ static int16_t wave_y[WAVE_SIZE];
 static int16_t wave_h[WAVE_SIZE];
 static int16_t raw_data[WAVE_SIZE * 2];
 static int header_height = 0;
-static size_t fileindex = 0;
+static size_t station_index = 0;
+static char stream_title[128] = { 0 };
+static const char* meta_text[2] = { nullptr, stream_title };
+static const size_t meta_text_num = sizeof(meta_text) / sizeof(meta_text[0]);
+static uint8_t meta_mod_bits = 0;
 
 void MDCallback(void *cbData, const char *type, bool isUnicode, const char *string)
 {
   (void)cbData;
-  if (string[0] == 0) { return; }
-  if (strcmp(type, "eof") == 0)
+  if ((strcmp(type, "StreamTitle") == 0) && (strcmp(stream_title, string) != 0))
   {
-    M5.Display.display();
-    return;
+    strncpy(stream_title, string, sizeof(stream_title));
+    meta_mod_bits |= 2;
   }
-  int y = M5.Display.getCursorY();
-  if (y+1 >= header_height) { return; }
-  M5.Display.fillRect(0, y, M5.Display.width(), 12, M5.Display.getBaseColor());
-  M5.Display.printf("%s: %s", type, string);
-  M5.Display.setCursor(0, y+12);
 }
 
 void stop(void)
 {
-  if (id3 == nullptr) return;
+  if (mp3) {
+    mp3->stop();
+    delete mp3;
+    mp3 = nullptr;
+  }
+
+  if (buffmp3) {
+    buffmp3->close();
+    delete buffmp3;
+    buffmp3 = nullptr;
+  }
+  if (filemp3) {
+    filemp3->close();
+    delete filemp3;
+    filemp3 = nullptr;
+  }
   out.stop();
-  mp3.stop();
-  id3->RegisterMetadataCB(nullptr, nullptr);
-  id3->close();
-  file.close();
-  delete id3;
-  id3 = nullptr;
 }
 
-void play(const char* fname)
+void play(size_t index)
 {
-  if (id3 != nullptr) { stop(); }
-  M5.Display.setCursor(0, 8);
-  file.open(fname);
-  id3 = new AudioFileSourceID3(&file);
-  id3->RegisterMetadataCB(MDCallback, (void*)"ID3TAG");
-  id3->open(fname);
-  mp3.begin(id3, &out);
+  stop();
+  filemp3 = new AudioFileSourceICYStream(station_list[index][1]);
+  filemp3->RegisterMetadataCB(MDCallback, (void*)"ICY");
+  // StreamTitle
+  buffmp3 = new AudioFileSourceBuffer(filemp3, bufferSize);
+  mp3 = new AudioGeneratorMP3();
+  mp3->begin(buffmp3, &out);
+  mp3->loop();
+
+  meta_text[0] = station_list[index][0];
+  stream_title[0] = 0;
+  meta_mod_bits = 3;
 }
 
 uint32_t bgcolor(LGFX_Device* gfx, int y)
@@ -247,12 +281,12 @@ void gfxSetup(LGFX_Device* gfx)
   }
   gfx->setFont(&fonts::lgfxJapanGothic_12);
   gfx->setEpdMode(epd_mode_t::epd_fastest);
-  gfx->setCursor(0, 8);
-  gfx->println("MP3 player");
   gfx->setTextWrap(false);
+  gfx->setCursor(0, 8);
+  gfx->println("WebRadio player");
   gfx->fillRect(0, 6, gfx->width(), 2, TFT_BLACK);
 
-  header_height = 45;
+  header_height = (gfx->height() > 80) ? 33 : 21;
   fft_enabled = !gfx->isEPD();
   if (fft_enabled)
   {
@@ -279,6 +313,82 @@ void gfxSetup(LGFX_Device* gfx)
 void gfxLoop(LGFX_Device* gfx)
 {
   if (gfx == nullptr) { return; }
+  if (header_height > 32)
+  {
+    if (meta_mod_bits)
+    {
+      gfx->startWrite();
+      for (int id = 0; id < meta_text_num; ++id)
+      {
+        if (0 == (meta_mod_bits & (1<<id))) { continue; }
+        meta_mod_bits &= ~(1<<id);
+        size_t y = id * 12;
+        if (y+12 >= header_height) { continue; }
+        gfx->setCursor(4, 8 + y);
+        gfx->fillRect(0, 8 + y, gfx->width(), 12, gfx->getBaseColor());
+        gfx->print(meta_text[id]);
+        gfx->print(" "); // Garbage data removal when UTF8 characters are broken in the middle.
+      }
+      gfx->display();
+      gfx->endWrite();
+    }
+  }
+  else
+  {
+    static int title_x;
+    static int title_id;
+    static int wait = INT16_MAX;
+
+    if (meta_mod_bits)
+    {
+      if (meta_mod_bits & 1)
+      {
+        title_x = 4;
+        title_id = 0;
+        gfx->fillRect(0, 8, gfx->width(), 12, gfx->getBaseColor());
+      }
+      meta_mod_bits = 0;
+      wait = 0;
+    }
+
+    if (--wait < 0)
+    {
+      int tx = title_x;
+      int tid = title_id;
+      wait = 3;
+      gfx->startWrite();
+      uint_fast8_t no_data_bits = 0;
+      do
+      {
+        if (tx == 4) { wait = 255; }
+        gfx->setCursor(tx, 8);
+        const char* meta = meta_text[tid];
+        if (meta[0] != 0)
+        {
+          gfx->print(meta);
+          gfx->print("  /  ");
+          tx = gfx->getCursorX();
+          if (++tid == meta_text_num) { tid = 0; }
+          if (tx <= 4)
+          {
+            title_x = tx;
+            title_id = tid;
+          }
+        }
+        else
+        {
+          if ((no_data_bits |= 1 << tid) == ((1 << meta_text_num) - 1))
+          {
+            break;
+          }
+          if (++tid == meta_text_num) { tid = 0; }
+        }
+      } while (tx < gfx->width());
+      --title_x;
+      gfx->display();
+      gfx->endWrite();
+    }
+  }
 
   if (!gfx->displayBusy())
   { // draw volume bar
@@ -435,7 +545,22 @@ void gfxLoop(LGFX_Device* gfx)
   }
 }
 
-void setup(void)
+void gfxLoopTask(void*)
+{
+  uint32_t prev_update_count = 0;
+  for (;;)
+  {
+    delay(1);
+    uint32_t update_count = out.getUpdateCount();
+    if (prev_update_count != update_count)
+    {
+      prev_update_count = update_count;
+      gfxLoop(&M5.Display);
+    }
+  }
+}
+
+void setup()
 {
   auto cfg = M5.config();
 
@@ -450,49 +575,81 @@ void setup(void)
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+    spk_cfg.task_pinned_core = APP_CPU_NUM;
     M5.Speaker.config(spk_cfg);
   }
 
 
   M5.Speaker.begin();
 
-  while (false == SD.begin(GPIO_NUM_4, SPI, 25000000))
-  {
-    delay(500);
+  M5.Display.println("Connecting to WiFi");
+  WiFi.disconnect();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+
+#if defined ( WIFI_SSID ) &&  defined ( WIFI_PASS )
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+#else
+  WiFi.begin();
+#endif
+
+  // Try forever
+  while (WiFi.status() != WL_CONNECTED) {
+    M5.Display.print(".");
+    delay(100);
   }
+  M5.Display.clear();
 
   gfxSetup(&M5.Display);
 
-  play(filename[fileindex]);
+  play(station_index);
+
+  xTaskCreatePinnedToCore(gfxLoopTask, "gfxLoopTask", 2048, nullptr, 1, nullptr, PRO_CPU_NUM);
 }
 
-void loop(void)
+void loop()
 {
-  gfxLoop(&M5.Display);
-
-  if (mp3.isRunning())
+  if (mp3->isRunning())
   {
-    if (!mp3.loop()) { mp3.stop(); }
+    if (!mp3->loop()) { mp3->stop(); }
   }
   else
   {
-    delay(1);
+    delay(16);
   }
 
   M5.update();
-  if (M5.BtnA.wasClicked())
+  if (M5.BtnA.wasPressed())
   {
-    M5.Speaker.tone(1000, 100);
-    stop();
-    if (++fileindex >= filecount) { fileindex = 0; }
-    play(filename[fileindex]);
+    M5.Speaker.tone(440, 50);
   }
-  else
+  if (M5.BtnA.wasDeciedClickCount())
+  {
+    switch (M5.BtnA.getClickCount())
+    {
+    case 1:
+      M5.Speaker.tone(1000, 100);
+      if (++station_index >= stations) { station_index = 0; }
+      play(station_index);
+      break;
+
+    case 2:
+      M5.Speaker.tone(800, 100);
+      if (station_index == 0) { station_index = stations; }
+      play(--station_index);
+      break;
+    }
+  }
   if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed())
   {
     size_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
-    if (M5.BtnB.isPressed()) { --v; } else { ++v; }
-    if (v <= 255 || M5.BtnA.isHolding())
+    int add = (M5.BtnB.isPressed()) ? -1 : 1;
+    if (M5.BtnA.isHolding())
+    {
+      add = M5.BtnA.getClickCount() ? -1 : 1;
+    }
+    v += add;
+    if (v <= 255)
     {
       M5.Speaker.setChannelVolume(m5spk_virtual_channel, v);
     }

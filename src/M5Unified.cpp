@@ -93,50 +93,6 @@ namespace m5
     return true;
   }
 
-/*
-  bool M5Unified::_sound_set_mode_cb(void* args, m5::sound_mode_t mode)
-  {
-    auto self = (M5Unified*)args;
-
-    switch (self->getBoard())
-    {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StackCore2:
-    case board_t::board_M5Tough:
-      self->Power.Axp192.setGPIO2(mode == sound_mode_t::sound_output);
-      break;
-
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-      self->Power.Axp192.setLDO0(mode == sound_mode_t::sound_input ? 2800 : 0);
-      NON_BREAK;
-
-    case board_t::board_M5StackCoreInk:
-      /// for SPK HAT
-      if ((self->_cfg.external_spk_detail.enabled) && !self->_cfg.external_spk_detail.omit_spk_hat)
-      {
-        gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
-        if (mode == sound_mode_t::sound_output)
-        {
-          m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
-          m5gfx::gpio_hi(pin_en);
-        }
-        else
-        { m5gfx::gpio_lo(pin_en); }
-      }
-      NON_BREAK;
-
-      break;
-
-#endif
-    default:
-      break;
-    }
-    return true;
-  }
-*/
-
-
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr gpio_num_t TFCARD_CS_PIN          = GPIO_NUM_4;
   static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
@@ -276,11 +232,13 @@ namespace m5
 
     if (board == board_t::board_unknown)
     {
+      uint32_t tmp = *((volatile uint32_t *)(IO_MUX_GPIO20_REG));
       m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
       board = m5gfx::gpio_in(GPIO_NUM_20)
             ? board_t::board_M5StampC3
             : board_t::board_M5StampC3U
             ;
+      *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
     }
 
     {
@@ -309,6 +267,10 @@ namespace m5
     if (_cfg.led_brightness)
     {
       M5.Power.setLed(_cfg.led_brightness);
+    }
+    if (Power.getType() == Power_Class::pmic_t::pmic_axp192)
+    { /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
+      BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
     }
 
     if (_cfg.clear_display)
@@ -440,7 +402,7 @@ namespace m5
         break;
 
       case board_t::board_M5Atom:
-        if (_cfg.internal_spk)
+        if (_cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOM ECHO
           spk_cfg.pin_bck = 19;
           spk_cfg.pin_ws = 33;
@@ -449,7 +411,7 @@ namespace m5
         }
         NON_BREAK;
       case board_t::board_M5AtomPsram:
-        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk)
+        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
           gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
@@ -567,6 +529,7 @@ namespace m5
   void M5Unified::update( void )
   {
     auto ms = m5gfx::millis();
+    _updateMsec = ms;
 
     if (Touch.isEnabled())
     {
@@ -584,17 +547,18 @@ namespace m5
         int i = Touch.getCount();
         while (--i >= 0)
         {
-          auto det = Touch.getDetail(i);
-          if ((det.state & (touch_state_t::mask_touch | touch_state_t::mask_moving)) == touch_state_t::mask_touch)
+          auto raw = Touch.getTouchPointRaw(i);
+          if (raw.y > 240)
           {
-            auto raw = Touch.getTouchPointRaw(i);
-            if (raw.y > 240)
+            auto det = Touch.getDetail(i);
+            if (det.state & touch_state_t::touch)
             {
-              int x = raw.x;
-              size_t idx = x / 110;
-              if (x - (idx * 110) < 100)
+              if (BtnA.isPressed()) { btn_bits |= 1 << 0; }
+              if (BtnB.isPressed()) { btn_bits |= 1 << 1; }
+              if (BtnC.isPressed()) { btn_bits |= 1 << 2; }
+              if (btn_bits || !(det.state & touch_state_t::mask_moving))
               {
-                btn_bits = 1 << idx;
+                btn_bits |= 1 << ((raw.x - 2) / 107);
               }
             }
           }
@@ -640,12 +604,20 @@ namespace m5
     BtnA.setRawState(ms, btn_bits & 1);
     BtnB.setRawState(ms, btn_bits & 2);
     BtnC.setRawState(ms, btn_bits & 4);
-    if (Power.Axp192.isEnabled())
+    if (Power.Axp192.isEnabled() && _cfg.pmic_button)
     {
-      auto tmp = Power.Axp192.getPekPress();
-      if (tmp == 1) { tmp = 2; }
-      else if (tmp == 2) { tmp = 1; }
-      BtnPWR.setState(ms, tmp);
+      Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
+      bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
+      if (read_axp192 || BtnPWR.getState())
+      {
+        switch (Power.Axp192.getPekPress())
+        {
+        case 0: break;
+        case 2:   state = Button_Class::button_state_t::state_clicked; break;
+        default:  state = Button_Class::button_state_t::state_hold;    break;
+        }
+        BtnPWR.setState(ms, state);
+      }
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)

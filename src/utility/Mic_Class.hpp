@@ -125,8 +125,9 @@ namespace m5
     };
 
     recording_info_t _rec_info[2];
+    volatile bool _rec_flip = false;
 
-    static void input_task(void* args);
+    static void mic_task(void* args);
 
     uint32_t _calc_rec_rate(void) const;
     esp_err_t _setup_i2s(void);
@@ -141,6 +142,7 @@ namespace m5
     TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
     volatile bool _is_recording = false;
+    volatile SemaphoreHandle_t _task_semaphore = nullptr;
   };
 }
 

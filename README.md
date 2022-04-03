@@ -5,17 +5,23 @@
  - ESP-IDF
  - Arduino for ESP32
 
-## Support device (with display)
+## Support device
  - M5Stack BASIC / GRAY / GO / FIRE
  - M5Stack Core2 / Tough
  - M5Stick C / CPlus
  - M5Stack CoreInk
  - M5Paper
-
-## Support device (with Unit LCD / Unit OLED / ATOM Display)
- - M5ATOM Lite / Matrix / ECHO / U
+ - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5STAMP PICO / C3 / C3U
 
+## Support device (external display)
+ - Unit LCD (with no display model)
+ - Unit OLED (with no display model)
+ - ATOM Display (with M5ATOM Lite / Matrix / PSRAM)
+
+## Support device (external speaker)
+ - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
+ - ATOMIC SPK (with M5ATOM Lite / PSRAM)
 
 
 # H/W infomation
