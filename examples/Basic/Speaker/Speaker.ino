@@ -94,7 +94,7 @@ void draw_menu(size_t index, bool focus)
 
 void select_menu(size_t index)
 {
-  M5.Speaker.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+  M5.Speaker.playRaw( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
   M5.Display.startWrite();
   draw_menu(cursor_index, false);
   cursor_index = index;
@@ -215,14 +215,14 @@ void setup(void)
 
   delay(500);
 
-  /// The playRAW function can play raw wave data.
+  /// The playRaw function can play raw wave data.
   /// 1st argument : data pointer, (supported  int8_t / uint8_t / int16_t)
   /// 2nd argument : Number of data array elements.
   /// 3rd argument : the sampling rate (Hz) (default = 44100)
   /// 4th argument : true=stereo / false=monaural (default = false)
   /// 5th argument : repeat count (default = 1)
   /// 6th argument : virtual channel number (If omitted, use an available channel.)
-  M5.Speaker.playRAW( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+  M5.Speaker.playRaw( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
 
   while (M5.Speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
 

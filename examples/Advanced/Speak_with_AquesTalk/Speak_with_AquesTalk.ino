@@ -26,7 +26,7 @@ static void talk_task(void*)
     {
       uint16_t len;
       if (CAqTkPicoF_SyntheFrame(wav[tri_index], &len)) { is_talking = false; break; }
-      M5.Speaker.playRAW(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false);
+      M5.Speaker.playRaw(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false);
       tri_index = tri_index < 2 ? tri_index + 1 : 0;
     }
   }

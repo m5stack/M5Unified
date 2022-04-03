@@ -161,8 +161,8 @@ protected:
   {
     // Reduce memory requirements by dividing the received data into the first and second halves.
     length >>= 1;
-    M5.Speaker.playRAW(get_next_buf( data        , length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
-    M5.Speaker.playRAW(get_next_buf(&data[length], length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
+    M5.Speaker.playRaw(get_next_buf( data        , length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
+    M5.Speaker.playRaw(get_next_buf(&data[length], length), length >> 1, _sample_rate, true, 1, m5spk_virtual_channel);
     _export_index = _tri_index;
   }
 };

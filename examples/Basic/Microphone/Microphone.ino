@@ -107,11 +107,11 @@ void loop(void)
       int start_pos = rec_record_idx * record_length;
       if (start_pos < record_size)
       {
-        M5.Speaker.playRAW(&rec_data[start_pos], record_size - start_pos, record_samplerate, false, 1, 0);
+        M5.Speaker.playRaw(&rec_data[start_pos], record_size - start_pos, record_samplerate, false, 1, 0);
       }
       if (start_pos > 0)
       {
-        M5.Speaker.playRAW(rec_data, start_pos, record_samplerate, false, 1, 0);
+        M5.Speaker.playRaw(rec_data, start_pos, record_samplerate, false, 1, 0);
       }
       do
       {
