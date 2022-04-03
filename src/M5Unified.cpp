@@ -402,7 +402,7 @@ namespace m5
         break;
 
       case board_t::board_M5Atom:
-        if (_cfg.internal_spk)
+        if (_cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOM ECHO
           spk_cfg.pin_bck = 19;
           spk_cfg.pin_ws = 33;
@@ -411,7 +411,7 @@ namespace m5
         }
         NON_BREAK;
       case board_t::board_M5AtomPsram:
-        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk)
+        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
           gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
