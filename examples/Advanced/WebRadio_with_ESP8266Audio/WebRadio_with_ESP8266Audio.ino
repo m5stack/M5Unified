@@ -19,8 +19,6 @@
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
 
-static constexpr const int bufferSize = 64 * 1024; // buffer size in byte
-
 /// set M5Speaker virtual channel (0-7)
 static constexpr uint8_t m5spk_virtual_channel = 0;
 
@@ -79,7 +77,7 @@ class AudioOutputM5Speaker : public AudioOutput
       _m5sound->stop(_virtual_ch);
       for (size_t i = 0; i < 3; ++i)
       {
-        memset(_tri_buffer[i], 0, tri_buf_size);
+        memset(_tri_buffer[i], 0, tri_buf_size * sizeof(int16_t));
       }
       ++_update_count;
       return true;
@@ -189,11 +187,15 @@ public:
   }
 };
 
+static constexpr const int preallocateBufferSize = 5 * 1024;
+static constexpr const int preallocateCodecSize = 29192; // MP3 codec max mem needed
+static void* preallocateBuffer = nullptr;
+static void* preallocateCodec = nullptr;
 static constexpr size_t WAVE_SIZE = 320;
 static AudioOutputM5Speaker out(&M5.Speaker, m5spk_virtual_channel);
-static AudioGeneratorMP3 *mp3 = nullptr;
-static AudioFileSourceICYStream *filemp3 = nullptr;
-static AudioFileSourceBuffer *buffmp3 = nullptr;
+static AudioGenerator *decoder = nullptr;
+static AudioFileSourceICYStream *file = nullptr;
+static AudioFileSourceBuffer *buff = nullptr;
 static fft_t fft;
 static bool fft_enabled = false;
 static bool wave_enabled = false;
@@ -208,8 +210,9 @@ static char stream_title[128] = { 0 };
 static const char* meta_text[2] = { nullptr, stream_title };
 static const size_t meta_text_num = sizeof(meta_text) / sizeof(meta_text[0]);
 static uint8_t meta_mod_bits = 0;
+static volatile size_t playindex = ~0u;
 
-void MDCallback(void *cbData, const char *type, bool isUnicode, const char *string)
+static void MDCallback(void *cbData, const char *type, bool isUnicode, const char *string)
 {
   (void)cbData;
   if ((strcmp(type, "StreamTitle") == 0) && (strcmp(stream_title, string) != 0))
@@ -219,44 +222,59 @@ void MDCallback(void *cbData, const char *type, bool isUnicode, const char *stri
   }
 }
 
-void stop(void)
+static void stop(void)
 {
-  if (mp3) {
-    mp3->stop();
-    delete mp3;
-    mp3 = nullptr;
+  if (decoder) {
+    decoder->stop();
+    delete decoder;
+    decoder = nullptr;
   }
 
-  if (buffmp3) {
-    buffmp3->close();
-    delete buffmp3;
-    buffmp3 = nullptr;
+  if (buff) {
+    buff->close();
+    delete buff;
+    buff = nullptr;
   }
-  if (filemp3) {
-    filemp3->close();
-    delete filemp3;
-    filemp3 = nullptr;
+  if (file) {
+    file->close();
+    delete file;
+    file = nullptr;
   }
   out.stop();
 }
 
-void play(size_t index)
+static void play(size_t index)
 {
-  stop();
-  filemp3 = new AudioFileSourceICYStream(station_list[index][1]);
-  filemp3->RegisterMetadataCB(MDCallback, (void*)"ICY");
-  // StreamTitle
-  buffmp3 = new AudioFileSourceBuffer(filemp3, bufferSize);
-  mp3 = new AudioGeneratorMP3();
-  mp3->begin(buffmp3, &out);
-  mp3->loop();
-
-  meta_text[0] = station_list[index][0];
-  stream_title[0] = 0;
-  meta_mod_bits = 3;
+  playindex = index;
 }
 
-uint32_t bgcolor(LGFX_Device* gfx, int y)
+static void decodeTask(void*)
+{
+  for (;;)
+  {
+    delay(1);
+    if (playindex != ~0u)
+    {
+      auto index = playindex;
+      playindex = ~0u;
+      stop();
+      meta_text[0] = station_list[index][0];
+      stream_title[0] = 0;
+      meta_mod_bits = 3;
+      file = new AudioFileSourceICYStream(station_list[index][1]);
+      file->RegisterMetadataCB(MDCallback, (void*)"ICY");
+      buff = new AudioFileSourceBuffer(file, preallocateBuffer, preallocateBufferSize);
+      decoder = new AudioGeneratorMP3(preallocateCodec, preallocateCodecSize);
+      decoder->begin(buff, &out);
+    }
+    if (decoder && decoder->isRunning())
+    {
+      if (!decoder->loop()) { decoder->stop(); }
+    }
+  }
+}
+
+static uint32_t bgcolor(LGFX_Device* gfx, int y)
 {
   auto h = gfx->height();
   auto dh = h - header_height;
@@ -272,7 +290,7 @@ uint32_t bgcolor(LGFX_Device* gfx, int y)
   return gfx->color888(v + 2, v, v + 6);
 }
 
-void gfxSetup(LGFX_Device* gfx)
+static void gfxSetup(LGFX_Device* gfx)
 {
   if (gfx == nullptr) { return; }
   if (gfx->width() < gfx->height())
@@ -390,20 +408,7 @@ void gfxLoop(LGFX_Device* gfx)
     }
   }
 
-  if (!gfx->displayBusy())
-  { // draw volume bar
-    static int px;
-    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
-    int x = v * (gfx->width()) >> 8;
-    if (px != x)
-    {
-      gfx->fillRect(x, 6, px - x, 2, px < x ? 0xAAFFAAu : 0u);
-      gfx->display();
-      px = x;
-    }
-  }
-
-  if (fft_enabled && !gfx->displayBusy() && M5.Speaker.isPlaying(m5spk_virtual_channel) > 1)
+  if (fft_enabled)
   {
     static int prev_x[2];
     static int peak_x[2];
@@ -543,24 +548,22 @@ void gfxLoop(LGFX_Device* gfx)
       gfx->endWrite();
     }
   }
-}
 
-void gfxLoopTask(void*)
-{
-  uint32_t prev_update_count = 0;
-  for (;;)
-  {
-    delay(1);
-    uint32_t update_count = out.getUpdateCount();
-    if (prev_update_count != update_count)
+  if (!gfx->displayBusy())
+  { // draw volume bar
+    static int px;
+    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
+    int x = v * (gfx->width()) >> 8;
+    if (px != x)
     {
-      prev_update_count = update_count;
-      gfxLoop(&M5.Display);
+      gfx->fillRect(x, 6, px - x, 2, px < x ? 0xAAFFAAu : 0u);
+      gfx->display();
+      px = x;
     }
   }
 }
 
-void setup()
+void setup(void)
 {
   auto cfg = M5.config();
 
@@ -570,6 +573,12 @@ void setup()
 
   M5.begin(cfg);
 
+  preallocateBuffer = malloc(preallocateBufferSize);
+  preallocateCodec = malloc(preallocateCodecSize);
+  if (!preallocateBuffer || !preallocateCodec) {
+    M5.Display.printf("FATAL ERROR:  Unable to preallocate %d bytes for app\n", preallocateBufferSize + preallocateCodecSize);
+    for (;;) { delay(1000); }
+  }
 
   { /// custom setting
     auto spk_cfg = M5.Speaker.config();
@@ -604,18 +613,21 @@ void setup()
 
   play(station_index);
 
-  xTaskCreatePinnedToCore(gfxLoopTask, "gfxLoopTask", 2048, nullptr, 1, nullptr, PRO_CPU_NUM);
+  xTaskCreatePinnedToCore(decodeTask, "decodeTask", 4096, nullptr, 1, nullptr, PRO_CPU_NUM);
 }
 
-void loop()
+void loop(void)
 {
-  if (mp3->isRunning())
+  gfxLoop(&M5.Display);
+
   {
-    if (!mp3->loop()) { mp3->stop(); }
-  }
-  else
-  {
-    delay(16);
+    static int prev_frame;
+    int frame;
+    do
+    {
+      delay(1);
+    } while (prev_frame == (frame = millis() >> 3)); /// 8 msec cycle wait
+    prev_frame = frame;
   }
 
   M5.update();
