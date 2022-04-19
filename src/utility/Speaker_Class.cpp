@@ -45,24 +45,17 @@ namespace m5
 
   esp_err_t Speaker_Class::_setup_i2s(void)
   {
-    i2s_driver_uninstall(_cfg.i2s_port);
-
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
 
-    SAMPLE_RATE_TYPE sample_rate = _cfg.sample_rate;
-
-/*
- ESP-IDF ver4系にて I2S_MODE_DAC_BUILT_IN を使用するとサンプリングレートが正しく反映されない不具合があったため、特殊な対策を実装している。
- ・指定するサンプリングレートの値を1/16にする
- ・I2S_MODE_DAC_BUILT_INを使用せずに初期化を行う
- ・最後にI2S0のレジスタを操作してDACモードを有効にする。
-*/
-    if (_cfg.use_dac) { sample_rate >>= 4; }
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    /// DACが使用できるのはI2Sポート0のみ。;
+    if (_cfg.use_dac && _cfg.i2s_port != I2S_NUM_0) { return ESP_FAIL; }
+#endif
 
     i2s_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_config_t));
     i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_TX );
-    i2s_config.sample_rate          = sample_rate;
+    i2s_config.sample_rate          = 48000; // dummy setting
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = _cfg.stereo || _cfg.buzzer
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
@@ -78,7 +71,12 @@ namespace m5
     pin_config.ws_io_num      = _cfg.pin_ws;
     pin_config.data_out_num   = _cfg.pin_data_out;
 
-    esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
+    esp_err_t err;
+    if (ESP_OK != (err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr)))
+    {
+      i2s_driver_uninstall(_cfg.i2s_port);
+      err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
+    }
     if (err != ESP_OK) { return err; }
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -109,12 +107,106 @@ namespace m5
     return err;
   }
 
+  static void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
+  {
+    if (baseClock <= targetFreq << 1)
+    { /// Nは最小2のため、基準クロックが目標クロックの2倍より小さい場合は値を確定する;
+      *div_n = 2;
+      *div_a = 1;
+      *div_b = 0;
+      return;
+    }
+    uint32_t save_n = 255;
+    uint32_t save_a = 63;
+    uint32_t save_b = 62;
+    if (targetFreq)
+    {
+      float fdiv = (float)baseClock / targetFreq;
+      uint32_t n = (uint32_t)fdiv;
+      if (n < 256)
+      {
+        fdiv -= n;
+
+        float check_base = baseClock;
+// 探索時の誤差を少なくするため、値を大きくしておく;
+        while ((int32_t)targetFreq >= 0) { targetFreq <<= 1; check_base *= 2; }
+        float check_target = targetFreq;
+
+        uint32_t save_diff = UINT32_MAX;
+        if (n < 255)
+        { /// 初期値の設定はNがひとつ上のものを設定しておく;
+          save_a = 1;
+          save_b = 0;
+          save_n = n + 1;
+          save_diff = abs((int)(check_target - check_base / (float)save_n));
+        }
+
+        for (uint32_t a = 1; a < 64; ++a)
+        {
+          uint32_t b = roundf(a * fdiv);
+          if (a <= b) { continue; }
+          uint32_t diff = abs((int)(check_target - ((check_base * (float)a) / (float)(n * a + b))));
+          if (save_diff <= diff) { continue; }
+          save_diff = diff;
+          save_a = a;
+          save_b = b;
+          save_n = n;
+          if (!diff) { break; }
+        }
+      }
+    }
+    *div_n = save_n;
+    *div_a = save_a;
+    *div_b = save_b;
+  }
+
   void Speaker_Class::spk_task(void* args)
   {
     auto self = (Speaker_Class*)args;
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
-    const int32_t spk_sample_rate = self->_cfg.sample_rate & (self->_cfg.use_dac ? ~15u : ~0u);
+
+    static constexpr size_t base = 160*1000*1000; // 160 MHz
+    size_t bits = (self->_cfg.use_dac) ? 2 : 32;
+    uint32_t div_a, div_b, div_n, div_m = 8;
+    calcClockDiv(&div_a, &div_b, &div_n, base, div_m * bits * self->_cfg.sample_rate);
+    const int32_t spk_sample_rate = roundf((float)base / (((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits))));
+    // ESP_EARLY_LOGE("DEBUG", "self setting :%6d Hz :%3d MHz / (%2d + (%2d/%2d))/%2d/ %2d = %d Hz", self->_cfg.sample_rate, base/1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate);
+
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 )
+
+    auto dev = &I2S0;
+    dev->tx_conf1.tx_bck_div_num = div_m - 1;
+    dev->tx_clkm_conf.tx_clkm_div_num = div_n;
+    bool yn1 = (div_b > (div_a >> 1)) ? 1 : 0;
+
+    dev->tx_clkm_div_conf.val = 0;
+    if (yn1) {
+      dev->tx_clkm_div_conf.tx_clkm_div_yn1 = 1;
+      div_b = div_a - div_b;
+    }
+    if (div_b)
+    {
+      dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
+      dev->tx_clkm_div_conf.tx_clkm_div_y = div_a % div_b;
+      dev->tx_clkm_div_conf.tx_clkm_div_x = div_a / div_b - 1;
+    }
+    dev->tx_clkm_conf.tx_clk_sel = 2;   // PLL_160M_CLK
+    dev->tx_clkm_conf.clk_en = 1;
+    dev->tx_clkm_conf.tx_clk_active = 1;
+
+#else
+
+    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
+
+    dev->sample_rate_conf.tx_bck_div_num = div_m;
+    dev->clkm_conf.clkm_div_a = div_a;
+    dev->clkm_conf.clkm_div_b = div_b;
+    dev->clkm_conf.clkm_div_num = div_n;
+    dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+
+#endif
+
     const float magnification = (float)self->_cfg.magnification / spk_sample_rate
                               / (~0u >> ((self->_cfg.use_dac || self->_cfg.buzzer) ? 0 : 8));
     const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
