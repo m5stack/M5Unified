@@ -52,15 +52,15 @@ namespace m5
     {
 #if defined ( ARDUINO )
 
-      /// use "Serial" begin.
+      /// use "Serial" begin. (0=disabled)
       uint32_t serial_baudrate = 115200;
 
 #endif
 
-      /// Clear the screen.
+      /// Clear the screen when startup.
       bool clear_display = true;
 
-      /// use external port 5V output.
+      /// 5V output to external port.
       bool output_power  = true;
 
       /// use PMIC(AXP192) pek for M5.BtnPWR.
@@ -72,10 +72,10 @@ namespace m5
       /// use internal RTC.
       bool internal_rtc  = true;
 
-      /// use mic.
+      /// use the microphone.
       bool internal_mic = true;
 
-      /// use speaker.
+      /// use the speaker.
       bool internal_spk = true;
 
       /// use Unit Accel & Gyro.
