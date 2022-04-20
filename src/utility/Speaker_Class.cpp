@@ -145,7 +145,7 @@ namespace m5
         {
           uint32_t b = roundf(a * fdiv);
           if (a <= b) { continue; }
-          uint32_t diff = abs((int)(check_target - ((check_base * (float)a) / (float)(n * a + b))));
+          uint32_t diff = abs((int)(check_target - ((check_base * a) / (n * a + b))));
           if (save_diff <= diff) { continue; }
           save_diff = diff;
           save_a = a;
@@ -167,11 +167,16 @@ namespace m5
     const bool out_stereo = self->_cfg.stereo;
 
     static constexpr size_t base = 160*1000*1000; // 160 MHz
-    size_t bits = (self->_cfg.use_dac) ? 2 : 32;
-    uint32_t div_a, div_b, div_n, div_m = 8;
+    size_t bits = (self->_cfg.use_dac) ? 2 : 32; /// 1サンプリング当たりの出力ビット数 (DACは2ch分の出力で2回、I2Sは16bit x2chで32回);
+    uint32_t div_a, div_b, div_n;
+ // uint32_t div_m = 8;  /// MCLKとBCLKの比率。8 = BCLK 1サイクルあたり MCLK 8サイクル;
+    uint32_t div_m = div_m = 64 / bits; /// MCLKを使用しないので、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
+
     calcClockDiv(&div_a, &div_b, &div_n, base, div_m * bits * self->_cfg.sample_rate);
-    const int32_t spk_sample_rate = roundf((float)base / (((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits))));
-    // ESP_EARLY_LOGE("DEBUG", "self setting :%6d Hz :%3d MHz / (%2d + (%2d/%2d))/%2d/ %2d = %d Hz", self->_cfg.sample_rate, base/1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate);
+
+    /// 実際に設定されたサンプリングレートの算出を行う。誤差を少なくする目的で256倍する;
+    const int32_t spk_sample_rate_x256 = (float)base * 256 / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
+//  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, base / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / 256);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 )
 
@@ -207,7 +212,7 @@ namespace m5
 
 #endif
 
-    const float magnification = (float)self->_cfg.magnification / spk_sample_rate
+    const float magnification = (float)self->_cfg.magnification / spk_sample_rate_x256
                               / (~0u >> ((self->_cfg.use_dac || self->_cfg.buzzer) ? 0 : 8));
     const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
     int nodata_count = 0;
@@ -325,7 +330,7 @@ label_next_wav:
         }
         const void* data = current_wav->data;
         const bool in_stereo = current_wav->is_stereo;
-        const int32_t in_rate = current_wav->sample_rate;
+        const int32_t in_rate = current_wav->sample_rate_x256;
         int32_t tmp = ch_info->volume;
         tmp *= tmp;
         if (!current_wav->is_16bit) { tmp <<= 8; }
@@ -400,7 +405,7 @@ label_next_wav:
               }
               liner_base[0] = l * ch_v;
 
-              ch_diff -= spk_sample_rate;
+              ch_diff -= spk_sample_rate_x256;
             } while (ch_diff >= 0);
             ch_info->index = ch_index;
           }
@@ -410,14 +415,14 @@ label_continue_sample:
 /// liner_prevからliner_baseへの２サンプル間の線形補間;
           float base_l = liner_base[0];
           float step_l = base_l - liner_prev[0];
-          base_l *= spk_sample_rate;
+          base_l *= spk_sample_rate_x256;
           base_l += step_l * ch_diff;
           step_l *= in_rate;
           if (out_stereo)
           {
             float base_r = liner_base[1];
             float step_r = base_r - liner_prev[1];
-            base_r *= spk_sample_rate;
+            base_r *= spk_sample_rate_x256;
             base_r += step_r * ch_diff;
             step_r *= in_rate;
             do
@@ -626,7 +631,7 @@ label_continue_sample:
   {
     length = 0;
     data = nullptr;
-    sample_rate = 0;
+    sample_rate_x256 = 0;
     flg = 0;
     repeat = 0;
   }
@@ -650,7 +655,7 @@ label_continue_sample:
     return true;
   }
 
-  bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
+  bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
     if (!begin() || (_task_handle == nullptr)) { return true; }
     if (array_len == 0 || data == nullptr) { return true; }
@@ -668,7 +673,7 @@ label_continue_sample:
     info.data = data;
     info.length = array_len;
     info.repeat = repeat_count ? repeat_count : ~0u;
-    info.sample_rate = sample_rate;
+    info.sample_rate_x256 = sample_rate * 256;
     info.is_stereo = flg_stereo;
     info.is_16bit = flg_16bit;
     info.is_signed = flg_signed;

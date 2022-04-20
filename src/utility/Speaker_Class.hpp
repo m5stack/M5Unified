@@ -127,7 +127,7 @@ namespace m5
     /// @param stereo true=data is stereo / false=data is mono.
     bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* raw_data, size_t array_len, bool stereo = false)
     {
-      return _play_raw(raw_data, array_len, false, false, (int)(frequency * array_len) >> stereo, stereo, (duration != ~0u) ? (duration * frequency / 1000) : ~0u, channel, stop_current_sound, true);
+      return _play_raw(raw_data, array_len, false, false, frequency * (array_len >> stereo), stereo, (duration != ~0u) ? (duration * frequency / 1000) : ~0u, channel, stop_current_sound, true);
     }
 
     /// play simple tone sound.
@@ -148,6 +148,7 @@ namespace m5
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
+    [[deprecated("The playRAW function has been renamed to playRaw")]]
     bool playRAW(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -165,6 +166,7 @@ namespace m5
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, false, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
+    [[deprecated("The playRAW function has been renamed to playRaw")]]
     bool playRAW(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, false, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -182,6 +184,7 @@ namespace m5
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
+    [[deprecated("The playRAW function has been renamed to playRaw")]]
     bool playRAW(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -205,7 +208,7 @@ namespace m5
     struct wav_info_t
     {
       volatile uint32_t repeat = 0;   /// -1 mean infinity repeat
-      uint32_t sample_rate = 0;
+      uint32_t sample_rate_x256 = 0;
       const void* data = nullptr;
       size_t length = 0;
       union
@@ -240,7 +243,7 @@ namespace m5
     static void spk_task(void* args);
 
     esp_err_t _setup_i2s(void);
-    bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, uint32_t sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
+    bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
     bool _set_next_wav(size_t ch, const wav_info_t& wav);
 
     speaker_config_t _cfg;
