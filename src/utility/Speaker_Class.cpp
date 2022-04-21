@@ -160,23 +160,26 @@ namespace m5
     *div_b = save_b;
   }
 
+/// レート変換係数 (実際に設定されるレートが浮動小数になる場合があるため、入力と出力の両方のサンプリングレートに係数を掛け、誤差を減らす);
+  #define SAMPLERATE_MUL 256
+
   void Speaker_Class::spk_task(void* args)
   {
     auto self = (Speaker_Class*)args;
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
 
-    static constexpr size_t base = 160*1000*1000; // 160 MHz
-    size_t bits = (self->_cfg.use_dac) ? 2 : 32; /// 1サンプリング当たりの出力ビット数 (DACは2ch分の出力で2回、I2Sは16bit x2chで32回);
+    static constexpr uint32_t base = 160*1000*1000; // 160 MHz
+    uint32_t bits = (self->_cfg.use_dac) ? 2 : 32; /// 1サンプリング当たりの出力ビット数 (DACは2ch分の出力で2回、I2Sは16bit x2chで32回);
     uint32_t div_a, div_b, div_n;
- // uint32_t div_m = 8;  /// MCLKとBCLKの比率。8 = BCLK 1サイクルあたり MCLK 8サイクル;
-    uint32_t div_m = div_m = 64 / bits; /// MCLKを使用しないので、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
+    uint32_t div_m = 64 / bits; /// MCLKを使用しないので、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
+    // MCLKを使用するデバイスに対応する場合には、div_mを使用してBCKとMCKの比率を調整する;
 
     calcClockDiv(&div_a, &div_b, &div_n, base, div_m * bits * self->_cfg.sample_rate);
 
-    /// 実際に設定されたサンプリングレートの算出を行う。誤差を少なくする目的で256倍する;
-    const int32_t spk_sample_rate_x256 = (float)base * 256 / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
-//  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, base / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / 256);
+    /// 実際に設定されたサンプリングレートの算出を行う;
+    const int32_t spk_sample_rate_x256 = (float)base * SAMPLERATE_MUL / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
+//  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, base / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 )
 
@@ -300,7 +303,6 @@ namespace m5
         wav_info_t* next_wav    = &(ch_info->wavinfo[ ch_info->flip]);
 
         size_t idx = 0;
-        int ch_diff = ch_info->diff;
 
         if (current_wav->repeat == 0 || next_wav->stop_current)
         {
@@ -341,6 +343,7 @@ label_next_wav:
         auto liner_base = ch_info->liner_buf[ liner_flip];
         auto liner_prev = ch_info->liner_buf[!liner_flip];
 
+        int ch_diff = ch_info->diff;
         if (ch_diff < 0) { goto label_continue_sample; }
 
         do
@@ -443,9 +446,9 @@ label_continue_sample:
               ch_diff += in_rate;
             } while (++idx < dma_buf_len && ch_diff < 0);
           }
+          ch_info->diff = ch_diff;
         } while (idx < dma_buf_len);
         ch_info->liner_flip = (liner_prev < liner_base);
-        ch_info->diff = ch_diff;
       }
 
       if (self->_cfg.use_dac)
@@ -673,7 +676,7 @@ label_continue_sample:
     info.data = data;
     info.length = array_len;
     info.repeat = repeat_count ? repeat_count : ~0u;
-    info.sample_rate_x256 = sample_rate * 256;
+    info.sample_rate_x256 = sample_rate * SAMPLERATE_MUL;
     info.is_stereo = flg_stereo;
     info.is_16bit = flg_16bit;
     info.is_signed = flg_signed;
