@@ -5,12 +5,6 @@
 
 #include <M5GFX.h>
 
-#if defined ( ARDUINO )
-
- #include <Wire.h>
-
-#endif
-
 namespace m5
 {
   I2C_Class In_I2C;
@@ -21,6 +15,7 @@ namespace m5
     _port_num = port_num;
     _pin_sda = sda;
     _pin_scl = scl;
+    m5gfx::i2c::setPins(port_num, sda, scl).has_value();
   }
 
   bool I2C_Class::begin(i2c_port_t port_num, int sda, int scl)
@@ -31,8 +26,7 @@ namespace m5
 
   bool I2C_Class::begin(void)
   {
-    auto port_num = _port_num;
-    return m5gfx::i2c::init(port_num, (int)_pin_sda, (int)_pin_scl).has_value();
+    return m5gfx::i2c::init(_port_num).has_value();
   }
 
   bool I2C_Class::release(void) const

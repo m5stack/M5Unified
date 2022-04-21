@@ -15,7 +15,7 @@ namespace m5
 
   LDOio0: 1.8-3.3V,  100mV/step    50mA
   LDO1  :                          30mA always on
-  LDO2  : 1.8-3.3V， 100mV/step   200mA 
+  LDO2  : 1.8-3.3V， 100mV/step   200mA
   LDO3  : 1.8-3.3V， 100mV/step   200mA
 */
   bool AXP192_Class::begin(void)
@@ -167,7 +167,7 @@ namespace m5
   {
     max_mV = (max_mV / 10) - 410;
     if (max_mV > 436 - 410) { max_mV = 436 - 410; }
-    static constexpr std::uint8_t table[] = 
+    static constexpr std::uint8_t table[] =
       { 415 - 410  /// 4150mV
       , 420 - 410  /// 4200mV
       , 436 - 410  /// 4360mV
@@ -196,7 +196,7 @@ namespace m5
                           : 0;
     if (current > 16) { res -= 16; }
 
-    return (res < 100) ? res : 100;    
+    return (res < 100) ? res : 100;
   }
 
   bool AXP192_Class::isCharging(void)

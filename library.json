@@ -1,6 +1,6 @@
 {
   "name": "M5Unified",
-  "description": "Library for M5Stack/Core2/Tough, M5StickC/C-Plus, M5CoreInk, M5Paper, M5ATOM, M5STAMP",
+  "description": "Library for M5Stack/Core2/Tough, M5StickC/C-Plus, M5CoreInk, M5Paper, M5ATOM, M5STAMP, M5Station",
   "keywords": "M5Unified",
   "authors": {
     "name": "M5Stack, lovyan03",
@@ -13,10 +13,10 @@
   "dependencies": [
     {
       "name": "M5GFX",
-      "version": ">=0.0.19"
+      "version": ">=0.0.20"
     }
   ],
-  "version": "0.0.6",
+  "version": "0.0.7",
   "frameworks": "arduino",
   "platforms": "espressif32",
   "headers": "M5Unified.h"
