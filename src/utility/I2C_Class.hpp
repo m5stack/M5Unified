@@ -112,7 +112,7 @@ namespace m5
     /// @return success(true) or failed(false).
     bool bitOff(std::uint8_t address, std::uint8_t reg, std::uint8_t data, std::uint32_t freq) const;
 
-    /// execute I2C scan. (for 7bit address) 
+    /// execute I2C scan. (for 7bit address)
     /// @param[out] result data array needs 120 Bytes.
     void scanID(bool* result) const;
 
@@ -120,10 +120,12 @@ namespace m5
     int8_t getSDA(void) const { return _pin_sda; }
     int8_t getSCL(void) const { return _pin_scl; }
 
+    bool isEnabled(void) const { return _port_num >= 0; }
+
   private:
-    i2c_port_t _port_num = I2C_NUM_0;
-    int8_t _pin_sda = 21;
-    int8_t _pin_scl = 22;
+    i2c_port_t _port_num = (i2c_port_t)-1;
+    int8_t _pin_sda = -1;
+    int8_t _pin_scl = -1;
   };
 
 

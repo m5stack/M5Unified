@@ -240,13 +240,8 @@ namespace m5
             ;
       *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
     }
-
-    {
-      i2c_port_t in_port = I2C_NUM_0;
-      gpio_num_t in_sda = GPIO_NUM_1;
-      gpio_num_t in_scl = GPIO_NUM_0;
-      In_I2C.begin(in_port, in_sda, in_scl);
-    }
+    /// StampC3 does not have internal i2c.
+    In_I2C.setPort(-1, -1, -1);
 
     { /// setup External I2C
       i2c_port_t ex_port = I2C_NUM_0;
@@ -498,7 +493,7 @@ namespace m5
       M5.Ex_I2C.begin();
     }
 
-    if (_cfg.internal_rtc)
+    if (_cfg.internal_rtc && In_I2C.isEnabled())
     {
       M5.Rtc.begin();
     }
@@ -509,7 +504,7 @@ namespace m5
 
     M5.Rtc.setSystemTimeFromRtc();
 
-    if (_cfg.internal_imu)
+    if (_cfg.internal_imu && In_I2C.isEnabled())
     {
       if (M5.Imu.begin())
       {
