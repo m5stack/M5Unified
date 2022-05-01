@@ -11,6 +11,8 @@
 
 #endif
 
+#include <esp_sntp.h>
+
 #include <M5Unified.h>
 
 void setup(void)
