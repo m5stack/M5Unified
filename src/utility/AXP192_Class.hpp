@@ -79,7 +79,7 @@ namespace m5
     float getBatteryDischargeCurrent(void);
     float getBatteryChargeCurrent(void);
     float getBatteryPower(void);
-    float getACINVolatge(void);
+    float getACINVoltage(void);
     float getACINCurrent(void);
     float getVBUSVoltage(void);
     float getVBUSCurrent(void);
@@ -87,6 +87,10 @@ namespace m5
     float getInternalTemperature(void);
 
     std::uint8_t getPekPress(void);
+
+    [[deprecated("use getACINVoltage()")]]
+    inline float getACINVolatge(void) { return getACINVoltage(); }
+
   private:
     std::size_t readRegister12(std::uint8_t addr);
     std::size_t readRegister13(std::uint8_t addr);

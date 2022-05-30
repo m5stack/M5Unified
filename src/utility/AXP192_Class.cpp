@@ -274,7 +274,7 @@ namespace m5
     return val;
   }
 
-  float AXP192_Class::getACINVolatge(void)
+  float AXP192_Class::getACINVoltage(void)
   {
     return 1.7f * readRegister12(0x56) / 1000.0f;
   }
