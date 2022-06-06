@@ -700,12 +700,16 @@ label_continue_sample:
       uint32_t byte_per_sec;
       uint16_t block_size;
       uint16_t bit_per_sample;
-      char data[4];
-      uint32_t wav_size;
+    };
+    struct __attribute__((packed)) sub_chunk_t
+    {
+        char identifier[4];
+        uint32_t chunk_size;
+        uint8_t data[1];
     };
 
     auto wav = (wav_header_t*)wav_data;
-/*
+    /*
     ESP_LOGD("wav", "RIFF           : %.4s" , wav->RIFF          );
     ESP_LOGD("wav", "chunk_size     : %d"   , wav->chunk_size    );
     ESP_LOGD("wav", "WAVEfmt        : %.8s" , wav->WAVEfmt       );
@@ -716,12 +720,24 @@ label_continue_sample:
     ESP_LOGD("wav", "byte_per_sec   : %d"   , wav->byte_per_sec  );
     ESP_LOGD("wav", "block_size     : %d"   , wav->block_size    );
     ESP_LOGD("wav", "bit_per_sample : %d"   , wav->bit_per_sample);
-    ESP_LOGD("wav", "data           : %.4s" , wav->data          );
-    ESP_LOGD("wav", "wav_size       : %d"   , wav->wav_size      );
-// */
-    if (memcmp(wav->RIFF, "RIFF", 4)
-     || memcmp(wav->WAVEfmt, "WAVEfmt ", 8)
-     || memcmp(wav->data, "data", 4)
+    */
+    sub_chunk_t* sub = (sub_chunk_t*)(wav_data + offsetof(wav_header_t, audiofmt) + wav->fmt_chunk_size);
+    /*
+    ESP_LOGD("wav", "sub id         : %.4s" , sub->identifier);
+    ESP_LOGD("wav", "sub chunk_size : %d"   , sub->chunk_size);
+    */
+    while(memcmp(sub->identifier, "data", 4))
+    {
+        sub = (sub_chunk_t*)((uint8_t*)sub + offsetof(sub_chunk_t, data) + sub->chunk_size);
+        /*
+        ESP_LOGD("wav", "sub id         : %.4s" , sub->identifier);
+        ESP_LOGD("wav", "sub chunk_size : %d"   , sub->chunk_size);
+        */
+    }
+
+    if (memcmp(wav->RIFF,       "RIFF",     4)
+     || memcmp(wav->WAVEfmt,    "WAVEfmt ", 8)
+     || memcmp(sub->identifier, "data",     4)
      || wav->audiofmt != 1
      || wav->bit_per_sample < 8
      || wav->bit_per_sample > 16
@@ -733,9 +749,9 @@ label_continue_sample:
     }
 
     data_len = data_len > sizeof(wav_header_t) ? data_len - sizeof(wav_header_t) : 0;
-    if (data_len > wav->wav_size) { data_len = wav->wav_size; }
+    if (data_len > sub->chunk_size) { data_len = sub->chunk_size; }
     bool flg_16bit = (wav->bit_per_sample >> 4);
-    return _play_raw( &wav_data[sizeof(wav_header_t)]
+    return _play_raw( sub->data
                     , data_len >> flg_16bit
                     , flg_16bit
                     , flg_16bit
