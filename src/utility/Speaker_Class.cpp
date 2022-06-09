@@ -703,9 +703,9 @@ label_continue_sample:
     };
     struct __attribute__((packed)) sub_chunk_t
     {
-        char identifier[4];
-        uint32_t chunk_size;
-        uint8_t data[1];
+      char identifier[4];
+      uint32_t chunk_size;
+      uint8_t data[1];
     };
 
     auto wav = (wav_header_t*)wav_data;
@@ -721,29 +721,33 @@ label_continue_sample:
     ESP_LOGD("wav", "block_size     : %d"   , wav->block_size    );
     ESP_LOGD("wav", "bit_per_sample : %d"   , wav->bit_per_sample);
     */
+    if ( !wav_data
+      || memcmp(wav->RIFF,    "RIFF",     4)
+      || memcmp(wav->WAVEfmt, "WAVEfmt ", 8)
+      || wav->audiofmt != 1
+      || wav->bit_per_sample < 8
+      || wav->bit_per_sample > 16
+      || wav->channel == 0
+      || wav->channel > 2
+      )
+    {
+      return false;
+    }
+
     sub_chunk_t* sub = (sub_chunk_t*)(wav_data + offsetof(wav_header_t, audiofmt) + wav->fmt_chunk_size);
     /*
     ESP_LOGD("wav", "sub id         : %.4s" , sub->identifier);
     ESP_LOGD("wav", "sub chunk_size : %d"   , sub->chunk_size);
     */
-    while(memcmp(sub->identifier, "data", 4))
+    while(memcmp(sub->identifier, "data", 4) && (uint8_t*)sub < wav_data + wav->chunk_size + 8)
     {
-        sub = (sub_chunk_t*)((uint8_t*)sub + offsetof(sub_chunk_t, data) + sub->chunk_size);
-        /*
-        ESP_LOGD("wav", "sub id         : %.4s" , sub->identifier);
-        ESP_LOGD("wav", "sub chunk_size : %d"   , sub->chunk_size);
-        */
+      sub = (sub_chunk_t*)((uint8_t*)sub + offsetof(sub_chunk_t, data) + sub->chunk_size);
+      /*
+      ESP_LOGD("wav", "sub id         : %.4s" , sub->identifier);
+      ESP_LOGD("wav", "sub chunk_size : %d"   , sub->chunk_size);
+      */
     }
-
-    if (memcmp(wav->RIFF,       "RIFF",     4)
-     || memcmp(wav->WAVEfmt,    "WAVEfmt ", 8)
-     || memcmp(sub->identifier, "data",     4)
-     || wav->audiofmt != 1
-     || wav->bit_per_sample < 8
-     || wav->bit_per_sample > 16
-     || wav->channel == 0
-     || wav->channel > 2
-     )
+    if (memcmp(sub->identifier, "data", 4))
     {
       return false;
     }
