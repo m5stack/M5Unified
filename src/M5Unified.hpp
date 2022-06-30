@@ -36,6 +36,7 @@
 #include "utility/Speaker_Class.hpp"
 #include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
+#include "utility/Log_Class.hpp"
 
 #include <memory>
 
@@ -139,6 +140,7 @@ namespace m5
     M5GFX &Lcd = Display;
 
     IMU_Class Imu;
+    Log_Class Log;
     Power_Class Power;
     RTC8563_Class Rtc;
     Touch_Class Touch;
