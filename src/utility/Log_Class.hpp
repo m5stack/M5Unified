@@ -45,20 +45,14 @@ namespace m5
     /// Output log.
     void operator() (esp_log_level_t level, const char* format, ...);
 
-    /// Output specified level log.
-    void log(esp_log_level_t level, bool use_suffix, const char* format, ...);
-
     /// Output regardless of log level setting.
     void printf(const char* format, ...);
  
     /// Set whether or not to change the color for each log level.
-    void setEnableColor(log_target_t target, bool enable) { _use_color[target] = enable; }
+    void setEnableColor(log_target_t target, bool enable) { if (target < log_target_max) { _use_color[target] = enable; } }
 
     /// Get whether or not to change the color for each log level.
     bool getEnableColor(log_target_t target) const { return _use_color[target]; }
-
-    /// Set the text to be added to the end of the log.
-    void setSuffix(log_target_t target, const char* suffix) { _suffix[target] = suffix; }
 
     /// Set log level.
     void setLogLevel(log_target_t target, esp_log_level_t level) { if (target < log_target_max) { _log_level[target] = level; update_level(); } }
@@ -66,8 +60,11 @@ namespace m5
     /// Get log level for serial output.
     esp_log_level_t getLogLevel(log_target_t target) const { return _log_level[target]; }
 
+    /// Set the text to be added to the end of the log.
+    void setSuffix(log_target_t target, const char* suffix) { if (target < log_target_max) { _suffix[target] = suffix; } }
+
     /// set logging callback function / functor .
-    /// @param function Pointer to a user-defined function that takes a const char* as an argument.
+    /// @param function Pointer to a user-defined function that takes three arguments: esp_log_level_t , bool, const char*.
     void setCallback(std::function<void(esp_log_level_t log_level, bool use_color, const char* log_text)> function) { _callback = function; };
 
     /// not for use.

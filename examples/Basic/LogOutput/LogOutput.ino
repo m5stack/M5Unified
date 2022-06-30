@@ -39,7 +39,7 @@ void setup(void)
   M5.Log.setCallback(user_made_log_callback);
 
 /// You can color the log or not.
-  M5.Log.setEnableColor(m5::log_target_serial, false);
+  M5.Log.setEnableColor(m5::log_target_serial, true);
   M5.Log.setEnableColor(m5::log_target_display, true);
   M5.Log.setEnableColor(m5::log_target_callback, true);
 
@@ -62,6 +62,9 @@ void setup(void)
   M5_LOGI("M5_LOGI info log");      /// INFO level output with source info
   M5_LOGD("M5_LOGD debug log");     /// DEBUG level output with source info
   M5_LOGV("M5_LOGV verbose log");   /// VERBOSE level output with source info
+
+/// `M5.Log.printf()` is output without log level and without suffix and is output to all serial, display, and callback.
+  M5.Log.printf("M5.Log.printf non level output\n");
 }
 
 void loop(void)
