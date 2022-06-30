@@ -42,56 +42,36 @@ namespace m5
   class Log_Class
   {
   public:
-    static const char* pathToFileName(const char * path);
+    /// Output log.
+    void operator() (esp_log_level_t level, const char* format, ...);
+
+    /// Output specified level log.
+    void log(esp_log_level_t level, bool use_suffix, const char* format, ...);
 
     /// Output regardless of log level setting.
     void printf(const char* format, ...);
  
     /// Set whether or not to change the color for each log level.
-    void setColorSerial(bool enable) { _color_serial = enable; }
+    void setEnableColor(log_target_t target, bool enable) { _use_color[target] = enable; }
 
-    /// Set whether or not to change the color for each log level.
-    void setColorDisplay(bool enable) { _color_display = enable; }
+    /// Get whether or not to change the color for each log level.
+    bool getEnableColor(log_target_t target) const { return _use_color[target]; }
 
     /// Set the text to be added to the end of the log.
     void setSuffix(log_target_t target, const char* suffix) { _suffix[target] = suffix; }
-    void setSuffixSerial(  const char* suffix) { _suffix[log_target_serial] = suffix; }
-    void setSuffixDisplay( const char* suffix) { _suffix[log_target_display] = suffix; }
-    void setSuffixCallback(const char* suffix) { _suffix[log_target_callback] = suffix; }
-
-    /// Output specified level log.
-    void log(esp_log_level_t level, bool use_suffix, const char* format, ...);
-
-    /// Output log.
-    void operator() (esp_log_level_t level, const char* format, ...);
 
     /// Set log level.
     void setLogLevel(log_target_t target, esp_log_level_t level) { if (target < log_target_max) { _log_level[target] = level; update_level(); } }
 
-    /// Set log level for serial output.
-    void setLogLevelSerial(  esp_log_level_t level) { _log_level[log_target_serial] = level; update_level(); }
-
-    /// Set log level for display output.
-    void setLogLevelDisplay( esp_log_level_t level) { _log_level[log_target_display] = level; update_level(); }
-
-    /// Set log level for user callback output.
-    void setLogLevelCallback(esp_log_level_t level) { _log_level[log_target_callback] = level; update_level(); }
-
     /// Get log level for serial output.
-    esp_log_level_t getLogLevel(esp_log_level_t level) const { return _log_level[level]; }
-
-    /// Get log level for serial output.
-    esp_log_level_t getLogLevelSerial(void) const { return _log_level[log_target_serial]; }
-
-    /// Get log level for display output.
-    esp_log_level_t getLogLevelDisplay(void) const { return _log_level[log_target_display]; }
-
-    /// Get log level for user callback output.
-    esp_log_level_t getLogLevelCallback(void) const { return _log_level[log_target_callback]; }
+    esp_log_level_t getLogLevel(log_target_t target) const { return _log_level[target]; }
 
     /// set logging callback function / functor .
     /// @param function Pointer to a user-defined function that takes a const char* as an argument.
-    void setCallback(std::function<void(const char*)> function) { _callback = function; };
+    void setCallback(std::function<void(esp_log_level_t log_level, bool use_color, const char* log_text)> function) { _callback = function; };
+
+    /// not for use.
+    static const char* pathToFileName(const char * path);
 
   private:
     static constexpr const char str_crlf[3] = "\r\n";
@@ -99,19 +79,18 @@ namespace m5
     void output(esp_log_level_t level, bool suffix, const char* __restrict format, va_list arg);
     void update_level(void);
 
-    std::function<void(const char*)> _callback;
+    std::function<void(esp_log_level_t log_level, bool use_color, const char* log_text)> _callback;
 
 #if defined ( CORE_DEBUG_LEVEL )
     esp_log_level_t _level_maximum  = (esp_log_level_t)CORE_DEBUG_LEVEL;
 #else
     esp_log_level_t _level_maximum  = (esp_log_level_t)CONFIG_LOG_DEFAULT_LEVEL;
 #endif
-    esp_log_level_t _log_level[3]   = { _level_maximum, _level_maximum, _level_maximum };
+    esp_log_level_t _log_level[log_target_max]   = { _level_maximum, _level_maximum, _level_maximum };
 
-    const char* _suffix[3] = { str_crlf, str_crlf, str_crlf };
+    const char* _suffix[log_target_max] = { str_crlf, str_crlf, str_crlf };
 
-    bool _color_serial = true;
-    bool _color_display = true;
+    bool _use_color[log_target_max] = { true, true, true };
   };
 }
 #endif

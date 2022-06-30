@@ -1,7 +1,7 @@
 #include <M5Unified.h>
 
 
-void user_made_log_callback(const char* text);
+void user_made_log_callback(esp_log_level_t, bool, const char*);
 
 
 void setup(void)
@@ -37,6 +37,11 @@ void setup(void)
 
 /// Set up user-specific callback functions.
   M5.Log.setCallback(user_made_log_callback);
+
+/// You can color the log or not.
+  M5.Log.setEnableColor(m5::log_target_serial, false);
+  M5.Log.setEnableColor(m5::log_target_display, true);
+  M5.Log.setEnableColor(m5::log_target_callback, true);
 
 /// You can set the text to be added to the end of the log for each output destination.
 /// ( default value : "\r\n" )
@@ -76,23 +81,23 @@ void loop(void)
   }
 }
 
-#if defined ( ARDUINO )
-void user_made_log_callback(const char* text)
+void user_made_log_callback(esp_log_level_t log_level, bool use_color, const char* log_text)
 {
 // You can also create your own callback function to output log contents to a file,WiFi,and more other destination
-/*
 
+#if defined ( ARDUINO )
+/*
   if (SD.begin(GPIO_NUM_4, SPI, 25000000))
   {
     auto file = SD.open("/logfile.txt", FILE_APPEND);
-    file.print(text);
+    file.print(log_text);
     file.close();
     SD.end();
   }
-
 //*/
-}
 #endif
+
+}
 
 /// for ESP-IDF
 #if !defined ( ARDUINO )

@@ -72,32 +72,35 @@ namespace m5
 
     if (_log_level[log_target_serial] >= level)
     {
+      if (level != ESP_LOG_NONE && _use_color[log_target_serial])
+      {
 #if defined ( ARDUINO )
-      if (_color_serial && level != ESP_LOG_NONE)
-      {
         log_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
-      }
-      else
-      {
-        log_printf(str);
-      }
-      if (suffix && _suffix[log_target_serial]) { log_printf(_suffix[log_target_serial]); }
 #else
-      if (_color_serial && level != ESP_LOG_NONE)
-      {
         esp_rom_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
+#endif
       }
       else
       {
+#if defined ( ARDUINO )
+        log_printf(str);
+#else
         esp_rom_printf(str);
-      }
-      if (suffix && _suffix[log_target_serial]) { esp_rom_printf(_suffix[log_target_serial]); }
 #endif
+      }
+      if (suffix && _suffix[log_target_serial])
+      {
+#if defined ( ARDUINO )
+        log_printf(_suffix[log_target_serial]);
+#else
+        esp_rom_printf(_suffix[log_target_serial]);
+#endif
+      }
     }
 
     if (_log_level[log_target_display] >= level)
     {
-      if (_color_serial && level != ESP_LOG_NONE)
+      if (level != ESP_LOG_NONE && _use_color[log_target_display])
       {
         auto style = M5.Display.getTextStyle();
         if (style.fore_rgb888 == style.back_rgb888)
@@ -120,8 +123,8 @@ namespace m5
 
     if (_log_level[log_target_callback] >= level && _callback != nullptr)
     {
-      _callback(str);
-      if (suffix && _suffix[log_target_callback]) { _callback(_suffix[log_target_callback]); }
+      _callback(level, _log_level[log_target_callback], str);
+      if (suffix && _suffix[log_target_callback]) { _callback(level, _log_level[log_target_callback], _suffix[log_target_callback]); }
     }
   }
 }
