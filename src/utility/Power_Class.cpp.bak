@@ -16,6 +16,7 @@
 #define NON_BREAK ;
 #endif
 
+#if defined (ESP_PLATFORM)
 #include <esp_log.h>
 #include <esp_sleep.h>
 #include <sdkconfig.h>
@@ -594,3 +595,4 @@ namespace m5
     }
   }
 }
+#endif
