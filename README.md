@@ -149,9 +149,17 @@
   <TD colspan="2"></TD>
  </TR>
  <TR align="center">
-  <TD>Bus</TD>
+  <TD rowspan="2">Bus</TD>
   <TD><IMG src="docs/img/pin_def_core_bus.svg" ><BR>M-Bus</TD>
   <TD><IMG src="docs/img/pin_def_core2_bus.svg"><BR>M-Bus</TD>
+  <TD></TD>
+  <TD colspan="2"></TD>
+ </TR>
+ <TR align="center">
+  <TD colspan="2">
+  ※ HPWR=not connected to the ESP32.
+   Used by modules capable of supplying 12V power.
+  </TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
