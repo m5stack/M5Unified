@@ -286,8 +286,9 @@ namespace m5
     case board_t::board_M5Atom:
     case board_t::board_M5AtomU:
       // Countermeasure to the problem that CH552 applies 4v to GPIO0, thus reducing WiFi sensitivity.
+      // Setting output_high adds a bias of 3.3v and suppresses overvoltage.
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::output);
-      m5gfx::gpio_lo(GPIO_NUM_0);
+      m5gfx::gpio_hi(GPIO_NUM_0);
       break;
 
     default:
