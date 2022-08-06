@@ -1,11 +1,18 @@
 # M5Unified
 ### M5Stack Series unified library .
 
-## Support framework
+## Supported development environment
+
+- ArduinoIDE
+- PlatformIO
+
+Note: Using CMake ESP-IDF projects is not supported.
+
+## Supported framework
  - ESP-IDF
  - Arduino for ESP32
 
-## Support device
+## Supported device
  - M5Stack BASIC / GRAY / GO / FIRE
  - M5Stack Core2 / Tough
  - M5Stick C / CPlus
@@ -14,12 +21,12 @@
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5STAMP PICO / C3 / C3U
 
-## Support device (external display)
+## Supported device (external display)
  - Unit LCD (with no display model)
  - Unit OLED (with no display model)
  - ATOM Display (with M5ATOM Lite / Matrix / PSRAM)
 
-## Support device (external speaker)
+## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM)
 
