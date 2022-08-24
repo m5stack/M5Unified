@@ -10,6 +10,7 @@
  - M5Stack Core2 / Tough
  - M5Stick C / CPlus
  - M5Stack CoreInk
+ - M5Station
  - M5Paper
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5STAMP PICO / C3 / C3U
@@ -31,13 +32,13 @@
 |:------------------:|:---------------------------------:|:---------------------------------:|:-------------------------------------:|:----------------------------:|:----------------------:|:---------------------:|:---------------------:|:---------------------------------------:|:------------------:|:------------------:|
 |GPIO 0<BR>`ADC2_CH1`|`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>**SPK_LRCK<BR>PDM_C**(Core2)|`HAT`<BR>`PAD`<BR>**PDM_C**   |**EPD_RST**             | ---                   | ---                   | ---                                     |                    |GPIO 0<BR>`ADC2_CH1`|
 |GPIO 1<BR>`USB_TX`  |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**                  |**Serial**                    |**Serial**              |**Serial**             |**Serial**             |**Serial**                               |**Serial**          |GPIO 1<BR>`USB_TX`  |
-|GPIO 2<BR>`ADC2_CH2`|`M-Bus`<BR>                        |`M-Bus`<BR>                        |`M-Bus`<BR>**SPK D**                   |`PAD`<BR>**Beep**(CPlus)      |**Beep**                |**PW_Hold**            | REn?                  | ---                                     | ---                |GPIO 2<BR>`ADC2_CH2`|
+|GPIO 2<BR>`ADC2_CH2`|`M-Bus`<BR>                        |`M-Bus`<BR>                        |`M-Bus`<BR>**SPK D**                   |`PAD`<BR>**Beep**(CPlus)      |**Beep**                |**PW_Hold**            |**ReadEn**             | ---                                     | ---                |GPIO 2<BR>`ADC2_CH2`|
 |GPIO 3<BR>`USB_RX`  |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**                  |**Serial**                    |**Serial**              |**Serial**             |**Serial**             |**Serial**                               |**Serial**          |GPIO 3<BR>`USB_RX`  |
 |GPIO 4<BR>`ADC2_CH0`|**TF_CS**                          |**TF_CS**                          |**TF_CS**                              | ---                          |**EPD_BUSY**            |**TF_CS**              |**RGB LED**            | ---                                     | ---                |GPIO 4<BR>`ADC2_CH0`|
-|GPIO 5              |`M-Bus`                            |`M-Bus`                            |**LCD_CS**                             |**LCD_CS**                    |**BTN_HAT**             |**EXT_5V**             |**LCD_CS**             |(PSRAM)<BR>**PDM_C**(U)                  | ---                |GPIO 5              |
+|GPIO 5              |`M-Bus`                            |`M-Bus`                            |**LCD_CS**                             |**LCD_CS**                    |**BTN_HAT**             |**EXT_5V**             |**LCD_CS**             |`Bus`(P)<BR>**PDM_C**(U)                  | ---                |GPIO 5              |
 |GPIO 9              | ---                               | ---                               | ---                                   |**InfraRed**                  |**EPD_CS**              | ---                   | ---                   | ---                                     | ---                |GPIO 9              |
 |GPIO10              | ---                               | ---                               | ---                                   |**LED**                       |**LED**                 | ---                   | ---                   | ---                                     | ---                |GPIO10              |
-|GPIO12<BR>`ADC2_CH5`|`M-Bus`<BR>IIS_SK                  |`M-Bus`<BR>IIS_SK                  |**SPK BCLK**                           | ---                          |**PW_Hold**             |**SPI_MOSI**           | USB?                  |**InfraRed**                             | ---                |GPIO12<BR>`ADC2_CH5`|
+|GPIO12<BR>`ADC2_CH5`|`M-Bus`<BR>IIS_SK                  |`M-Bus`<BR>IIS_SK                  |**SPK BCLK**                           | ---                          |**PW_Hold**             |**SPI_MOSI**           |**USB_PW**             |**InfraRed**                             | ---                |GPIO12<BR>`ADC2_CH5`|
 |GPIO13<BR>`ADC2_CH4`|`M-Bus`<BR>IIS_WS                  |`M-Bus`<BR>IIS_WS                  |`M-Bus`<BR>RXD2                        |**SPI_SCLK**                  |`MI-Bus`<BR>RXD2        |**SPI_MISO**           |`PORT.C1`              | ---                                     | ---                |GPIO13<BR>`ADC2_CH4`|
 |GPIO14<BR>`ADC2_CH6`|**LCD_CS**                         |**LCD_CS**                         |`M-Bus`<BR>TXD2                        | ---                          |`MI-Bus`<BR>TXD2        |**SPI_SCLK**           |`PORT.C1`              | ---                                     | ---                |GPIO14<BR>`ADC2_CH6`|
 |GPIO15<BR>`ADC2_CH3`|`M-Bus`<BR>IIS_OUT                 |`M-Bus`<BR>**RGB LED**             |**LCD_D/C**                            |**SPI_MOSI**                  |**EPD_D/C**             |**EPD_CS**             |**LCD_RST**            | ---                                     | ---                |GPIO15<BR>`ADC2_CH3`|
@@ -84,21 +85,21 @@
 
 
 ### AXP192 IO list
-|              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|              |
-|:------------:|:-----------------:|:-----------------:|:--------------:|:--------------:|:------------:|
-|GPIO0<br>LDO0 |BUS PW EN          |BUS PW EN          |MIC VCC         |MIC VCC         |GPIO0<br>LDO0 |
-| GPIO1        |SYS LED            |TP RST             | ---            | ---            | GPIO1        |
-| GPIO2        |SPK EN             |SPK EN             | ---            | ---            | GPIO2        |
-| GPIO3        | ---               | ---               | ---            | ---            | GPIO3        |
-| GPIO4        |LCD RST<BR>TP RST  |LCD RST            | ---            | ---            | GPIO4        |
-| EXTEN        |PORT 5V EN         |PORT 5V EN         |PORT 5V EN      |PORT 5V EN      | EXTEN        |
-| BACKUP       |RTC BAT            |RTC BAT            |RTC BAT         |RTC BAT         | BACKUP       |
-| LDO1         |RTC VDD            |RTC VDD            |RTC VDD         |RTC VDD         | LDO1         |
-| LDO2         |LCD PW<BR>Periph PW|LCD PW<BR>Periph PW|LCD BL          |LCD BL          | LDO2         |
-| LDO3         |VIB MOTOR          |LCD BL             |LCD PW          |LCD PW          | LDO3         |
-| DCDC1        |ESP32 VDD          |ESP32 VDD          |ESP32 VDD       |ESP32 VDD       | DCDC1        |
-| DCDC2        | ---               | ---               | ---            | ---            | DCDC2        |
-| DCDC3        |LCD BL             | ---               | ---            | ---            | DCDC3        |
+|              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
+|:------------:|:-----------------:|:-----------------:|:--------------:|:--------------:|:-----------:|:------------:|
+|GPIO0<br>LDO0 |BUS PW EN          |BUS PW EN          |MIC VCC         |MIC VCC         |PortA1.A2 EN |GPIO0<br>LDO0 |
+| GPIO1        |SYS LED            |TP RST             | ---            | ---            |PortB1 EN    | GPIO1        |
+| GPIO2        |SPK EN             |SPK EN             | ---            | ---            |PortB2 EN    | GPIO2        |
+| GPIO3        | ---               | ---               | ---            | ---            |PortC1 EN    | GPIO3        |
+| GPIO4        |LCD RST<BR>TP RST  |LCD RST            | ---            | ---            |PortC2 EN    | GPIO4        |
+| EXTEN        |PORT 5V EN         |PORT 5V EN         |PORT 5V EN      |PORT 5V EN      |PORT 5V EN   | EXTEN        |
+| BACKUP       |RTC BAT            |RTC BAT            |RTC BAT         |RTC BAT         | ---         | BACKUP       |
+| LDO1         |RTC VDD            |RTC VDD            |RTC VDD         |RTC VDD         |RTC VDD      | LDO1         |
+| LDO2         |LCD PW<BR>Periph PW|LCD PW<BR>Periph PW|LCD BL          |LCD BL          | ---         | LDO2         |
+| LDO3         |VIB MOTOR          |LCD BL             |LCD PW          |LCD PW          |LCD BL       | LDO3         |
+| DCDC1        |ESP32 VDD          |ESP32 VDD          |ESP32 VDD       |ESP32 VDD       |ESP32 VDD    | DCDC1        |
+| DCDC2        | ---               | ---               | ---            | ---            | ---         | DCDC2        |
+| DCDC3        |LCD BL             | ---               | ---            | ---            | ---         | DCDC3        |
 
 
 ### PinMap
@@ -236,14 +237,15 @@
 
 ### I2C device
 
-|                |M5Stack<BR>BASIC/GRAY<BR>GO/FIRE   |M5Stack<BR>Core2      |M5Stack<BR>Tough    |M5Stick<BR>C<BR>CPlus|M5Stack<BR>CoreInk |M5Paper              |ATOM<BR>Matrix  |                |
-|:--------------:|:---------------------------------:|:--------------------:|:------------------:|:-------------------:|:-----------------:|:-------------------:|:--------------:|:--------------:|
-|Touch<BR>Panel  | ---                               |`FT6336U`<BR>38h      |`CHSC6540`<BR>2Eh   | ---                 | ---               |`GT911`<BR>14h or 5Dh| ---            |Touch<BR>Panel  |
-|RTC             | ---                               |`BM8563`<BR>51h       |`BM8563`<BR>51h     |`BM8563`<BR>51h      |`BM8563`<BR>51h    |`BM8563`<BR>51h      | ---            |RTC             |
-|Power<BR>Manage |`IP5306`<BR>75h                    |`AXP192`<BR>34h       |`AXP192`<BR>34h     |`AXP192`<BR>34h      | ---               | ---                 | ---            |Power<BR>Manage |
-|IMU             |`MPU6886`<BR>68h                   |`MPU6886`<BR>68h (Ext)| ---                |`MPU6886`<BR>68h     | ---               | ---                 |`MPU6886`<BR>68h|IMU             |
-|IMU<BR>(old lot)|`SH200Q`<BR>6Ch                    | ---                  | ---                |`SH200Q`<BR>6Ch      | ---               | ---                 | ---            |IMU<BR>(old lot)|
-|ENV             | ---                               | ---                  | ---                | ---                 | ---               |`SHT30`<BR>44h       | ---            |ENV             |
-|EEPROM          | ---                               | ---                  | ---                | ---                 | ---               |`FM24C02`<BR>50h     | ---            |EEPROM          |
+|                             |M5Stack<BR>BASIC/GRAY<BR>GO/FIRE   |M5Stack<BR>Core2      |M5Stack<BR>Tough    |M5Stick<BR>C<BR>CPlus|M5Stack<BR>CoreInk |M5Paper              |ATOM<BR>Matrix  |M5Station                    |                             |
+|:---------------------------:|:---------------------------------:|:--------------------:|:------------------:|:-------------------:|:-----------------:|:-------------------:|:--------------:|:---------------------------:|:---------------------------:|
+|Touch<BR>Panel               | ---                               |`FT6336U`<BR>38h      |`CHSC6540`<BR>2Eh   | ---                 | ---               |`GT911`<BR>14h or 5Dh| ---            | ---                         |Touch<BR>Panel               |
+|RTC                          | ---                               |`BM8563`<BR>51h       |`BM8563`<BR>51h     |`BM8563`<BR>51h      |`BM8563`<BR>51h    |`BM8563`<BR>51h      | ---            |`BM8563`<BR>51h              |RTC                          |
+|Power<BR>Manage              |`IP5306`<BR>75h                    |`AXP192`<BR>34h       |`AXP192`<BR>34h     |`AXP192`<BR>34h      | ---               | ---                 | ---            |`AXP192`<BR>34h              |Power<BR>Manage              |
+|IMU                          |`MPU6886`<BR>68h                   |`MPU6886`<BR>68h (Ext)| ---                |`MPU6886`<BR>68h     | ---               | ---                 |`MPU6886`<BR>68h|`MPU6886`<BR>68h (opt)       |IMU                          |
+|IMU<BR>(old lot)             |`SH200Q`<BR>6Ch                    | ---                  | ---                |`SH200Q`<BR>6Ch      | ---               | ---                 | ---            | ---                         |IMU<BR>(old lot)             |
+|ENV                          | ---                               | ---                  | ---                | ---                 | ---               |`SHT30`<BR>44h       | ---            | ---                         |ENV                          |
+|EEPROM                       | ---                               | ---                  | ---                | ---                 | ---               |`FM24C02`<BR>50h     | ---            | ---                         |EEPROM                       |
+|Current<BR>Voltage<BR>Monitor| ---                               | ---                  | ---                | ---                 | ---               | ---                 | ---            |`INA3221`<BR>40h/41h<BR>(opt)|Current<BR>Voltage<BR>Monitor|
 
 

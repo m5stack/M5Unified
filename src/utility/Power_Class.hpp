@@ -17,13 +17,13 @@ namespace m5
 
   enum ext_port_mask_t
   { ext_none = 0
-  , ext_PA  = 0b00000001
-  , ext_PB1 = 0b00000010
-  , ext_PB2 = 0b00000100
-  , ext_PC1 = 0b00001000
-  , ext_PC2 = 0b00010000
-  , ext_USB = 0b00100000
-  , ext_HAT = 0b01000000
+  , ext_PA   = 0b00000001
+  , ext_PB1  = 0b00000010
+  , ext_PB2  = 0b00000100
+  , ext_PC1  = 0b00001000
+  , ext_PC2  = 0b00010000
+  , ext_USB  = 0b00100000
+  , ext_MAIN = 0b10000000
   };
 
   class Power_Class

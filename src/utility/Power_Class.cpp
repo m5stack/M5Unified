@@ -265,7 +265,7 @@ namespace m5
       if (enable && !Axp192.isACIN() && (0 >= Axp192.getBatteryLevel()))
       { /// ACINがfalseの時(USB非接続)かつバッテリー無しの状態のときは、M-BusやPort.A等から電力を得ている状態と判断できる。;
         /// 電力を外部に供給する設定にすると、外部からの電力供給を受けられなくなり、電源を喪失するため、設定不可とする;
-        ESP_LOGD("Power","setExtPower(true) but non ACIN.");
+        ESP_LOGW("Power","setExtPower(true) but non ACIN.");
       }
       else
       {
@@ -287,6 +287,10 @@ namespace m5
       {
         if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
         else        { m5gfx::gpio_lo(GPIO_NUM_12); }
+      }
+      if (port_mask & ext_port_mask_t::ext_MAIN)
+      {
+        Axp192.setEXTEN(enable);
       }
 
     default:
