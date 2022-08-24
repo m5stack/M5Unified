@@ -33,7 +33,8 @@ namespace m5
     /// use single gpio buzzer, ( need only pin_data_out )
     bool buzzer = false;
 
-    /// use DAC speaker, ( need only pin_data_out ) ( only GPIO_NUM_25 or GPIO_NUM_26 )
+    /// use DAC speaker, ( need only pin_data_out ) ( for ESP32, only GPIO_NUM_25 or GPIO_NUM_26 )
+    /// ※ for ESP32, need `i2s_port = I2S_NUM_0`. ( DAC+I2S_NUM_1 is not available )
     bool use_dac = false;
 
     /// Zero level reference value when using DAC ( 0=Dynamic change )
@@ -237,10 +238,9 @@ namespace m5
       wav_info_t wavinfo[2]; // current/next flip info.
       size_t index = 0;
       int diff = 0;
-      volatile uint8_t volume = 64; // channel volume (not master volume)
+      volatile uint8_t volume = 255; // channel volume (not master volume)
       volatile bool flip = false;
 
-      bool liner_flip = false;
       float liner_buf[2][2] = { { 0, 0 }, { 0, 0 } };
     };
 

@@ -47,7 +47,19 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      self->Power.Axp192.setGPIO2(enabled);
+      {
+        auto cfg = self->Speaker.config();
+        if (cfg.pin_bck == GPIO_NUM_12)
+        {
+          self->Power.Axp192.setGPIO2(false);
+          if (enabled)
+          { // To prevent I2S mis-synchronization, turn off the setting once and set the BCLK pin low.
+            m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::output);
+            m5gfx::gpio_lo(GPIO_NUM_12);
+            self->Power.Axp192.setGPIO2(true);
+          }
+        }
+      }
       break;
 
     case board_t::board_M5StickC:
@@ -314,6 +326,7 @@ namespace m5
       auto mic_cfg = Mic.config();
 
       mic_cfg.over_sampling = 2;
+      mic_cfg.i2s_port = I2S_NUM_1;
       switch (_board)
       {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -321,6 +334,7 @@ namespace m5
         if (_cfg.internal_mic)
         {
           mic_cfg.pin_data_in = GPIO_NUM_34;  // M5GO bottom MIC
+          mic_cfg.i2s_port = I2S_NUM_0;
           mic_cfg.use_adc = true;    // use ADC analog input
           mic_cfg.input_offset = 192;
           mic_cfg.over_sampling = 4;
@@ -368,6 +382,7 @@ namespace m5
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
       spk_cfg.magnification = 16;
+      spk_cfg.i2s_port = I2S_NUM_1;
       switch (_board)
       {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -376,6 +391,7 @@ namespace m5
         {
           m5gfx::gpio_lo(GPIO_NUM_25);
           m5gfx::pinMode(GPIO_NUM_25, m5gfx::pin_mode_t::output);
+          spk_cfg.i2s_port = I2S_NUM_0;
           spk_cfg.use_dac = true;
           spk_cfg.pin_data_out = GPIO_NUM_25;
           spk_cfg.magnification = 8;
@@ -388,7 +404,7 @@ namespace m5
         {
           spk_cfg.buzzer = true;
           spk_cfg.pin_data_out = GPIO_NUM_2;
-          spk_cfg.magnification = 32;
+          spk_cfg.magnification = 48;
         }
         NON_BREAK;
       case board_t::board_M5StickC:
@@ -400,6 +416,7 @@ namespace m5
           m5gfx::gpio_lo(GPIO_NUM_26);
           m5gfx::pinMode(GPIO_NUM_26, m5gfx::pin_mode_t::output);
           spk_cfg.pin_data_out = GPIO_NUM_26;
+          spk_cfg.i2s_port = I2S_NUM_0;
           spk_cfg.use_dac = true;
           spk_cfg.buzzer = false;
           spk_cfg.magnification = 32;
@@ -407,8 +424,8 @@ namespace m5
         break;
 
       case board_t::board_M5Tough:
-        // The gain is set higher than Core2 here because the waterproof case reduces the sound.;
-        spk_cfg.magnification = 32;
+        // The magnification is set higher than Core2 here because the waterproof case reduces the sound.;
+        spk_cfg.magnification = 24;
         NON_BREAK;
       case board_t::board_M5StackCore2:
         if (_cfg.internal_spk)

@@ -17,11 +17,20 @@ namespace m5
     /// i2s_data_in (for mic)
     int pin_data_in = -1;
 
-    /// i2s_ws
-    int pin_ws = -1;
+    /// i2s_bclk
+    int pin_bck = I2S_PIN_NO_CHANGE;
+
+    /// i2s_mclk
+    int pin_mck = I2S_PIN_NO_CHANGE;
+
+    /// i2s_ws (lrck)
+    int pin_ws = I2S_PIN_NO_CHANGE;
 
     /// input sampling rate (Hz)
     uint32_t sample_rate = 16000;
+
+    /// use stereo output
+    bool stereo = false;
 
     /// offset correction value of ADC input value
     int input_offset = 0;
