@@ -218,6 +218,8 @@ namespace m5
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
 
 #endif
+    i2s_start(i2s_port);
+    i2s_zero_dma_buffer(i2s_port);
 
     // ステレオ出力の場合は倍率を2倍する
     const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
@@ -235,6 +237,7 @@ namespace m5
     };
     spk_i2s_state flg_i2s_started = spk_i2s_stop;
 
+
     union
     {
       int16_t surplus16 = 0;
@@ -242,6 +245,8 @@ namespace m5
     };
 
     int32_t* sound_buf32 = (int32_t*)alloca(dma_buf_len * sizeof(int32_t));
+
+    i2s_stop(i2s_port);
 
     while (self->_task_running)
     {
@@ -281,6 +286,8 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
           if (self->_cfg.use_dac)
           {
+            // flg_i2s_started = spk_i2s_stop;
+            // i2s_stop(i2s_port);
             i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
           }
 #endif
@@ -442,13 +449,13 @@ label_wav_end:
             if (out_stereo)
             {
               liner_prev[1] = liner_base[1];
-              liner_base[1] = l * ch_v;
+              liner_base[1] = r * ch_v;
             }
             else
             {
-              r += l;
+              l += r;
             }
-            liner_base[0] = r * ch_v;
+            liner_base[0] = l * ch_v;
 
             ch_diff -= spk_sample_rate_x256;
           } while (ch_diff >= 0);
