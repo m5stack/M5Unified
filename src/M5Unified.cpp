@@ -470,7 +470,6 @@ for (int i = 0; i < 0x50; ++i)
       auto mic_cfg = Mic.config();
 
       mic_cfg.over_sampling = 2;
-      mic_cfg.i2s_port = I2S_NUM_1;
       switch (_board)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
