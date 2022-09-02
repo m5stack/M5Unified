@@ -284,23 +284,18 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
-ESP_LOGE("DEBUG","setExpPower 1");
         if (enable)
         {
           // AW9523を操作して5V output ON;
           M5.In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
           // Axp2101.setReg0x20Bit0(true);
-ESP_LOGE("DEBUG","setExpPower true 2");
-
         }
         else
         {
-ESP_LOGE("DEBUG","setExpPower false 2");
           // AW9523を操作して5V output OFF;
           M5.In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
           // Axp2101.setReg0x20Bit0(false);
         }
-ESP_LOGE("DEBUG","setExpPower 3");
       }
       break;
 
