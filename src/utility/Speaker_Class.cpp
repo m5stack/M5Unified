@@ -190,19 +190,33 @@ namespace m5
 #endif
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
-    bool yn1 = (div_b > (div_a >> 1)) ? 1 : 0;
 
     dev->tx_clkm_div_conf.val = 0;
-    if (yn1) {
+    if (div_b > (div_a >> 1)) {
       dev->tx_clkm_div_conf.tx_clkm_div_yn1 = 1;
       div_b = div_a - div_b;
     }
+    int div_y = 1;
+    int div_x = 0;
     if (div_b)
     {
-      dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
-      dev->tx_clkm_div_conf.tx_clkm_div_y = div_a % div_b;
-      dev->tx_clkm_div_conf.tx_clkm_div_x = div_a / div_b - 1;
+      div_x = div_a / div_b - 1;
+      div_y = div_a % div_b;
+
+      if (div_y == 0)
+      { // div_yが0になる場合、分数成分が無視される不具合があり、
+        // 指定よりクロックが速くなってしまう。
+        // 回避策として、誤差が少なくなる設定値を導入する。
+        // これにより、誤差をクロック周期512回に1回程度のズレに抑える。;
+        div_y = 1;
+        div_b = 511;
+      }
     }
+
+    dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
+    dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
+    dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
+
     dev->tx_clkm_conf.tx_clk_sel = 2;   // PLL_160M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
