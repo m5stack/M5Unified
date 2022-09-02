@@ -229,7 +229,7 @@ namespace m5
       ((M5GFX_*)&Display)->init_with_panel(nullptr);
       return Display.getBoard();
     }
-
+public:
     struct M5GFX_ : public M5GFX
     {
       void setBoard(board_t board) { _board = board; }

@@ -218,8 +218,8 @@ namespace m5
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
 
 #endif
-    i2s_start(i2s_port);
     i2s_zero_dma_buffer(i2s_port);
+    i2s_start(i2s_port);
 
     // ステレオ出力の場合は倍率を2倍する
     const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
@@ -281,13 +281,11 @@ namespace m5
 
         if (!retry)
         {
-          flg_i2s_started = spk_i2s_stop;
-          i2s_stop(i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
           if (self->_cfg.use_dac)
           {
-            // flg_i2s_started = spk_i2s_stop;
-            // i2s_stop(i2s_port);
+            flg_i2s_started = spk_i2s_stop;
+            i2s_stop(i2s_port);
             i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
           }
 #endif
@@ -449,13 +447,13 @@ label_wav_end:
             if (out_stereo)
             {
               liner_prev[1] = liner_base[1];
-              liner_base[1] = r * ch_v;
+              liner_base[1] = l * ch_v;
             }
             else
             {
-              l += r;
+              r += l;
             }
-            liner_base[0] = l * ch_v;
+            liner_base[0] = r * ch_v;
 
             ch_diff -= spk_sample_rate_x256;
           } while (ch_diff >= 0);
@@ -631,15 +629,15 @@ label_continue_sample:
 
   void Speaker_Class::end(void)
   {
+    if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     if (!_task_running) { return; }
     _task_running = false;
+    stop();
     if (_task_handle)
     {
-      if (_task_handle) { xTaskNotifyGive(_task_handle); }
+      xTaskNotifyGive(_task_handle);
       do { vTaskDelay(1); } while (_task_handle);
     }
-    stop();
-    if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
   }
 
   void Speaker_Class::stop(void)

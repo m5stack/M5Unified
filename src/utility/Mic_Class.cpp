@@ -172,10 +172,15 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
     size_t src_idx = ~0u;
     size_t src_len = 0;
     int32_t value = 0;
-    int32_t prev_value = 0;
+    int32_t prev_value[2] = { 0, 0 };
+    bool flip = false;
+    const bool stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
+
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
 
     while (self->_task_running)
     {
@@ -234,25 +239,28 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)
         {
-          value = (value + prev_value * noise_filter) / (noise_filter + 1);
-          prev_value = value;
+          value = (value + prev_value[flip] * noise_filter) / (noise_filter + 1);
+          prev_value[flip] = value;
+          flip = stereo - flip;
         }
 
         value = value * f_gain;
 
-        if (     value < INT16_MIN) { value = INT16_MIN; }
-        else if (value > INT16_MAX) { value = INT16_MAX; }
-
         if (current_rec->is_16bit)
         {
+          if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
+          else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
           auto dst = (int16_t*)(current_rec->data);
           *dst++ = value;
           current_rec->data = dst;
         }
         else
         {
+          value = ((value + 128) >> 8) + 128;
+          if (     value < 0) { value = 0; }
+          else if (value > 255) { value = 255; }
           auto dst = (uint8_t*)(current_rec->data);
-          *dst++ = (value >> 8) + 128;
+          *dst++ = value;
           current_rec->data = dst;
         }
         value = 0;

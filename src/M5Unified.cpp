@@ -67,15 +67,10 @@ namespace m5
         auto cfg = self->Speaker.config();
         if (cfg.pin_bck == GPIO_NUM_34)
         {
-          self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-
           if (enabled)
           {
-            m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::output);
-            m5gfx::gpio_lo(GPIO_NUM_34);
             self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-delay(10);
-            /// サンプリングレートに応じてAW88298のレジスタの設定値を変える
+            /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
             static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
             size_t reg0x06_value = 0;
             size_t rate = (cfg.sample_rate + 1102) / 2205;
@@ -87,6 +82,11 @@ delay(10);
             aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
             aw88298_write_reg( 0x06, reg0x06_value );
             aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
+          }
+          else
+          {
+            aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
+            self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
           }
         }
       }
@@ -144,53 +144,53 @@ delay(10);
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Mic.config();
-        if (cfg.pin_mck != GPIO_NUM_0
-        ||  cfg.pin_bck != GPIO_NUM_34
-        ||  cfg.pin_ws != GPIO_NUM_33
-        ||  cfg.pin_data_in != GPIO_NUM_14)
+        if (cfg.pin_bck == GPIO_NUM_34)
         {
-          break;
-        }
-        if (enabled)
-        {
-          es7210_write_reg( 0x00, 0xff ); // RESET_CTL
-          es7210_write_reg( 0x00, 0x41 ); // RESET_CTL
-          es7210_write_reg( 0x01, 0x1f ); // CLK_ON_OFF
-          es7210_write_reg( 0x06, 0x00 ); // DIGITAL_PDN
-          es7210_write_reg( 0x07, 0x20 ); // ADC_OSR
-          es7210_write_reg( 0x08, 0x10 ); // MODE_CFG
-          es7210_write_reg( 0x09, 0x30 ); // TCT0_CHPINI
-          es7210_write_reg( 0x0A, 0x30 ); // TCT1_CHPINI
-          es7210_write_reg( 0x20, 0x0a ); // ADC34_HPF2
-          es7210_write_reg( 0x21, 0x2a ); // ADC34_HPF1
-          es7210_write_reg( 0x22, 0x0a ); // ADC12_HPF2
-          es7210_write_reg( 0x23, 0x2a ); // ADC12_HPF1
-
-es7210_write_reg( 0x02, 0xC1 );
-es7210_write_reg( 0x04, 0x01 );
-es7210_write_reg( 0x05, 0x00 );
-es7210_write_reg( 0x11, 0x60 );
-
-          es7210_write_reg( 0x40, 0x42 ); // ANALOG_SYS
-          es7210_write_reg( 0x41, 0x70 ); // MICBIAS12
-          es7210_write_reg( 0x42, 0x70 ); // MICBIAS34
-
-          es7210_write_reg( 0x43, 0x1B ); // MIC1_GAIN
-          es7210_write_reg( 0x44, 0x1B ); // MIC2_GAIN
-          es7210_write_reg( 0x45, 0x00 ); // MIC3_GAIN
-          es7210_write_reg( 0x46, 0x00 ); // MIC4_GAIN
-          es7210_write_reg( 0x47, 0x00 ); // MIC1_LP
-          es7210_write_reg( 0x48, 0x00 ); // MIC2_LP
-          es7210_write_reg( 0x49, 0x00 ); // MIC3_LP
-          es7210_write_reg( 0x4A, 0x00 ); // MIC4_LP
-          es7210_write_reg( 0x4B, 0x00 ); // MIC12_PDN
-          es7210_write_reg( 0x4C, 0xFF ); // MIC34_PDN
-
-          es7210_write_reg( 0x01, 0x14 ); // CLK_ON_OFF
-        }
-        else
-        {
-        }
+          es7210_write_reg(0x00, 0xFF); // RESET_CTL
+          struct __attribute__((packed)) reg_data_t
+          {
+            uint8_t reg;
+            uint8_t value;
+          };
+          if (enabled)
+          {
+            static constexpr reg_data_t data[] =
+            {
+              { 0x00, 0x41 }, // RESET_CTL
+              { 0x01, 0x1f }, // CLK_ON_OFF
+              { 0x06, 0x00 }, // DIGITAL_PDN
+              { 0x07, 0x20 }, // ADC_OSR
+              { 0x08, 0x10 }, // MODE_CFG
+              { 0x09, 0x30 }, // TCT0_CHPINI
+              { 0x0A, 0x30 }, // TCT1_CHPINI
+              { 0x20, 0x0a }, // ADC34_HPF2
+              { 0x21, 0x2a }, // ADC34_HPF1
+              { 0x22, 0x0a }, // ADC12_HPF2
+              { 0x23, 0x2a }, // ADC12_HPF1
+              { 0x02, 0xC1 },
+              { 0x04, 0x01 },
+              { 0x05, 0x00 },
+              { 0x11, 0x60 },
+              { 0x40, 0x42 }, // ANALOG_SYS
+              { 0x41, 0x70 }, // MICBIAS12
+              { 0x42, 0x70 }, // MICBIAS34
+              { 0x43, 0x1B }, // MIC1_GAIN
+              { 0x44, 0x1B }, // MIC2_GAIN
+              { 0x45, 0x00 }, // MIC3_GAIN
+              { 0x46, 0x00 }, // MIC4_GAIN
+              { 0x47, 0x00 }, // MIC1_LP
+              { 0x48, 0x00 }, // MIC2_LP
+              { 0x49, 0x00 }, // MIC3_LP
+              { 0x4A, 0x00 }, // MIC4_LP
+              { 0x4B, 0x00 }, // MIC12_PDN
+              { 0x4C, 0xFF }, // MIC34_PDN
+              { 0x01, 0x14 }, // CLK_ON_OFF
+            };
+            for (auto& d: data)
+            {
+              es7210_write_reg(d.reg, d.value);
+            }
+          }
 /*
 uint8_t buf[0x50];
 for (int i = 0; i < 0x50; ++i)
@@ -204,6 +204,7 @@ for (int i = 0; i < 0x50; ++i)
   }
 }
 //*/
+        }
       }
       break;
 
@@ -470,6 +471,7 @@ for (int i = 0; i < 0x50; ++i)
       auto mic_cfg = Mic.config();
 
       mic_cfg.over_sampling = 2;
+      mic_cfg.i2s_port = I2S_NUM_0;
       switch (_board)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -479,7 +481,6 @@ for (int i = 0; i < 0x50; ++i)
           mic_cfg.magnification = 1;
           mic_cfg.over_sampling = 1;
           mic_cfg.pin_mck = GPIO_NUM_0;
-// mic_cfg.pin_mck = -1;
           mic_cfg.pin_bck = GPIO_NUM_34;
           mic_cfg.pin_ws = GPIO_NUM_33;
           mic_cfg.pin_data_in = GPIO_NUM_14;
@@ -551,7 +552,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_bck = GPIO_NUM_34;
           spk_cfg.pin_ws = GPIO_NUM_33;
           spk_cfg.pin_data_out = GPIO_NUM_13;
-          spk_cfg.magnification = 2;
+          spk_cfg.magnification = 4;
           spk_cfg.i2s_port = I2S_NUM_1;
         }
         break;
@@ -828,20 +829,30 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
-    if (Power.Axp2101.isEnabled() && _cfg.pmic_button)
+    switch (_board)
     {
-      Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
-      bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
-      if (read_axp || BtnPWR.getState())
+    case board_t::board_M5AtomS3LCD:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
+      break;
+
+    default:
+
+      if (Power.Axp2101.isEnabled() && _cfg.pmic_button)
       {
-        switch (Power.Axp2101.getPekPress())
+        Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
+        bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
+        if (read_axp || BtnPWR.getState())
         {
-        case 0: break;
-        case 2:   state = Button_Class::button_state_t::state_clicked; break;
-        default:  state = Button_Class::button_state_t::state_hold;    break;
+          switch (Power.Axp2101.getPekPress())
+          {
+          case 0: break;
+          case 2:   state = Button_Class::button_state_t::state_clicked; break;
+          default:  state = Button_Class::button_state_t::state_hold;    break;
+          }
+          BtnPWR.setState(ms, state);
         }
-        BtnPWR.setState(ms, state);
       }
+      break;
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
