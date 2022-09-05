@@ -461,13 +461,13 @@ label_wav_end:
             if (out_stereo)
             {
               liner_prev[1] = liner_base[1];
-              liner_base[1] = l * ch_v;
+              liner_base[1] = r * ch_v;
             }
             else
             {
-              r += l;
+              l += r;
             }
-            liner_base[0] = r * ch_v;
+            liner_base[0] = l * ch_v;
 
             ch_diff -= spk_sample_rate_x256;
           } while (ch_diff >= 0);
