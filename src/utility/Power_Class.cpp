@@ -307,12 +307,12 @@ namespace m5
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      if (enable && Axp192.isVBUS())
-      { /// When VBUS is true, it is assumed that 5V input is received from M-Bus or PortA, etc.
-        /// and power supply from Core to the outside is prohibited.
-        /// ※ If there is no power source other than VBUS and an attempt is made to supply power externally,
-        ///    no input can be obtained from VBUS and Core will be powered down.
-        ESP_LOGW("Power","setExtPower(true), Deny output due to presence of VBUS input");
+      if (enable && !Axp192.isACIN() && (8 >= Axp192.getBatteryLevel()))
+      {
+        // If ACIN is false and the remaining battery charge is low,
+        // power supply from Core to the outside is prohibited.
+        // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
+        ESP_LOGW("Power","setExtPower(true) is canceled.");
         break;
       }
       else
