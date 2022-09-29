@@ -307,10 +307,13 @@ namespace m5
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      if (enable && !Axp192.isACIN() && (0 >= Axp192.getBatteryLevel()))
-      { /// ACINがfalseの時(USB非接続)かつバッテリー無しの状態のときは、M-BusやPort.A等から電力を得ている状態と判断できる。;
-        /// 電力を外部に供給する設定にすると、外部からの電力供給を受けられなくなり、電源を喪失するため、設定不可とする;
-        ESP_LOGW("Power","setExtPower(true) but non ACIN.");
+      if (enable && Axp192.isVBUS())
+      { /// When VBUS is true, it is assumed that 5V input is received from M-Bus or PortA, etc.
+        /// and power supply from Core to the outside is prohibited.
+        /// ※ If there is no power source other than VBUS and an attempt is made to supply power externally,
+        ///    no input can be obtained from VBUS and Core will be powered down.
+        ESP_LOGW("Power","setExtPower(true), Deny output due to presence of VBUS input");
+        break;
       }
       else
       {
