@@ -63,7 +63,7 @@ void setup(void)
 
   time_t t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  /// Synchronization in seconds
-  M5.Rtc.setDateTime( localtime( &t ) );
+  M5.Rtc.setDateTime( gmtime( &t ) );
 
 //*/
 
@@ -99,7 +99,8 @@ void loop(void)
 
  /// ESP32 internal timer
   auto t = time(nullptr);
-  auto tm = localtime(&t);
+  auto tm = gmtime(&t);
+//auto tm = localtime(&t); // for local timezone.
 
   Serial.printf("ESP32:%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n",
         tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
