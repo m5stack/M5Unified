@@ -22,6 +22,7 @@
 
 namespace m5
 {
+#if defined ( ESP_PLATFORM )
 #if defined (ESP_IDF_VERSION_VAL)
  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
   #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_STAND_I2S)
@@ -44,14 +45,11 @@ namespace m5
   uint32_t Mic_Class::_calc_rec_rate(void) const
   {
     int rate = (_cfg.sample_rate * _cfg.over_sampling);
-    if (_cfg.use_adc) { rate *= 1.004f; }
     return rate;
   }
 
   esp_err_t Mic_Class::_setup_i2s(void)
   {
-    i2s_driver_uninstall(_cfg.i2s_port);
-
     if (_cfg.pin_data_in  < 0) { return ESP_FAIL; }
 
     SAMPLE_RATE_TYPE sample_rate = _calc_rec_rate();
@@ -61,27 +59,39 @@ namespace m5
  ・I2S_MODE_ADC_BUILT_INを使用せずに初期化を行う
  ・最後にI2S0のレジスタを操作してADCモードを有効にする。
 */
-    if (_cfg.use_adc) { sample_rate >>= 4; }
-
+    bool use_pdm = (_cfg.pin_bck < 0);
+    if (_cfg.use_adc) { sample_rate >>= 4; use_pdm = false;}
+ESP_LOGV("Mic","sampling rate:%d", sample_rate);
     i2s_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_config_t));
-    i2s_config.mode                 = _cfg.use_adc
-                                    ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX )
-                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) ); // 0x1<<6 is I2S_MODE_PDM
-                                 // : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
+    i2s_config.mode                 = use_pdm
+                                //  ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
+                                    ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) ) // 0x1<<6 is I2S_MODE_PDM
+                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX );
     i2s_config.sample_rate          = sample_rate;
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
-    i2s_config.channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT;
+    i2s_config.channel_format       = _cfg.stereo ? I2S_CHANNEL_FMT_RIGHT_LEFT : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
 
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 1)
+    pin_config.mck_io_num     = _cfg.pin_mck;
+ #endif
+#endif
+    pin_config.bck_io_num     = _cfg.pin_bck;
     pin_config.ws_io_num      = _cfg.pin_ws;
     pin_config.data_in_num    = _cfg.pin_data_in;
 
-    esp_err_t err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
+    esp_err_t err;
+    if (ESP_OK != (err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr)))
+    {
+      i2s_driver_uninstall(_cfg.i2s_port);
+      err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
+    }
     if (err != ESP_OK) { return err; }
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -151,6 +161,7 @@ namespace m5
   void Mic_Class::mic_task(void* args)
   {
     auto self = (Mic_Class*)args;
+    i2s_start(self->_cfg.i2s_port);
 
     int oversampling = self->_cfg.over_sampling;
     if (     oversampling < 1) { oversampling = 1; }
@@ -161,10 +172,15 @@ namespace m5
     size_t src_idx = ~0u;
     size_t src_len = 0;
     int32_t value = 0;
-    int32_t prev_value = 0;
+    int32_t prev_value[2] = { 0, 0 };
+    bool flip = false;
+    const bool stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
+
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
 
     while (self->_task_running)
     {
@@ -223,25 +239,28 @@ namespace m5
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)
         {
-          value = (value + prev_value * noise_filter) / (noise_filter + 1);
-          prev_value = value;
+          value = (value + prev_value[flip] * noise_filter) / (noise_filter + 1);
+          prev_value[flip] = value;
+          flip = stereo - flip;
         }
 
         value = value * f_gain;
 
-        if (     value < INT16_MIN) { value = INT16_MIN; }
-        else if (value > INT16_MAX) { value = INT16_MAX; }
-
         if (current_rec->is_16bit)
         {
+          if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
+          else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
           auto dst = (int16_t*)(current_rec->data);
           *dst++ = value;
           current_rec->data = dst;
         }
         else
         {
+          value = ((value + 128) >> 8) + 128;
+          if (     value < 0) { value = 0; }
+          else if (value > 255) { value = 255; }
           auto dst = (uint8_t*)(current_rec->data);
-          *dst++ = (value >> 8) + 128;
+          *dst++ = value;
           current_rec->data = dst;
         }
         value = 0;
@@ -308,6 +327,7 @@ namespace m5
     }
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
+    i2s_driver_uninstall(_cfg.i2s_port);
   }
 
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
@@ -329,4 +349,5 @@ namespace m5
     }
     return true;
   }
+#endif
 }

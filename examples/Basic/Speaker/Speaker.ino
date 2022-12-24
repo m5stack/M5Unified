@@ -191,14 +191,14 @@ void setup(void)
   M5.Display.fillScreen(TFT_DARKGRAY);
   M5.Display.print("SOUND TEST");
 
-  /// The setVolume function can be set the master volume in the range of 0-255.
+  /// The setVolume function can be set the master volume in the range of 0-255. (default : 64)
   M5.Speaker.setVolume(64);
 
-  /// The setAllChannelVolume function can be set the all virtual channel volume in the range of 0-255.
-  M5.Speaker.setAllChannelVolume(64);
+  /// The setAllChannelVolume function can be set the all virtual channel volume in the range of 0-255. (default : 255)
+  M5.Speaker.setAllChannelVolume(255);
 
-  /// The setChannelVolume function can be set the specified virtual channel volume in the range of 0-255.
-  M5.Speaker.setChannelVolume(0, 64);
+  /// The setChannelVolume function can be set the specified virtual channel volume in the range of 0-255. (default : 255)
+  M5.Speaker.setChannelVolume(0, 255);
 
   /// play 2000Hz tone sound, 100 msec. 
   M5.Speaker.tone(2000, 100);
@@ -236,7 +236,7 @@ void setup(void)
   delay(500);
 
   M5.Speaker.setVolume(0);
-  M5.Speaker.tone(220);  // tone 220Hz sound output. (Keeps output until it stops.)
+  M5.Speaker.tone(880);  // tone 880Hz sound output. (Keeps output until it stops.)
   for (int i = 0; i <= 64; i++)
   {
     M5.Speaker.setVolume(i); // Volume can be changed during sound output.
@@ -296,8 +296,8 @@ void loop(void)
 {
   if (!M5.Display.displayBusy())
   {
-    static uint8_t prev_channelvolume;
-    static uint8_t prev_mastervolume;
+    static int32_t prev_channelvolume;
+    static int32_t prev_mastervolume;
     int32_t m_vol = (M5.Speaker.getVolume()         * (M5.Display.height() - menu_y)) >> 8;
     int32_t c_vol = (M5.Speaker.getChannelVolume(0) * (M5.Display.height() - menu_y)) >> 8;
     if (prev_mastervolume  != m_vol

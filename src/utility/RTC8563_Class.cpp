@@ -246,7 +246,7 @@ namespace m5
     writeRegister8(0x01, 0x00);
   }
 
-  void RTC8563_Class::setSystemTimeFromRtc(void)
+  void RTC8563_Class::setSystemTimeFromRtc(timezone* tz)
   {
     rtc_datetime_t dt;
     if (getDateTime(&dt))
@@ -262,7 +262,7 @@ namespace m5
       timeval now;
       now.tv_sec = mktime(&t_st);
       now.tv_usec = 0;
-      settimeofday(&now, nullptr);
+      settimeofday(&now, tz);
     }
   }
 }

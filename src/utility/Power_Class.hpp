@@ -6,6 +6,7 @@
 
 #include "I2C_Class.hpp"
 #include "AXP192_Class.hpp"
+#include "AXP2101_Class.hpp"
 #include "IP5306_Class.hpp"
 #include "RTC8563_Class.hpp"
 
@@ -17,13 +18,13 @@ namespace m5
 
   enum ext_port_mask_t
   { ext_none = 0
-  , ext_PA  = 0b00000001
-  , ext_PB1 = 0b00000010
-  , ext_PB2 = 0b00000100
-  , ext_PC1 = 0b00001000
-  , ext_PC2 = 0b00010000
-  , ext_USB = 0b00100000
-  , ext_HAT = 0b01000000
+  , ext_PA   = 0b00000001
+  , ext_PB1  = 0b00000010
+  , ext_PB2  = 0b00000100
+  , ext_PC1  = 0b00001000
+  , ext_PC2  = 0b00010000
+  , ext_USB  = 0b00100000
+  , ext_MAIN = 0b10000000
   };
 
   class Power_Class
@@ -36,6 +37,7 @@ namespace m5
     , pmic_adc
     , pmic_axp192
     , pmic_ip5306
+    , pmic_axp2101
     };
 
     enum is_charging_t
@@ -107,8 +109,18 @@ namespace m5
 
     pmic_t getType(void) const { return _pmic; }
 
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    AXP2101_Class Axp2101;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+#else
+
     AXP192_Class Axp192;
     IP5306_Class Ip5306;
+
+#endif
 
   private:
     void _powerOff(bool withTimer);

@@ -5,8 +5,19 @@
 #define __M5_Mic_Class_H__
 
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
-#include <driver/i2s.h>
+#include <soc/i2s_struct.h>
+
+#if __has_include(<driver/i2s_std.h>)
+ #include <driver/i2s_std.h>
+#else
+ #include <driver/i2s.h>
+#endif
+
+#ifndef I2S_PIN_NO_CHANGE
+#define I2S_PIN_NO_CHANGE (-1)
+#endif
 
 namespace m5
 {
@@ -17,11 +28,20 @@ namespace m5
     /// i2s_data_in (for mic)
     int pin_data_in = -1;
 
-    /// i2s_ws
-    int pin_ws = -1;
+    /// i2s_bclk
+    int pin_bck = I2S_PIN_NO_CHANGE;
+
+    /// i2s_mclk
+    int pin_mck = I2S_PIN_NO_CHANGE;
+
+    /// i2s_ws (lrck)
+    int pin_ws = I2S_PIN_NO_CHANGE;
 
     /// input sampling rate (Hz)
     uint32_t sample_rate = 16000;
+
+    /// use stereo output
+    bool stereo = false;
 
     /// offset correction value of ADC input value
     int input_offset = 0;

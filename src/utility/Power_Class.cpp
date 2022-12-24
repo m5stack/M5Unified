@@ -25,7 +25,10 @@
 
 namespace m5
 {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+  static constexpr int aw9523_i2c_addr = 0x58;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr int CoreInk_POWER_HOLD_PIN = 12;
   static constexpr int M5Paper_POWER_HOLD_PIN =  2;
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
@@ -37,7 +40,31 @@ namespace m5
   {
     _pmic = pmic_t::pmic_unknown;
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    /// setup power management ic
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_M5StackCoreS3:
+      _pmic = Power_Class::pmic_t::pmic_axp2101;
+      Axp2101.begin();
+      static constexpr std::uint8_t reg_data_array[] =
+      { 0x90, 0xBF  // LDOS ON/OFF control 0
+      , 0x92, 18 -5 // ALDO1 set to 1.8v // for AW88298
+      , 0x93, 33 -5 // ALDO2 set to 3.3v // for ES7210
+      , 0x94, 33 -5 // ALDO3 set to 3.3v // for camera
+      , 0x95, 33 -5 // ALDO3 set to 3.3v // for TF card slot
+// , 0x10, 0x30
+, 0x69, 0x11
+      };
+      Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      break;
+    }
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -216,6 +243,7 @@ namespace m5
       case board_t::board_M5StackCore2:
         Axp192.setLDO2(3300); // LCD + SD peripheral power supply
         Axp192.setLDO3(0);    // VIB_MOTOR STOP
+        Axp192.setGPIO2(false);   // SPEAKER STOP
         Axp192.writeRegister8(0x9A, 255);  // PWM 255 (LED OFF)
         Axp192.writeRegister8(0x92, 0x02); // GPIO1 PWM
         Axp192.setChargeCurrent(390); // Core2 battery = 390mAh
@@ -223,6 +251,7 @@ namespace m5
 
       case board_t::board_M5Tough:
         Axp192.setLDO2(3300); // LCD + SD peripheral
+        Axp192.setGPIO2(false);   // SPEAKER STOP
         Axp192.setDCDC3(0);
         break;
 
@@ -250,9 +279,27 @@ namespace m5
 
   void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StackCoreS3:
+      {
+        if (enable)
+        {
+          // AW9523を操作して5V output ON;
+          M5.In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
+          // Axp2101.setReg0x20Bit0(true);
+        }
+        else
+        {
+          // AW9523を操作して5V output OFF;
+          M5.In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
+          // Axp2101.setReg0x20Bit0(false);
+        }
+      }
+      break;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       if (enable) { m5gfx::gpio_hi(M5Paper_EXT5V_ENABLE_PIN); }
       else        { m5gfx::gpio_lo(M5Paper_EXT5V_ENABLE_PIN); }
@@ -260,7 +307,18 @@ namespace m5
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+      if (enable && !Axp192.isACIN() && (8 >= Axp192.getBatteryLevel()))
+      {
+        // If ACIN is false and the remaining battery charge is low,
+        // power supply from Core to the outside is prohibited.
+        // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
+        ESP_LOGW("Power","setExtPower(true) is canceled.");
+        break;
+      }
+      else
+      {
+        Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+      }
       NON_BREAK;
 
     case board_t::board_M5StickC:
@@ -278,11 +336,15 @@ namespace m5
         if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
         else        { m5gfx::gpio_lo(GPIO_NUM_12); }
       }
+      if (port_mask & ext_port_mask_t::ext_MAIN)
+      {
+        Axp192.setEXTEN(enable);
+      }
+#endif
 
     default:
       break;
     }
-#endif
   }
 
   void Power_Class::setLed(uint8_t brightness)
@@ -335,6 +397,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
     case pmic_t::pmic_adc:
       if (_pwrHoldPin >= 0)
       {
@@ -345,10 +409,12 @@ namespace m5
     case pmic_t::pmic_axp192:
       Axp192.powerOff();
       break;
-    
+
     case pmic_t::pmic_ip5306:
       Ip5306.setPowerBoostKeepOn(withTimer);
       break;
+
+#endif
 
     case pmic_t::pmic_unknown:
     default:
@@ -367,7 +433,7 @@ namespace m5
     {
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      /// RTCタイマーは指定時間になるとGPIO35をLOWにすることで通知を行うが、
+      /// RTCタイマーは指定時間になるとGPIO35をLOWにすることで通知を行うが、;
       /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。;
       /// そのため、同じくGPIO35に接続されているMPU6886のINTピンを利用してプルアップを実施する。;
       /// IMUの種類がMPU6886でない個体は対応できない (SH200Qではできない);
@@ -397,10 +463,13 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 
 #else
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_pmic == pmic_t::pmic_ip5306)
     {
       Ip5306.setPowerBoostKeepOn(true);
     }
+#endif
 
     if (touch_wakeup && _wakeupPin >= 0)
     {
@@ -428,10 +497,13 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 
 #else
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_pmic == pmic_t::pmic_ip5306)
     {
       Ip5306.setPowerBoostKeepOn(true);
     }
+#endif
 
     if (touch_wakeup && _wakeupPin >= 0)
     {
@@ -504,12 +576,22 @@ namespace m5
     float volt;
     switch (_pmic)
     {
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       return Ip5306.getBatteryLevel();
 
     case pmic_t::pmic_axp192:
       volt = Axp192.getBatteryVoltage() * 1000;
       break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_axp2101:
+      return Axp2101.getBatteryLevel();
+      break;
+
+#endif
 
     case pmic_t::pmic_adc:
       volt = getBatteryAdcRaw(_batAdc) * _adc_ratio;
@@ -530,6 +612,7 @@ namespace m5
   {
     switch (_pmic)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       Ip5306.setBatteryCharge(enable);
       return;
@@ -537,6 +620,14 @@ namespace m5
     case pmic_t::pmic_axp192:
       Axp192.setBatteryCharge(enable);
       return;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_axp2101:
+      Axp2101.setBatteryCharge(enable);
+      break;
+
+#endif
 
     default:
       return;
@@ -547,6 +638,7 @@ namespace m5
   {
     switch (_pmic)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       Ip5306.setChargeCurrent(max_mA);
       return;
@@ -554,6 +646,14 @@ namespace m5
     case pmic_t::pmic_axp192:
       Axp192.setChargeCurrent(max_mA);
       return;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_axp2101:
+      Axp2101.setChargeCurrent(max_mA);
+      break;
+
+#endif
 
     default:
       return;
@@ -564,6 +664,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
     case pmic_t::pmic_ip5306:
       Ip5306.setChargeVoltage(max_mV);
       return;
@@ -571,6 +673,14 @@ namespace m5
     case pmic_t::pmic_axp192:
       Axp192.setChargeVoltage(max_mV);
       return;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_axp2101:
+      Axp2101.setChargeVoltage(max_mV);
+      break;
+
+#endif
 
     default:
       return;
@@ -581,11 +691,20 @@ namespace m5
   {
     switch (_pmic)
     {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
     case pmic_t::pmic_ip5306:
       return Ip5306.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
     case pmic_t::pmic_axp192:
       return Axp192.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    // case pmic_t::pmic_axp2101:
+    //   return Axp2101.getChargeDirection() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+
+#endif
 
     default:
       return is_charging_t::charge_unknown;

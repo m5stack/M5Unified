@@ -552,7 +552,7 @@ void gfxLoop(LGFX_Device* gfx)
   if (!gfx->displayBusy())
   { // draw volume bar
     static int px;
-    uint8_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
+    uint8_t v = M5.Speaker.getVolume();
     int x = v * (gfx->width()) >> 8;
     if (px != x)
     {
@@ -654,7 +654,7 @@ void loop(void)
   }
   if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed())
   {
-    size_t v = M5.Speaker.getChannelVolume(m5spk_virtual_channel);
+    size_t v = M5.Speaker.getVolume();
     int add = (M5.BtnB.isPressed()) ? -1 : 1;
     if (M5.BtnA.isHolding())
     {
@@ -663,7 +663,7 @@ void loop(void)
     v += add;
     if (v <= 255)
     {
-      M5.Speaker.setChannelVolume(m5spk_virtual_channel, v);
+      M5.Speaker.setVolume(v);
     }
   }
 }

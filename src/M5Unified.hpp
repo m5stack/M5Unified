@@ -36,6 +36,7 @@
 #include "utility/Speaker_Class.hpp"
 #include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
+#include "utility/Log_Class.hpp"
 
 #include <memory>
 
@@ -139,6 +140,7 @@ namespace m5
     M5GFX &Lcd = Display;
 
     IMU_Class Imu;
+    Log_Class Log;
     Power_Class Power;
     RTC8563_Class Rtc;
     Touch_Class Touch;
@@ -191,10 +193,16 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (_board == board_t::board_M5ATOM)
       {
-        auto dsp = new M5AtomDisplay;
+ESP_LOGD("M5Unified","check AtomDisplay");
+        auto dsp = new M5AtomDisplay();
         _ex_display.reset(dsp);
-        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
+        // if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
+        if (dsp->init())
         {
+          Display.setPanel(dsp->getPanel());
+          (lgfx::LGFX_Device)Display = *(lgfx::LGFX_Device*)dsp;
+          Display.init();
+ESP_LOGD("M5Unified","use AtomDisplay");
           return dsp->getBoard();
         }
       }
@@ -227,7 +235,7 @@ namespace m5
       ((M5GFX_*)&Display)->init_with_panel(nullptr);
       return Display.getBoard();
     }
-
+public:
     struct M5GFX_ : public M5GFX
     {
       void setBoard(board_t board) { _board = board; }

@@ -2,6 +2,8 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "SH200Q_Class.hpp"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 namespace m5
 {

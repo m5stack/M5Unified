@@ -33,7 +33,8 @@ namespace m5
     /// use single gpio buzzer, ( need only pin_data_out )
     bool buzzer = false;
 
-    /// use DAC speaker, ( need only pin_data_out ) ( only GPIO_NUM_25 or GPIO_NUM_26 )
+    /// use DAC speaker, ( need only pin_data_out ) ( for ESP32, only GPIO_NUM_25 or GPIO_NUM_26 )
+    /// ※ for ESP32, need `i2s_port = I2S_NUM_0`. ( DAC+I2S_NUM_1 is not available )
     bool use_dac = false;
 
     /// Zero level reference value when using DAC ( 0=Dynamic change )
@@ -144,6 +145,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
+    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -162,6 +165,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
+    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, false, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -180,6 +185,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
+    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
@@ -231,10 +238,9 @@ namespace m5
       wav_info_t wavinfo[2]; // current/next flip info.
       size_t index = 0;
       int diff = 0;
-      volatile uint8_t volume = 64; // channel volume (not master volume)
+      volatile uint8_t volume = 255; // channel volume (not master volume)
       volatile bool flip = false;
 
-      bool liner_flip = false;
       float liner_buf[2][2] = { { 0, 0 }, { 0, 0 } };
     };
 
