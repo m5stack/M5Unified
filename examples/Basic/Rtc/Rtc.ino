@@ -3,15 +3,26 @@
  #define WIFI_SSID     "YOUR WIFI SSID NAME"
  #define WIFI_PASSWORD "YOUR WIFI PASSWORD"
  #define NTP_TIMEZONE  "JST-9"
- #define NTP_SERVER1   "ntp.nict.jp"
- #define NTP_SERVER2   "ntp.jst.mfeed.ad.jp"
- #define NTP_SERVER3   ""
+ #define NTP_SERVER1   "0.pool.ntp.org"
+ #define NTP_SERVER2   "1.pool.ntp.org"
+ #define NTP_SERVER3   "2.pool.ntp.org"
 
  #include <WiFi.h>
 
+// Different versions of the framework have different SNTP header file names and availability.
+ #if __has_include (<esp_sntp.h>)
+  #include <esp_sntp.h>
+  #define SNTP_ENABLED 1
+ #elif __has_include (<sntp.h>)
+  #include <sntp.h>
+  #define SNTP_ENABLED 1
+ #endif
+
 #endif
 
-#include <esp_sntp.h>
+#ifndef SNTP_ENABLED
+#define SNTP_ENABLED 0
+#endif
 
 #include <M5Unified.h>
 
@@ -41,7 +52,8 @@ void setup(void)
 //*/
 
 
-/* /// setup RTC ( NTP auto setting )
+#if SNTP_ENABLED
+/// setup RTC ( NTP auto setting )
 
   M5.Display.print("WiFi:");
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
@@ -65,7 +77,7 @@ void setup(void)
   while (t > time(nullptr));  /// Synchronization in seconds
   M5.Rtc.setDateTime( gmtime( &t ) );
 
-//*/
+#endif
 
 }
 
