@@ -12,7 +12,7 @@
  - M5Stack CoreInk
  - M5Station
  - M5Paper
- - M5ATOM Lite / Matrix / ECHO / PSRAM / U
+ - M5ATOM Lite / Matrix / ECHO / PSRAM / U / S3
  - M5STAMP PICO / C3 / C3U
 
 ## Support device (external display)
@@ -64,25 +64,65 @@
 
 
 ### ESP32C3 GPIO list
-|                    |M5Stamp<BR>C3                   |M5Stamp<BR>C3U                  |
-|:------------------:|:------------------------------:|:------------------------------:|
-|GPIO 0              |`PORT.A`<BR>**I2C0SCL**         |`PORT.A`<BR>**I2C_SCL**         |
-|GPIO 1              |`PORT.A`<BR>**I2C0SDA**         |`PORT.A`<BR>**I2C_SDA**         |
-|GPIO 2              |**RGB LED**                     |**RGB LED**                     |
-|GPIO 3              |**BTN_A**                       |`Bus`                           |
-|GPIO 4              |`Bus`                           |`Bus`                           |
-|GPIO 5              |`Bus`                           |`Bus`                           |
-|GPIO 6              |`Bus`                           |`Bus`                           |
-|GPIO 7              |`Bus`                           |`Bus`                           |
-|GPIO 8              |`Bus`                           |`Bus`                           |
-|GPIO 9              | ---                            |**BTN_A**                       |
-|GPIO10              |`Bus`                           |`Bus`                           |
-|GPIO18              |`PORT.U`<BR>**D-**              |`USB`<BR>`PORT.U`<BR>**D-**     |
-|GPIO19              |`PORT.U`<BR>**D+**              |`USB`<BR>`PORT.U`<BR>**D+**     |
-|GPIO20              |`USB`<BR>**Serial**             |`Bus`<BR>                       |
-|GPIO21              |`USB`<BR>**Serial**             |`Bus`<BR>                       |
-|                    |M5Stamp<BR>C3                   |M5Stamp<BR>C3U                  |
+|                    |M5Stamp<BR>C3           |M5Stamp<BR>C3U                  |
+|:------------------:|:----------------------:|:------------------------------:|
+|GPIO 0              |`PORT.A`<BR>**I2C0SCL** |`PORT.A`<BR>**I2C_SCL**         |
+|GPIO 1              |`PORT.A`<BR>**I2C0SDA** |`PORT.A`<BR>**I2C_SDA**         |
+|GPIO 2              |**RGB LED**             |**RGB LED**                     |
+|GPIO 3              |**BTN_A**               |`Bus`                           |
+|GPIO 4              |`Bus`                   |`Bus`                           |
+|GPIO 5              |`Bus`                   |`Bus`                           |
+|GPIO 6              |`Bus`                   |`Bus`                           |
+|GPIO 7              |`Bus`                   |`Bus`                           |
+|GPIO 8              |`Bus`                   |`Bus`                           |
+|GPIO 9              | ---                    |**BTN_A**                       |
+|GPIO10              |`Bus`                   |`Bus`                           |
+|GPIO18              |`PORT.U`<BR>**D-**      |`USB`<BR>`PORT.U`<BR>**D-**     |
+|GPIO19              |`PORT.U`<BR>**D+**      |`USB`<BR>`PORT.U`<BR>**D+**     |
+|GPIO20              |`USB`<BR>**Serial**     |`Bus`<BR>                       |
+|GPIO21              |`USB`<BR>**Serial**     |`Bus`<BR>                       |
+|                    |M5Stamp<BR>C3           |M5Stamp<BR>C3U                  |
 
+
+### ESP32S3 GPIO list
+|                    |M5ATOM<BR>S3             |                    |
+|:------------------:|:-----------------------:|:------------------:|
+|GPIO 0              | ---                     |GPIO 0              |
+|GPIO 1              |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
+|GPIO 2              |`PORT.A`<BR>**I2C0_SDA** |GPIO 2              |
+|GPIO 3              |vdd3v3                   |GPIO 3              |
+|GPIO 4              |**InfraRed**             |GPIO 4              |
+|GPIO 5              |`Bus`                    |GPIO 5              |
+|GPIO 6              |`Bus`                    |GPIO 6              |
+|GPIO 7              |`Bus`                    |GPIO 7              |
+|GPIO 8              |`Bus`                    |GPIO 8              |
+|GPIO 9              | ---                     |GPIO 9              |
+|GPIO10              | ---                     |GPIO10              |
+|GPIO11              | ---                     |GPIO11              |
+|GPIO13              | ---                     |GPIO13              |
+|GPIO14              | ---                     |GPIO14              |
+|GPIO15              |**LCD_CS**               |GPIO15              |
+|GPIO16              |**LCD_BL**               |GPIO16              |
+|GPIO17              |**LCD_SCLK**             |GPIO17              |
+|GPIO18              | ---                     |GPIO18              |
+|GPIO19              |`USB`<BR>**D--**         |GPIO19              |
+|GPIO20              |`USB`<BR>**D++**         |GPIO20              |
+|GPIO21              |**LCD_MOSI**             |GPIO21              |
+|GPIO33              |**LCD_DC**               |GPIO33              |
+|GPIO34              |**LCD_RST**              |GPIO34              |
+|GPIO35              |**RGB LED**              |GPIO35              |
+|GPIO36              | ---                     |GPIO36              |
+|GPIO37              | ---                     |GPIO37              |
+|GPIO38              |`Bus`<BR>**I2C1_SDA**    |GPIO38              |
+|GPIO39              |`Bus`<BR>**I2C1_SCL**    |GPIO39              |
+|GPIO40              | ---                     |GPIO40              |
+|GPIO41              |**BTN_A**                |GPIO41              |
+|GPIO42              | ---                     |GPIO42              |
+|GPIO43              | ---                     |GPIO43              |
+|GPIO44              | ---                     |GPIO44              |
+|GPIO45              | ---                     |GPIO45              |
+|GPIO46              | ---                     |GPIO46              |
+|                    |M5ATOM<BR>S3             |                    |
 
 ### AXP192 IO list
 |              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
@@ -222,6 +262,21 @@
   <TD><IMG src="docs/img/pin_def_atom_echo.svg"></TD>
   <TD><IMG src="docs/img/pin_def_atom_psram.svg"></TD>
   <TD><IMG src="docs/img/pin_def_atom_u.svg"></TD>
+ </TR>
+</TABLE>
+
+<TABLE>
+ <TR>
+  <TH></TH>
+  <TH>ATOM<BR>S3</TH>
+ </TR>
+ <TR align="center">
+  <TD>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_atom_s3_porta.svg" title="G,V,2,1"></TD>
+ </TR>
+ <TR align="center">
+  <TD>Bus</TD>
+  <TD><IMG src="docs/img/pin_def_atom_s3.svg"></TD>
  </TR>
 </TABLE>
 
