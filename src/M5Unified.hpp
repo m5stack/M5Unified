@@ -193,10 +193,16 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (_board == board_t::board_M5ATOM)
       {
-        auto dsp = new M5AtomDisplay;
+ESP_LOGD("M5Unified","check AtomDisplay");
+        auto dsp = new M5AtomDisplay();
         _ex_display.reset(dsp);
-        if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
+        // if (((M5GFX_*)&Display)->init_with_panel(dsp->getPanel()))
+        if (dsp->init())
         {
+          Display.setPanel(dsp->getPanel());
+          (lgfx::LGFX_Device)Display = *(lgfx::LGFX_Device*)dsp;
+          Display.init();
+ESP_LOGD("M5Unified","use AtomDisplay");
           return dsp->getBoard();
         }
       }

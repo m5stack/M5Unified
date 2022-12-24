@@ -373,6 +373,14 @@ for (int i = 0; i < 0x50; ++i)
       ex_sda = GPIO_NUM_2;
       ex_scl = GPIO_NUM_1;
       break;
+
+    case board_t::board_M5AtomS3:
+      in_sda = GPIO_NUM_38;
+      in_scl = GPIO_NUM_39;
+      ex_sda = GPIO_NUM_2;
+      ex_scl = GPIO_NUM_1;
+      break;
+
     default:
       break;
     }
@@ -516,7 +524,7 @@ for (int i = 0; i < 0x50; ++i)
         { /// ATOM U builtin PDM mic
           mic_cfg.pin_data_in = GPIO_NUM_19;
           mic_cfg.pin_ws = GPIO_NUM_5;
-          mic_cfg.input_offset = - 768;
+          mic_cfg.input_offset = - 768; /// TODO 固定値のオフセットを廃止し、HPFを実装する;
         }
         break;
 
@@ -542,7 +550,7 @@ for (int i = 0; i < 0x50; ++i)
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
       spk_cfg.magnification = 16;
-      spk_cfg.i2s_port = I2S_NUM_1;
+      spk_cfg.i2s_port = (i2s_port_t)(I2S_NUM_MAX - 1);
       switch (_board)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -694,6 +702,11 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input_pullup);
       break;
 
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5AtomS3:
+      m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
+      break;
+
 #endif
 
     default:
@@ -831,7 +844,7 @@ for (int i = 0; i < 0x50; ++i)
 
     switch (_board)
     {
-    case board_t::board_M5AtomS3LCD:
+    case board_t::board_M5AtomS3:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
       break;
 

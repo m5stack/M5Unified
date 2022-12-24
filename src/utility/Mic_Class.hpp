@@ -5,8 +5,19 @@
 #define __M5_Mic_Class_H__
 
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
-#include <driver/i2s.h>
+#include <soc/i2s_struct.h>
+
+#if __has_include(<driver/i2s_std.h>)
+ #include <driver/i2s_std.h>
+#else
+ #include <driver/i2s.h>
+#endif
+
+#ifndef I2S_PIN_NO_CHANGE
+#define I2S_PIN_NO_CHANGE (-1)
+#endif
 
 namespace m5
 {
