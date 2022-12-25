@@ -52,7 +52,6 @@ void setup(void)
 //*/
 
 
-#if SNTP_ENABLED
 /// setup RTC ( NTP auto setting )
 
   M5.Display.print("WiFi:");
@@ -66,18 +65,25 @@ void setup(void)
   Serial.println("\r\n WiFi Connected.");
   M5.Display.print("Connected.");
 
+#if SNTP_ENABLED
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
   {
     Serial.print('.');
     delay(1000);
   }
+#else
+  struct tm timeInfo;
+  while (!getLocalTime(&timeInfo, 1000))
+  {
+    Serial.print('.');
+  };
+#endif
+
   Serial.println("\r\n NTP Connected.");
 
   time_t t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  /// Synchronization in seconds
   M5.Rtc.setDateTime( gmtime( &t ) );
-
-#endif
 
 }
 
