@@ -565,6 +565,27 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
+      case board_t::board_M5AtomS3:
+        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        { // for ATOMIC SPK
+          gpio_num_t pin = GPIO_NUM_7;
+          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input_pulldown);
+          if (m5gfx::gpio_in(GPIO_NUM_6)
+            && m5gfx::gpio_in(GPIO_NUM_7)
+            && m5gfx::gpio_in(GPIO_NUM_8))
+          {
+            _cfg.internal_imu = false; /// avoid conflict with i2c
+            _cfg.internal_rtc = false; /// avoid conflict with i2c
+            spk_cfg.pin_bck = GPIO_NUM_5;
+            spk_cfg.pin_ws = GPIO_NUM_39;
+            spk_cfg.pin_data_out = GPIO_NUM_38;
+            spk_cfg.magnification = 16;
+          }
+        }
+        break;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
       case board_t::board_M5Stack:
         if (_cfg.internal_spk)
