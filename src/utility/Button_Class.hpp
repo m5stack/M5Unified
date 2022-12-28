@@ -45,6 +45,7 @@ namespace m5
     bool wasReleased(void) const { return _oldPress && !_press; }
     bool wasReleaseHold(void) const { return !_press && _oldPress == 2; }
     bool wasReleaseFor(std::uint32_t ms) const { return _oldPress && !_press && _lastHoldPeriod >= ms; }
+    bool wasReleasefor(std::uint32_t ms) const { return wasReleaseFor(ms); }
     bool pressedFor(std::uint32_t ms)  const { return (_press  && _lastMsec - _lastChange >= ms); }
     bool releasedFor(std::uint32_t ms) const { return (!_press && _lastMsec - _lastChange >= ms); }
 
