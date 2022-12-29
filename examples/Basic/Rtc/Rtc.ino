@@ -56,7 +56,6 @@ void setup(void)
 
   M5.Display.print("WiFi:");
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
-  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
   while (WiFi.status() != WL_CONNECTED)
   {
     Serial.print('.');
@@ -65,6 +64,8 @@ void setup(void)
   Serial.println("\r\n WiFi Connected.");
   M5.Display.print("Connected.");
 
+  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+
 #if SNTP_ENABLED
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
   {
@@ -72,6 +73,7 @@ void setup(void)
     delay(1000);
   }
 #else
+  delay(1600);
   struct tm timeInfo;
   while (!getLocalTime(&timeInfo, 1000))
   {
