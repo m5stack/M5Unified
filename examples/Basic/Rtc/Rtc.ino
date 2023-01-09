@@ -43,9 +43,8 @@ void setup(void)
 
   Serial.println("RTC found.");
 
-
+// It is recommended to set UTC for the RTC and ESP32 internal clocks.
 /* /// setup RTC ( direct setting )
-
   //                      YYYY  MM  DD      hh  mm  ss
   M5.Rtc.setDateTime( { { 2021, 12, 31 }, { 12, 34, 56 } } );
 
