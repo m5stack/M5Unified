@@ -19,19 +19,19 @@ namespace m5
     };
 
     /// Returns true when the button is pressed briefly and released.
-    bool wasClicked(void)  const { return _changeState == state_clicked; }
+    bool wasClicked(void)  const { return _currentState == state_clicked; }
 
     /// Returns true when the button has been held pressed for a while.
-    bool wasHold(void)     const { return _changeState == state_hold; }
+    bool wasHold(void)     const { return _currentState == state_hold; }
 
     /// Returns true when some time has passed since the button was single clicked.
-    bool wasSingleClicked(void) const { return _changeState == state_decide_click_count && _clickCount == 1; }
+    bool wasSingleClicked(void) const { return _currentState == state_decide_click_count && _clickCount == 1; }
 
     /// Returns true when some time has passed since the button was double clicked.
-    bool wasDoubleClicked(void) const { return _changeState == state_decide_click_count && _clickCount == 2; }
+    bool wasDoubleClicked(void) const { return _currentState == state_decide_click_count && _clickCount == 2; }
 
     /// Returns true when some time has passed since the button was multiple clicked.
-    bool wasDeciedClickCount(void) const { return _changeState == state_decide_click_count; }
+    bool wasDeciedClickCount(void) const { return _currentState == state_decide_click_count; }
 
     std::uint8_t getClickCount(void) const { return _clickCount; }
 
@@ -43,6 +43,9 @@ namespace m5
     bool isReleased(void)  const { return !_press; }
     bool wasPressed(void)  const { return !_oldPress && _press; }
     bool wasReleased(void) const { return _oldPress && !_press; }
+    bool wasReleasedAfterHold(void) const { return !_press && _oldPress == 2; }
+    bool wasReleaseFor(std::uint32_t ms) const { return _oldPress && !_press && _lastHoldPeriod >= ms; }
+    bool wasReleasefor(std::uint32_t ms) const { return wasReleaseFor(ms); }
     bool pressedFor(std::uint32_t ms)  const { return (_press  && _lastMsec - _lastChange >= ms); }
     bool releasedFor(std::uint32_t ms) const { return (!_press && _lastMsec - _lastChange >= ms); }
 
@@ -51,7 +54,7 @@ namespace m5
 
     void setRawState(std::uint32_t msec, bool press);
     void setState(std::uint32_t msec, button_state_t state);
-    button_state_t getState(void) const { return _changeState; }
+    button_state_t getState(void) const { return _currentState; }
     std::uint32_t lastChange(void) const { return _lastChange; }
 
     std::uint32_t getDebounceThresh(void) const { return _msecDebounce; }
@@ -63,9 +66,10 @@ namespace m5
     std::uint32_t _lastChange = 0;
     std::uint32_t _lastRawChange = 0;
     std::uint32_t _lastClicked = 0;
-    button_state_t _changeState = state_nochange; // 0:nochange  1:click  2:hold
+    button_state_t _currentState = state_nochange; // 0:nochange  1:click  2:hold
     std::uint16_t _msecDebounce = 10;
     std::uint16_t _msecHold = 500;
+    std::uint16_t _lastHoldPeriod = 0;
     bool _raw_press = false;
     std::uint8_t _press = 0;     // 0:release  1:click  2:holding
     std::uint8_t _oldPress = 0;

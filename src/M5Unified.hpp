@@ -6,23 +6,11 @@
 
 #include <sdkconfig.h>
 
-#if defined (ARDUINO)
- #if __has_include(<SD.h>)
-  #include <SD.h>
- #endif
- #if __has_include(<SPIFFS.h>)
-  #include <SPIFFS.h>
- #endif
- #if __has_include(<LittleFS.h>)
-  #include <LittleFS.h>
- #endif
- #if __has_include(<LITTLEFS.h>)
-  #include <LITTLEFS.h>
- #endif
- #if __has_include(<PSRamFS.h>)
-  #include <PSRamFS.h>
- #endif
-#endif
+// If you want to use a set of functions to handle SD/SPIFFS/HTTP,
+//  please include <SD.h>,<SPIFFS.h>,<HTTPClient.h> before <M5GFX.h>
+// #include <SD.h>
+// #include <SPIFFS.h>
+// #include <HTTPClient.h>
 
 #include <M5GFX.h>
 

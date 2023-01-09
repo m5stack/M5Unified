@@ -7,6 +7,7 @@
 #include "I2C_Class.hpp"
 
 #include <time.h>
+#include <sys/time.h>
 
 namespace m5
 {

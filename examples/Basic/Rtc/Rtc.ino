@@ -3,15 +3,26 @@
  #define WIFI_SSID     "YOUR WIFI SSID NAME"
  #define WIFI_PASSWORD "YOUR WIFI PASSWORD"
  #define NTP_TIMEZONE  "JST-9"
- #define NTP_SERVER1   "ntp.nict.jp"
- #define NTP_SERVER2   "ntp.jst.mfeed.ad.jp"
- #define NTP_SERVER3   ""
+ #define NTP_SERVER1   "0.pool.ntp.org"
+ #define NTP_SERVER2   "1.pool.ntp.org"
+ #define NTP_SERVER3   "2.pool.ntp.org"
 
  #include <WiFi.h>
 
+// Different versions of the framework have different SNTP header file names and availability.
+ #if __has_include (<esp_sntp.h>)
+  #include <esp_sntp.h>
+  #define SNTP_ENABLED 1
+ #elif __has_include (<sntp.h>)
+  #include <sntp.h>
+  #define SNTP_ENABLED 1
+ #endif
+
 #endif
 
-#include <esp_sntp.h>
+#ifndef SNTP_ENABLED
+#define SNTP_ENABLED 0
+#endif
 
 #include <M5Unified.h>
 
@@ -32,20 +43,18 @@ void setup(void)
 
   Serial.println("RTC found.");
 
-
+// It is recommended to set UTC for the RTC and ESP32 internal clocks.
 /* /// setup RTC ( direct setting )
-
   //                      YYYY  MM  DD      hh  mm  ss
   M5.Rtc.setDateTime( { { 2021, 12, 31 }, { 12, 34, 56 } } );
 
 //*/
 
 
-/* /// setup RTC ( NTP auto setting )
+/// setup RTC ( NTP auto setting )
 
   M5.Display.print("WiFi:");
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
-  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
   while (WiFi.status() != WL_CONNECTED)
   {
     Serial.print('.');
@@ -54,18 +63,28 @@ void setup(void)
   Serial.println("\r\n WiFi Connected.");
   M5.Display.print("Connected.");
 
+  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+
+#if SNTP_ENABLED
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
   {
     Serial.print('.');
     delay(1000);
   }
+#else
+  delay(1600);
+  struct tm timeInfo;
+  while (!getLocalTime(&timeInfo, 1000))
+  {
+    Serial.print('.');
+  };
+#endif
+
   Serial.println("\r\n NTP Connected.");
 
   time_t t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  /// Synchronization in seconds
   M5.Rtc.setDateTime( gmtime( &t ) );
-
-//*/
 
 }
 

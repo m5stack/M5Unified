@@ -85,6 +85,7 @@ void setup(void)
 
   if (M5.Rtc.isEnabled())
   {
+// It is recommended to set UTC for the RTC and ESP32 internal clocks.
 //  rtc direct setting.    YYYY  MM  DD      hh  mm  ss
 //  M5.Rtc.setDateTime( {{ 2021, 12, 31 }, { 12, 34, 56 }} );
   }
