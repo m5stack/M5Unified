@@ -96,8 +96,15 @@ namespace m5
     std::uint8_t w = date.weekDay;
     if (w > 6 && date.year >= 1900 && ((std::size_t)(date.month - 1)) < 12)
     { /// weekDay auto adjust
-      std::int_fast16_t y = date.year / 100;
-      w = (date.year + (date.year >> 2) - y + (y >> 2) + (13 * date.month + 8) / 5 + date.date) % 7;
+      int32_t year = date.year;
+      int32_t month = date.month;
+      int32_t day = date.date;
+      if (month < 3) {
+        year--;
+        month += 12;
+      }
+      int32_t ydiv100 = year / 100;
+      w = (year + (year >> 2) - ydiv100 + (ydiv100 >> 2) + (13 * month + 8) / 5 + day) % 7;
     }
 
     std::uint8_t buf[] =

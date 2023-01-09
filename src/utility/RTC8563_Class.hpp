@@ -84,6 +84,7 @@ namespace m5
         setDate( { (int16_t)(datetime->tm_year + 1900)
                  , (int8_t)(datetime->tm_mon + 1)
                  , (int8_t)(datetime->tm_mday)
+                 , (int8_t)(datetime->tm_wday)
                  } );
         setTime( { (int8_t)(datetime->tm_hour)
                  , (int8_t)(datetime->tm_min)
