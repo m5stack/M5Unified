@@ -103,7 +103,10 @@ namespace m5
           if (enabled)
           { // To prevent I2S mis-synchronization, turn off the setting once and set the BCLK pin low.
             m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::output);
+            m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::output);
             m5gfx::gpio_lo(GPIO_NUM_12);
+            m5gfx::gpio_lo(GPIO_NUM_0);
+            vTaskDelay(1);
             self->Power.Axp192.setGPIO2(true);
           }
         }
@@ -357,28 +360,27 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    if (board == board_t::board_unknown) {
+      board = board_t::board_M5AtomS3Lite;
+    }
 
     i2c_port_t in_port = I2C_NUM_1;
-    gpio_num_t in_sda = (gpio_num_t)-1;
-    gpio_num_t in_scl = (gpio_num_t)-1;
+    gpio_num_t in_sda = GPIO_NUM_38;
+    gpio_num_t in_scl = GPIO_NUM_39;
 
     i2c_port_t ex_port = I2C_NUM_0;
-    gpio_num_t ex_sda = (gpio_num_t)-1;
-    gpio_num_t ex_scl = (gpio_num_t)-1;
+    gpio_num_t ex_sda = GPIO_NUM_2;
+    gpio_num_t ex_scl = GPIO_NUM_1;
     switch (board)
     {
+
     case board_t::board_M5StackCoreS3:
       in_sda = GPIO_NUM_12;
       in_scl = GPIO_NUM_11;
-      ex_sda = GPIO_NUM_2;
-      ex_scl = GPIO_NUM_1;
       break;
 
     case board_t::board_M5AtomS3:
-      in_sda = GPIO_NUM_38;
-      in_scl = GPIO_NUM_39;
-      ex_sda = GPIO_NUM_2;
-      ex_scl = GPIO_NUM_1;
+    case board_t::board_M5AtomS3Lite:
       break;
 
     default:
@@ -764,6 +766,7 @@ for (int i = 0; i < 0x50; ++i)
     {
       M5.Imu.begin(&M5.Ex_I2C);
     }
+    update();
   }
 
 
@@ -866,6 +869,7 @@ for (int i = 0; i < 0x50; ++i)
     switch (_board)
     {
     case board_t::board_M5AtomS3:
+    case board_t::board_M5AtomS3Lite:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
       break;
 

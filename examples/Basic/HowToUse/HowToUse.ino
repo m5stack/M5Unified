@@ -116,8 +116,11 @@ void setup(void)
   case m5::board_t::board_M5StackCoreS3:
     name = "StackS3";
     break;
+  case m5::board_t::board_M5AtomS3Lite:
+    name = "ATOMS3Lite";
+    break;
   case m5::board_t::board_M5AtomS3:
-    name = "ATOM S3";
+    name = "ATOMS3";
     break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:

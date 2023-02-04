@@ -13,13 +13,13 @@
  - M5Station
  - M5Paper
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
- - M5ATOMS3
+ - M5ATOMS3 / Lite
  - M5STAMP PICO / C3 / C3U
 
 ## Supported device (external display)
  - Unit LCD (with no display model)
  - Unit OLED (with no display model)
- - ATOM Display (with M5ATOM Lite / Matrix / PSRAM)
+ - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
 
 ## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
@@ -86,7 +86,7 @@
 
 
 ### ESP32S3 GPIO list
-|                    |M5ATOM<BR>S3             |                    |
+|                    |M5ATOMS3 <BR>/ Lite      |                    |
 |:------------------:|:-----------------------:|:------------------:|
 |GPIO 0              | ---                     |GPIO 0              |
 |GPIO 1              |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
@@ -123,7 +123,7 @@
 |GPIO44              | ---                     |GPIO44              |
 |GPIO45              | ---                     |GPIO45              |
 |GPIO46              | ---                     |GPIO46              |
-|                    |M5ATOM<BR>S3             |                    |
+|                    |M5ATOMS3 <BR>/ Lite      |                    |
 
 ### AXP192 IO list
 |              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
@@ -269,7 +269,7 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH>ATOM<BR>S3</TH>
+  <TH>ATOMS3<BR>/Lite</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
