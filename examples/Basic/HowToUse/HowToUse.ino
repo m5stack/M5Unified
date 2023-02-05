@@ -21,11 +21,23 @@
 // #define M5ATOMDISPLAY_REFRESH_RATE     60  // refresh rate
 #include <M5AtomDisplay.h>
 
+// If you use ModuleDisplay, write this.
+// #define M5MODULEDISPLAY_LOGICAL_WIDTH  1280  // width
+// #define M5MODULEDISPLAY_LOGICAL_HEIGHT  720  // height
+// #define M5MODULEDISPLAY_REFRESH_RATE     60  // refresh rate
+#include <M5ModuleDisplay.h>
+
+// If you use ModuleRCA, write this.
+#include <M5ModuleRCA.h>
+
 // If you use Unit LCD, write this.
 #include <M5UnitLCD.h>
 
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use UnitRCA (for Video output), write this.
+#include <M5UnitRCA.h>
 
 // * The display header must be included before the M5Unified library.
 
@@ -54,9 +66,21 @@ void setup(void)
   cfg.internal_mic  = true;  // default=true. use internal microphone.
   cfg.external_imu  = true;  // default=false. use Unit Accel & Gyro.
   cfg.external_rtc  = true;  // default=false. use Unit RTC.
-  cfg.external_spk  = false; // default=false. use SPK_HAT / ATOMIC_SPK
-//cfg.external_spk_detail.omit_atomic_spk = true; // omit ATOMIC SPK
-//cfg.external_spk_detail.omit_spk_hat    = true; // omit SPK HAT
+
+  // external speaker setting.
+  cfg.external_speaker.module_display = true;  // default=false. use ModuleDisplay AudioOutput
+  cfg.external_speaker.hat_spk        = true;  // default=false. use HAT SPK
+  cfg.external_speaker.atomic_spk     = true;  // default=false. use ATOMIC SPK
+  cfg.external_speaker.module_rca     = false; // default=false. use ModuleRCA AudioOutput
+
+  // external display setting. (Pre-include required)
+  cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
+  cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
+  cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
+  cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
+  cfg.external_display.unit_rca       = false; // default=false. use UnitRCA VideoOutput
+  cfg.external_display.module_rca     = false; // default=false. use ModuleRCA VideoOutput
+
   cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
 
 
@@ -104,6 +128,12 @@ void setup(void)
     M5.Display.setRotation(M5.Display.getRotation() ^ 1);
   }
 
+  // multi display.
+  size_t display_count = M5.getDisplayCount();
+  for (int i = 0; i < display_count; ++i) {
+    M5.Displays(i).printf("Display %d\r\n", i);
+  }
+
   int textsize = M5.Display.height() / 160;
   if (textsize == 0) { textsize = 1; }
   M5.Display.setTextSize(textsize);
@@ -116,8 +146,11 @@ void setup(void)
   case m5::board_t::board_M5StackCoreS3:
     name = "StackS3";
     break;
+  case m5::board_t::board_M5AtomS3Lite:
+    name = "ATOMS3Lite";
+    break;
   case m5::board_t::board_M5AtomS3:
-    name = "ATOM S3";
+    name = "ATOMS3";
     break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:
@@ -336,7 +369,7 @@ void loop(void)
       {
         prev_battery = battery;
         M5.Display.startWrite();
-        M5.Display.setCursor(0, M5.Display.fontHeight() * 2);
+        M5.Display.setCursor(0, M5.Display.fontHeight() * 3);
         M5.Display.print("Bat:");
         if (battery >= 0)
         {

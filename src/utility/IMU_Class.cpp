@@ -48,20 +48,22 @@ namespace m5
   bool IMU_Class::getAccel(float *x, float *y, float *z)
   {
     bool res = false;
-    if (_imu == imu_t::imu_unknown)
-    {
-    }
-    if (_imu == imu_t::imu_sh200q)
-    {
-      res = Sh200q.getAccel(x, y, z);
-    }
-    else
-    // if (_imu == imu_t::imu_mpu6050
-    //  || _imu == imu_t::imu_mpu6886
-    //  || _imu == imu_t::imu_mpu9250)
-    {
+    switch (_imu) {
+    case imu_t::imu_mpu6050:
+    case imu_t::imu_mpu9250:
+    case imu_t::imu_mpu6886:
       res = Mpu6886.getAccel(x, y, z);
+      break;
+
+    case imu_t::imu_sh200q:
+      res = Sh200q.getAccel(x, y, z);
+      break;
+
+    case imu_t::imu_unknown:
+    default:
+      break;
     }
+
     if (!res)
     {
       *x = 0;
@@ -100,20 +102,22 @@ namespace m5
   bool IMU_Class::getGyro(float *x, float *y, float *z)
   {
     bool res = false;
-    if (_imu == imu_t::imu_unknown)
-    {
-    }
-    if (_imu == imu_t::imu_sh200q)
-    {
-      res = Sh200q.getGyro(x, y, z);
-    }
-    else
-    // if (_imu == imu_t::imu_mpu6050
-    //  || _imu == imu_t::imu_mpu6886
-    //  || _imu == imu_t::imu_mpu9250)
-    {
+    switch (_imu) {
+    case imu_t::imu_mpu6050:
+    case imu_t::imu_mpu9250:
+    case imu_t::imu_mpu6886:
       res = Mpu6886.getGyro(x, y, z);
+      break;
+
+    case imu_t::imu_sh200q:
+      res = Sh200q.getGyro(x, y, z);
+      break;
+
+    case imu_t::imu_unknown:
+    default:
+      break;
     }
+
     if (!res)
     {
       *x = 0;
@@ -147,5 +151,23 @@ namespace m5
       }
     }
     return res;
+  }
+
+  bool IMU_Class::getTemp(float *t)
+  {
+    switch (_imu) {
+    case imu_t::imu_mpu6050:
+    case imu_t::imu_mpu9250:
+    case imu_t::imu_mpu6886:
+      return Mpu6886.getTemp(t);
+
+    case imu_t::imu_sh200q:
+      return Sh200q.getTemp(t);
+
+    case imu_t::imu_unknown:
+    default:
+      return false;
+      break;
+    }
   }
 }

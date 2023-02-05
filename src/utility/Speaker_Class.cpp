@@ -169,6 +169,8 @@ namespace m5
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
 
+    i2s_stop(i2s_port);
+
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 80 MHz
     uint32_t bits = (self->_cfg.use_dac) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
@@ -181,13 +183,13 @@ namespace m5
     const int32_t spk_sample_rate_x256 = (float)PLL_D2_CLK * SAMPLERATE_MUL / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
-
 #if defined ( I2S1I_BCK_OUT_IDX )
     auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
 #else
     auto dev = &I2S0;
 #endif
+
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
 
@@ -223,17 +225,20 @@ namespace m5
 
 #else
 
-    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
-
     dev->sample_rate_conf.tx_bck_div_num = div_m;
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
 
+    // If TX is not reset here, BCK polarity may be inverted.
+    dev->conf.tx_reset = 1;
+    dev->conf.tx_fifo_reset = 1;
+    dev->conf.tx_reset = 0;
+    dev->conf.tx_fifo_reset = 0;
+
 #endif
     i2s_zero_dma_buffer(i2s_port);
-    i2s_start(i2s_port);
 
     // ステレオ出力の場合は倍率を2倍する
     const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
@@ -260,7 +265,6 @@ namespace m5
 
     int32_t* sound_buf32 = (int32_t*)alloca(dma_buf_len * sizeof(int32_t));
 
-    i2s_stop(i2s_port);
 
     while (self->_task_running)
     {
@@ -652,6 +656,7 @@ label_continue_sample:
       xTaskNotifyGive(_task_handle);
       do { vTaskDelay(1); } while (_task_handle);
     }
+    _play_channel_bits.store(0);
   }
 
   void Speaker_Class::stop(void)
