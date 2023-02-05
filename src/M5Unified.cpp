@@ -96,19 +96,12 @@ namespace m5
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
       {
-        auto cfg = self->Speaker.config();
-        if (cfg.pin_bck == GPIO_NUM_12)
-        {
-          self->Power.Axp192.setGPIO2(false);
-          if (enabled)
-          { // To prevent I2S mis-synchronization, turn off the setting once and set the BCLK pin low.
-            m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::output);
-            m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::output);
-            m5gfx::gpio_lo(GPIO_NUM_12);
-            m5gfx::gpio_lo(GPIO_NUM_0);
-            vTaskDelay(1);
-            self->Power.Axp192.setGPIO2(true);
-          }
+        auto spk_cfg = self->Speaker.config();
+        if (spk_cfg.pin_bck      == GPIO_NUM_12
+         && spk_cfg.pin_ws       == GPIO_NUM_0
+         && spk_cfg.pin_data_out == GPIO_NUM_2
+        ) {
+          self->Power.Axp192.setGPIO2(enabled);
         }
       }
       break;
@@ -462,11 +455,6 @@ for (int i = 0; i < 0x50; ++i)
       break;
     }
 
-    if (nullptr != Display.touch())
-    {
-      Touch.begin(&Display);
-    }
-
 #if defined ( ARDUINO )
 
     if (_cfg.serial_baudrate)
@@ -476,6 +464,94 @@ for (int i = 0; i < 0x50; ++i)
 
 #endif
 
+    switch (_board) /// setup Hardware Buttons
+    {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case board_t::board_M5StackCoreInk:
+      m5gfx::pinMode(CoreInk_BUTTON_EXT_PIN, m5gfx::pin_mode_t::input); // TopButton
+      m5gfx::pinMode(CoreInk_BUTTON_PWR_PIN, m5gfx::pin_mode_t::input); // PowerButton
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5Paper:
+    case board_t::board_M5Station:
+    case board_t::board_M5Stack:
+      m5gfx::pinMode(GPIO_NUM_38, m5gfx::pin_mode_t::input);
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+      m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5Atom:
+    case board_t::board_M5AtomPsram:
+    case board_t::board_M5AtomU:
+    case board_t::board_M5StampPico:
+      m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
+      NON_BREAK; /// don't break;
+
+    case board_t::board_M5StackCore2:
+    case board_t::board_M5Tough:
+ /// for GPIO 36,39 Chattering prevention.
+      adc_power_acquire();
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+    case board_t::board_M5StampC3:
+      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input_pullup);
+      break;
+
+    case board_t::board_M5StampC3U:
+      m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input_pullup);
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5AtomS3:
+    case board_t::board_M5AtomS3Lite:
+      m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
+      break;
+
+#endif
+
+    default:
+      break;
+    }
+
+    if (_cfg.external_rtc || _cfg.external_imu)
+    {
+      M5.Ex_I2C.begin();
+    }
+
+    if (_cfg.internal_rtc && In_I2C.isEnabled())
+    {
+      M5.Rtc.begin();
+    }
+    if (!M5.Rtc.isEnabled() && _cfg.external_rtc)
+    {
+      M5.Rtc.begin(&M5.Ex_I2C);
+    }
+
+    M5.Rtc.setSystemTimeFromRtc();
+
+    if (_cfg.internal_imu && In_I2C.isEnabled())
+    {
+      if (M5.Imu.begin())
+      {
+        if (M5.getBoard() == m5::board_t::board_M5Atom)
+        { // ATOM Matrix's IMU is oriented differently, so change the setting.
+          M5.Imu.setRotation(2);
+        }
+      }
+    }
+    if (!M5.Imu.isEnabled() && _cfg.external_imu)
+    {
+      M5.Imu.begin(&M5.Ex_I2C);
+    }
+  }
+
+  void M5Unified::_begin_spk( void )
+  {
     if (_cfg.internal_mic)
     {
       auto mic_cfg = Mic.config();
@@ -568,6 +644,7 @@ for (int i = 0; i < 0x50; ++i)
         break;
 
       case board_t::board_M5AtomS3:
+      case board_t::board_M5AtomS3Lite:
         if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           gpio_num_t pin = GPIO_NUM_7;
@@ -676,99 +753,73 @@ for (int i = 0; i < 0x50; ++i)
       default:
         break;
       }
+
+      if (_cfg.external_spk_detail.enabled) {
+        for (auto &dsp : _displays) {
+          auto board = dsp.getBoard();
+          if (board != m5gfx::board_M5ModuleDisplay && board != m5gfx::board_M5ModuleRCA) { continue; }
+          if (board == m5gfx::board_M5ModuleDisplay && _cfg.external_spk_detail.omit_module_display) { continue; }
+          if (board == m5gfx::board_M5ModuleRCA && _cfg.external_spk_detail.omit_module_rca) { continue; }
+
+          spk_cfg.i2s_port = I2S_NUM_1;
+          spk_cfg.magnification = 16;
+          spk_cfg.buzzer = false;
+          spk_cfg.use_dac = false;
+          spk_cfg.stereo = true;
+          spk_cfg.pin_ws = 0;     // LRCK
+          spk_cfg.pin_data_out = 2;
+
+          switch (board) {
+          case m5gfx::board_M5ModuleDisplay:
+            spk_cfg.sample_rate = 48000;
+
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+            {
+              spk_cfg.pin_bck = 6;
+              spk_cfg.pin_data_out = 13;
+            }
+#else
+            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
+            {
+              spk_cfg.pin_bck = 27;
+            }
+            else
+            {
+              spk_cfg.pin_data_out = 15;
+              spk_cfg.pin_bck = 12;
+            }
+#endif
+            break;
+
+          case m5gfx::board_M5ModuleRCA:
+
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#else
+
+            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
+            {
+              spk_cfg.pin_bck = 19;
+            }
+            else
+            {
+              spk_cfg.pin_data_out = 15;
+              spk_cfg.pin_bck = 13;
+            }
+
+#endif
+            break;
+          }
+          break;
+        }
+      }
+
       if (spk_cfg.pin_data_out >= 0)
       {
         Speaker.setCallback(this, _speaker_enabled_cb);
         Speaker.config(spk_cfg);
       }
     }
-
-    switch (_board) /// setup Hardware Buttons
-    {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StackCoreInk:
-      m5gfx::pinMode(CoreInk_BUTTON_EXT_PIN, m5gfx::pin_mode_t::input); // TopButton
-      m5gfx::pinMode(CoreInk_BUTTON_PWR_PIN, m5gfx::pin_mode_t::input); // PowerButton
-      NON_BREAK; /// don't break;
-
-    case board_t::board_M5Paper:
-    case board_t::board_M5Station:
-    case board_t::board_M5Stack:
-      m5gfx::pinMode(GPIO_NUM_38, m5gfx::pin_mode_t::input);
-      NON_BREAK; /// don't break;
-
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-      m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
-      NON_BREAK; /// don't break;
-
-    case board_t::board_M5Atom:
-    case board_t::board_M5AtomPsram:
-    case board_t::board_M5AtomU:
-    case board_t::board_M5StampPico:
-      m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
-      NON_BREAK; /// don't break;
-
-    case board_t::board_M5StackCore2:
-    case board_t::board_M5Tough:
- /// for GPIO 36,39 Chattering prevention.
-      adc_power_acquire();
-      break;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-
-    case board_t::board_M5StampC3:
-      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input_pullup);
-      break;
-
-    case board_t::board_M5StampC3U:
-      m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input_pullup);
-      break;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5AtomS3:
-      m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
-      break;
-
-#endif
-
-    default:
-      break;
-    }
-
-    if (_cfg.external_rtc || _cfg.external_imu)
-    {
-      M5.Ex_I2C.begin();
-    }
-
-    if (_cfg.internal_rtc && In_I2C.isEnabled())
-    {
-      M5.Rtc.begin();
-    }
-    if (!M5.Rtc.isEnabled() && _cfg.external_rtc)
-    {
-      M5.Rtc.begin(&M5.Ex_I2C);
-    }
-
-    M5.Rtc.setSystemTimeFromRtc();
-
-    if (_cfg.internal_imu && In_I2C.isEnabled())
-    {
-      if (M5.Imu.begin())
-      {
-        if (M5.getBoard() == m5::board_t::board_M5Atom)
-        { // ATOM Matrix's IMU is oriented differently, so change the setting.
-          M5.Imu.setRotation(2);
-        }
-      }
-    }
-    if (!M5.Imu.isEnabled() && _cfg.external_imu)
-    {
-      M5.Imu.begin(&M5.Ex_I2C);
-    }
-    update();
   }
-
 
   void M5Unified::update( void )
   {
