@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #include "M5Unified.hpp"
 
 #if __has_include (<esp_idf_version.h>)
@@ -110,7 +112,7 @@ namespace m5
     case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if ((self->_cfg.external_spk_detail.enabled) && !self->_cfg.external_spk_detail.omit_spk_hat)
+      if (self->_cfg.external_speaker.hat_spk)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (enabled)
@@ -517,37 +519,6 @@ for (int i = 0; i < 0x50; ++i)
     default:
       break;
     }
-
-    if (_cfg.external_rtc || _cfg.external_imu)
-    {
-      M5.Ex_I2C.begin();
-    }
-
-    if (_cfg.internal_rtc && In_I2C.isEnabled())
-    {
-      M5.Rtc.begin();
-    }
-    if (!M5.Rtc.isEnabled() && _cfg.external_rtc)
-    {
-      M5.Rtc.begin(&M5.Ex_I2C);
-    }
-
-    M5.Rtc.setSystemTimeFromRtc();
-
-    if (_cfg.internal_imu && In_I2C.isEnabled())
-    {
-      if (M5.Imu.begin())
-      {
-        if (M5.getBoard() == m5::board_t::board_M5Atom)
-        { // ATOM Matrix's IMU is oriented differently, so change the setting.
-          M5.Imu.setRotation(2);
-        }
-      }
-    }
-    if (!M5.Imu.isEnabled() && _cfg.external_imu)
-    {
-      M5.Imu.begin(&M5.Ex_I2C);
-    }
   }
 
   void M5Unified::_begin_spk( void )
@@ -623,7 +594,12 @@ for (int i = 0; i < 0x50; ++i)
       }
     }
 
-    if (_cfg.internal_spk || _cfg.external_spk_detail.enabled)
+    if (_cfg.external_spk_detail.enabled && _cfg.external_speaker_value == 0) {
+      _cfg.external_speaker.atomic_spk = !_cfg.external_spk_detail.omit_atomic_spk;
+      _cfg.external_speaker.hat_spk = !_cfg.external_spk_detail.omit_spk_hat;
+    }
+
+    if (_cfg.internal_spk || _cfg.external_speaker_value)
     {
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
@@ -645,7 +621,7 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5AtomS3:
       case board_t::board_M5AtomS3Lite:
-        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           gpio_num_t pin = GPIO_NUM_7;
           m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown);
@@ -688,7 +664,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5StickC:
-        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_spk_hat)
+        if (_cfg.external_speaker.hat_spk)
         { /// for SPK HAT
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
@@ -726,7 +702,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5AtomPsram:
-        if (_cfg.external_spk_detail.enabled && !_cfg.external_spk_detail.omit_atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
           gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
@@ -754,13 +730,18 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (_cfg.external_spk_detail.enabled) {
+      if (_cfg.external_speaker_value) {
+        bool exists_module_display = false;
+        bool exists_module_rca = false;
+        bool exists_unit_rca = false;
         for (auto &dsp : _displays) {
           auto board = dsp.getBoard();
-          if (board != m5gfx::board_M5ModuleDisplay && board != m5gfx::board_M5ModuleRCA) { continue; }
-          if (board == m5gfx::board_M5ModuleDisplay && _cfg.external_spk_detail.omit_module_display) { continue; }
-          if (board == m5gfx::board_M5ModuleRCA && _cfg.external_spk_detail.omit_module_rca) { continue; }
+          if (board == m5gfx::board_M5ModuleDisplay) { exists_module_display = true; }
+          else if (board == m5gfx::board_M5ModuleRCA) { exists_module_rca = true; }
+          else if (board == m5gfx::board_M5UnitRCA) { exists_unit_rca = true; }
+        }
 
+        if ((exists_module_display && _cfg.external_speaker.module_display) || _cfg.external_speaker.module_rca) {
           spk_cfg.i2s_port = I2S_NUM_1;
           spk_cfg.magnification = 16;
           spk_cfg.buzzer = false;
@@ -769,9 +750,8 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_ws = 0;     // LRCK
           spk_cfg.pin_data_out = 2;
 
-          switch (board) {
-          case m5gfx::board_M5ModuleDisplay:
-            spk_cfg.sample_rate = 48000;
+          if (exists_module_display && _cfg.external_speaker.module_display) {
+            spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
             {
@@ -789,9 +769,7 @@ for (int i = 0; i < 0x50; ++i)
               spk_cfg.pin_bck = 12;
             }
 #endif
-            break;
-
-          case m5gfx::board_M5ModuleRCA:
+          } else if (_cfg.external_speaker.module_rca) {
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
 #else
@@ -807,9 +785,7 @@ for (int i = 0; i < 0x50; ++i)
             }
 
 #endif
-            break;
           }
-          break;
         }
       }
 
@@ -819,6 +795,42 @@ for (int i = 0; i < 0x50; ++i)
         Speaker.config(spk_cfg);
       }
     }
+  }
+
+  bool M5Unified::_begin_rtc_imu( void )
+  {
+    bool port_a_used = false;
+    if (_cfg.external_rtc || _cfg.external_imu)
+    {
+      M5.Ex_I2C.begin();
+    }
+
+    if (_cfg.internal_rtc && In_I2C.isEnabled())
+    {
+      M5.Rtc.begin();
+    }
+    if (!M5.Rtc.isEnabled() && _cfg.external_rtc)
+    {
+      port_a_used = M5.Rtc.begin(&M5.Ex_I2C);
+    }
+
+    M5.Rtc.setSystemTimeFromRtc();
+
+    if (_cfg.internal_imu && In_I2C.isEnabled())
+    {
+      if (M5.Imu.begin())
+      {
+        if (M5.getBoard() == m5::board_t::board_M5Atom)
+        { // ATOM Matrix's IMU is oriented differently, so change the setting.
+          M5.Imu.setRotation(2);
+        }
+      }
+    }
+    if (!M5.Imu.isEnabled() && _cfg.external_imu)
+    {
+      port_a_used = M5.Imu.begin(&M5.Ex_I2C) || port_a_used;
+    }
+    return port_a_used;
   }
 
   void M5Unified::update( void )
