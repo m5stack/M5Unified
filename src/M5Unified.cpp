@@ -974,4 +974,56 @@ for (int i = 0; i < 0x50; ++i)
 
 #endif
   }
+
+  std::size_t M5Unified::addDisplay(M5GFX& dsp) {
+    this->_displays.push_back(dsp);
+    auto res = this->_displays.size() - 1;
+    setPrimaryDisplay(res == 0 ? 0 : _primary_display_index);
+
+    // Touch screen operation is always limited to the first display.
+    Touch.begin(_displays.front().touch() ? &_displays.front() : nullptr);
+
+    return res;
+  }
+
+  int32_t M5Unified::getDisplayIndex(m5gfx::board_t board) {
+    for (int32_t i = 0; i < _displays.size(); ++i) {
+      if (board == _displays[i].getBoard()) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  bool M5Unified::setPrimaryDisplay(std::size_t index) {
+    if (index >= _displays.size()) { return false; }
+    std::size_t pdi = _primary_display_index;
+
+    if (pdi < _displays.size()) {
+      _displays[pdi] = _primaryDisplay;
+    }
+    _primary_display_index = index;
+    _primaryDisplay = _displays[index];
+    return true;
+  }
+
+  bool M5Unified::setPrimaryDisplay(m5gfx::board_t board) {
+    int32_t i = getDisplayIndex(board);
+    if (i >= 0) {
+      setPrimaryDisplay(i);
+      return true;
+    }
+    return false;
+  }
+
+  bool M5Unified::setPrimaryDisplay(std::initializer_list<m5gfx::board_t> board_lsit) {
+    for (auto b : board_lsit) {
+      int32_t i = getDisplayIndex(b);
+      if (i >= 0) {
+        setPrimaryDisplay(i);
+        return true;
+      }
+    }
+    return false;
+  }
 }

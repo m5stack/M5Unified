@@ -313,28 +313,20 @@ namespace m5
 
     M5GFX& getDisplay(size_t index) { return index == _primary_display_index ? _primaryDisplay : this->_displays[index]; }
 
-    std::size_t addDisplay(M5GFX& dsp) {
-      this->_displays.push_back(dsp);
-      auto res = this->_displays.size() - 1;
-      setPrimaryDisplay(res == 0 ? 0 : _primary_display_index);
+    std::size_t addDisplay(M5GFX& dsp);
 
-      // Touch screen operation is always limited to the first display.
-      Touch.begin(_displays.front().touch() ? &_displays.front() : nullptr);
+    // Get the display index of the type matching the argument.
+    int32_t getDisplayIndex(m5gfx::board_t board);
 
-      return res;
-    }
+    // Designates the display of the specified index as PrimaryDisplay.
+    bool setPrimaryDisplay(std::size_t index);
 
-    bool setPrimaryDisplay(std::size_t index) {
-      if (index >= _displays.size()) { return false; }
-      std::size_t pdi = _primary_display_index;
-      // if (pdi == index) { return true; }
-      if (pdi < _displays.size()) {
-        _displays[pdi] = _primaryDisplay;
-      }
-      _primary_display_index = index;
-      _primaryDisplay = _displays[index];
-      return true;
-    }
+    // Find a display that matches the specified display type and designate it as PrimaryDisplay.
+    bool setPrimaryDisplay(m5gfx::board_t board);
+
+    // Find a display that matches the specified display type and designate it as PrimaryDisplay.
+    // Multiple display types can be specified in the initializer list.
+    bool setPrimaryDisplay(std::initializer_list<m5gfx::board_t> board_lsit);
 
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
