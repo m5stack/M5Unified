@@ -216,11 +216,12 @@ namespace m5
         }
 #endif
 
-// RCAはESP32S3では使用できない
+// RCA is not available on ESP32S3
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 #if defined ( __M5GFX_M5MODULERCA__ ) || defined ( __M5GFX_M5UNITRCA__ )
         {
           bool unit_rca = _cfg.external_display.unit_rca;
+          (void)unit_rca;
           auto board = getBoard();
 #if defined ( __M5GFX_M5MODULERCA__ )
           if (_cfg.external_display.module_rca)
