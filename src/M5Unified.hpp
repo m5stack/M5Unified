@@ -137,6 +137,9 @@ namespace m5
 
     void begin(void)
     {
+      // Allow begin execution only once.
+      if (_board != m5gfx::board_t::board_unknown) { return; }
+
       auto brightness = _primaryDisplay.getBrightness();
       _primaryDisplay.setBrightness(0);
       bool res = _primaryDisplay.init_without_reset();
