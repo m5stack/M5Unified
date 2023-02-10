@@ -623,14 +623,12 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomS3Lite:
         if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
-          gpio_num_t pin = GPIO_NUM_7;
-          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
+          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
           if (m5gfx::gpio_in(GPIO_NUM_6)
-            && m5gfx::gpio_in(GPIO_NUM_7)
-            && m5gfx::gpio_in(GPIO_NUM_8))
+            && m5gfx::gpio_in(GPIO_NUM_7))
           {
+            ESP_LOGD("M5Unified", "ATOMIC SPK");
             _cfg.internal_imu = false; /// avoid conflict with i2c
             _cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_5;
@@ -704,15 +702,14 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomPsram:
         if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
-          // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
+          // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
           gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
-          m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_33, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
+          m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
           if (m5gfx::gpio_in(GPIO_NUM_19)
-            && m5gfx::gpio_in(GPIO_NUM_33)
             && m5gfx::gpio_in(pin        ))
           {
+            ESP_LOGD("M5Unified", "ATOMIC SPK");
             _cfg.internal_imu = false; /// avoid conflict with i2c
             _cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_22;
@@ -730,18 +727,12 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (_cfg.external_speaker_value) {
-        bool exists_module_display = false;
-        bool exists_module_rca = false;
-        bool exists_unit_rca = false;
-        for (auto &dsp : _displays) {
-          auto board = dsp.getBoard();
-          if (board == m5gfx::board_M5ModuleDisplay) { exists_module_display = true; }
-          else if (board == m5gfx::board_M5ModuleRCA) { exists_module_rca = true; }
-          else if (board == m5gfx::board_M5UnitRCA) { exists_unit_rca = true; }
-        }
-
-        if ((exists_module_display && _cfg.external_speaker.module_display) || _cfg.external_speaker.module_rca) {
+      if (_cfg.external_speaker_value)
+      {
+        if (_cfg.external_speaker.module_display || _cfg.external_speaker.module_rca)
+        {
+          bool use_module_display = _cfg.external_speaker.module_display
+                                && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
           spk_cfg.i2s_port = I2S_NUM_1;
           spk_cfg.magnification = 16;
           spk_cfg.buzzer = false;
@@ -750,7 +741,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_ws = 0;     // LRCK
           spk_cfg.pin_data_out = 2;
 
-          if (exists_module_display && _cfg.external_speaker.module_display) {
+          if (use_module_display) {
             spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
