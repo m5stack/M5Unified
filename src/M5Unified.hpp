@@ -323,11 +323,11 @@ namespace m5
     bool setPrimaryDisplay(std::size_t index);
 
     // Find a display that matches the specified display type and designate it as PrimaryDisplay.
-    bool setPrimaryDisplay(m5gfx::board_t board);
+    bool setPrimaryDisplayType(m5gfx::board_t board);
 
     // Find a display that matches the specified display type and designate it as PrimaryDisplay.
     // Multiple display types can be specified in the initializer list.
-    bool setPrimaryDisplay(std::initializer_list<m5gfx::board_t> board_lsit);
+    bool setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit);
 
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;

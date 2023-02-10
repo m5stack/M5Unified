@@ -998,7 +998,7 @@ for (int i = 0; i < 0x50; ++i)
     return true;
   }
 
-  bool M5Unified::setPrimaryDisplay(m5gfx::board_t board) {
+  bool M5Unified::setPrimaryDisplayType(m5gfx::board_t board) {
     int32_t i = getDisplayIndex(board);
     if (i >= 0) {
       setPrimaryDisplay(i);
@@ -1007,7 +1007,7 @@ for (int i = 0; i < 0x50; ++i)
     return false;
   }
 
-  bool M5Unified::setPrimaryDisplay(std::initializer_list<m5gfx::board_t> board_lsit) {
+  bool M5Unified::setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit) {
     for (auto b : board_lsit) {
       int32_t i = getDisplayIndex(b);
       if (i >= 0) {
