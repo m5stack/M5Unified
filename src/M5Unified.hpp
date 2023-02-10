@@ -182,6 +182,7 @@ namespace m5
       _begin_spk();
 
       bool port_a_used = _begin_rtc_imu();
+      (void)port_a_used;
 
       if (_cfg.external_display_value)
       {
@@ -202,7 +203,7 @@ namespace m5
           M5UnitLCD dsp = { (uint8_t)Ex_I2C.getSDA(), (uint8_t)Ex_I2C.getSCL(), 400000, (int8_t)Ex_I2C.getPort() };
           int retry = 8;
           do {
-            delay(32);
+            m5gfx::delay(32);
             if (dsp.init()) {
               addDisplay(dsp);
               port_a_used = true;
@@ -307,11 +308,11 @@ namespace m5
 
     Mic_Class Mic;
 
-    M5GFX& Displays(size_t index) { return index == _primary_display_index ? _primaryDisplay : this->_displays[index]; }
+    M5GFX& Displays(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
+
+    M5GFX& getDisplay(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
 
     std::size_t getDisplayCount(void) const { return this->_displays.size(); }
-
-    M5GFX& getDisplay(size_t index) { return index == _primary_display_index ? _primaryDisplay : this->_displays[index]; }
 
     std::size_t addDisplay(M5GFX& dsp);
 
