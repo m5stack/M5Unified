@@ -17,13 +17,16 @@
  - M5STAMP PICO / C3 / C3U
 
 ## Supported device (external display)
- - Unit LCD (with no display model)
- - Unit OLED (with no display model)
+ - Unit LCD
+ - Unit OLED
+ - Unit RCA
  - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
+ - Module Display (with M5Stack / Core2 / Tough)
 
 ## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3)
+ - Module Display (with M5Stack / Core2 / Tough)
 
 
 # H/W infomation
