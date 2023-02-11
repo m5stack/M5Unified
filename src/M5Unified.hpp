@@ -105,6 +105,17 @@ namespace m5
       /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
       uint8_t led_brightness = 0;
 
+      /// If auto-detection fails, the board will operate as the board configured here.
+      board_t fallback_board
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+                             = board_t::board_M5AtomS3Lite;
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+                             = board_t::board_M5StampC3;
+#elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
+                             = board_t::board_M5Atom;
+#else
+                             = board_t::board_unknown;
+#endif
 
       union
       {
@@ -122,6 +133,7 @@ namespace m5
 
     config_t config(void) const { return _cfg; }
 
+    [[deprecated("Change to begin")]]
     void config(const config_t& cfg) { _cfg = cfg; }
 
     /// get the board type of the runtime environment.
@@ -131,6 +143,7 @@ namespace m5
     /// Perform initialization process at startup.
     void begin(const config_t& cfg)
     {
+      if (_board != m5gfx::board_t::board_unknown) { return; }
       _cfg = cfg;
       begin();
     }
@@ -143,7 +156,10 @@ namespace m5
       auto brightness = _primaryDisplay.getBrightness();
       _primaryDisplay.setBrightness(0);
       bool res = _primaryDisplay.init_without_reset();
-      _board = _check_boardtype(_primaryDisplay.getBoard());
+      auto board = _check_boardtype(_primaryDisplay.getBoard());
+      if (board == board_t::board_unknown) { board = _cfg.fallback_board; }
+      _board = board;
+      _setup_i2c(board);
       if (res && getDisplayCount() == 0) {
         addDisplay(_primaryDisplay);
       }
@@ -162,29 +178,29 @@ namespace m5
 #endif
 #endif
 
-      _begin();
+      _begin(_cfg);
 
 
       // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
-        if (_cfg.external_display.module_display) {
-          if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough || _board == board_t::board_M5StackCoreS3)
-          {
-            M5ModuleDisplay dsp;
-            if (dsp.init()) {
-              addDisplay(dsp);
-            }
+      if (_cfg.external_display.module_display) {
+        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough || _board == board_t::board_M5StackCoreS3)
+        {
+          M5ModuleDisplay dsp;
+          if (dsp.init()) {
+            addDisplay(dsp);
           }
         }
+      }
 #endif
 #endif
 
 
       // Speaker selection is performed after the Module Display has been determined.
-      _begin_spk();
+      _begin_spk(_cfg);
 
-      bool port_a_used = _begin_rtc_imu();
+      bool port_a_used = _begin_rtc_imu(_cfg);
       (void)port_a_used;
 
       if (_cfg.external_display_value)
@@ -222,7 +238,6 @@ namespace m5
         {
           bool unit_rca = _cfg.external_display.unit_rca;
           (void)unit_rca;
-          auto board = getBoard();
 #if defined ( __M5GFX_M5MODULERCA__ )
           if (_cfg.external_display.module_rca)
           {
@@ -344,11 +359,12 @@ namespace m5
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
 
-    void _begin(void);
-    void _begin_spk(void);
-    bool _begin_rtc_imu(void);
+    void _begin(const config_t& cfg);
+    void _begin_spk(config_t& cfg);
+    bool _begin_rtc_imu(const config_t& cfg);
 
     board_t _check_boardtype(board_t);
+    void _setup_i2c(board_t);
 
     static bool _speaker_enabled_cb(void* args, bool enabled);
     static bool _microphone_enabled_cb(void* args, bool enabled);
