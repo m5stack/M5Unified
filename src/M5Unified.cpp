@@ -112,7 +112,7 @@ namespace m5
     case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if (self->_cfg.external_speaker.hat_spk)
+      if (self->use_hat_spi)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (enabled)
@@ -471,8 +471,11 @@ for (int i = 0; i < 0x50; ++i)
     {
       M5.Power.setLed(cfg.led_brightness);
     }
-    if (Power.getType() == Power_Class::pmic_t::pmic_axp192)
-    { /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
+    if (Power.getType() == Power_Class::pmic_t::pmic_axp2101
+     || Power.getType() == Power_Class::pmic_t::pmic_axp192)
+    {
+      use_pmic_button = cfg.pmic_button;
+      /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
       BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
     }
 
@@ -714,6 +717,7 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5StickC:
         if (cfg.external_speaker.hat_spk)
         { /// for SPK HAT
+          use_hat_spi = true;
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
           m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
@@ -952,7 +956,7 @@ for (int i = 0; i < 0x50; ++i)
     BtnA.setRawState(ms, btn_bits & 1);
     BtnB.setRawState(ms, btn_bits & 2);
     BtnC.setRawState(ms, btn_bits & 4);
-    if (Power.Axp192.isEnabled() && _cfg.pmic_button)
+    if (use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
       bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
@@ -983,7 +987,7 @@ for (int i = 0; i < 0x50; ++i)
 
     default:
 
-      if (Power.Axp2101.isEnabled() && _cfg.pmic_button)
+      if (use_pmic_button)
       {
         Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
         bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
