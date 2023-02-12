@@ -14,7 +14,9 @@
  - M5Paper
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5ATOMS3 / Lite
- - M5STAMP PICO / C3 / C3U
+ - M5STAMP PICO
+ - M5STAMPC3 / C3U
+ - M5STAMPS3
 
 ## Supported device (external display)
  - Unit LCD
@@ -22,11 +24,13 @@
  - Unit RCA
  - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
+ - Module RCA (with M5Stack / Core2 / Tough)
 
 ## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3)
  - Module Display (with M5Stack / Core2 / Tough)
+ - Module RCA (with M5Stack / Core2 / Tough)
 
 
 # H/W infomation

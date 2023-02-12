@@ -72,7 +72,7 @@ namespace m5
           uint8_t module_rca : 1;
           uint8_t reserve : 2;
         } external_display;
-        uint8_t external_display_value = 0x0F;
+        uint8_t external_display_value = 0xFF;
       };
 
       /// Clear the screen when startup.
