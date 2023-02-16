@@ -97,8 +97,8 @@ void setup(void)
 // cfg.module_rca.logical_height = 144;
 // cfg.module_rca.output_width   = 216;
 // cfg.module_rca.output_height  = 144;
-// cfg.module_rca.signal_type    = M5ModuleRCA::signal_type_t::PAL;
-// cfg.module_rca.use_psram      = M5ModuleRCA::use_psram_t::psram_use;
+// cfg.module_rca.signal_type    = M5ModuleRCA::signal_type_t::PAL;     //  NTSC / NTSC_J / PAL_M / PAL_N
+// cfg.module_rca.use_psram      = M5ModuleRCA::use_psram_t::psram_use; // psram_no_use / psram_half_use
 // cfg.module_rca.pin_dac        = GPIO_NUM_26;
 // cfg.module_rca.output_level   = 128;
 #endif
@@ -107,8 +107,8 @@ void setup(void)
 // cfg.unit_rca.logical_height = 144;
 // cfg.unit_rca.output_width   = 216;
 // cfg.unit_rca.output_height  = 144;
-// cfg.unit_rca.signal_type    = M5UnitRCA::signal_type_t::PAL;
-// cfg.unit_rca.use_psram      = M5UnitRCA::use_psram_t::psram_use;
+// cfg.unit_rca.signal_type    = M5UnitRCA::signal_type_t::PAL;     //  NTSC / NTSC_J / PAL_M / PAL_N
+// cfg.unit_rca.use_psram      = M5UnitRCA::use_psram_t::psram_use; // psram_no_use / psram_half_use
 // cfg.unit_rca.pin_dac        = GPIO_NUM_26;
 // cfg.unit_rca.output_level   = 128;
 #endif
@@ -131,6 +131,20 @@ void setup(void)
   // begin M5Unified.
   M5.begin(cfg);
 
+  // Get the number of available displays
+  int display_count = M5.getDisplayCount();
+
+  for (int i = 0; i < display_count; ++i) {
+  // All displays are available in M5.Displays.
+  // ※ Note that the order of which displays are numbered is the order in which they are detected, so the order may change.
+
+    int textsize = M5.Displays(i).height() / 60;
+    if (textsize == 0) { textsize = 1; }
+    M5.Displays(i).setTextSize(textsize);
+    M5.Displays(i).printf("No.%d\n", i);
+  }
+
+
 // If an external display is to be used as the main display, it can be listed in order of priority.
   M5.setPrimaryDisplayType( {
       m5::board_t::board_M5ModuleDisplay,
@@ -145,19 +159,6 @@ void setup(void)
   // The primary display can be used with M5.Display.
   M5.Display.print("primary display\n");
 
-
-  // Get the number of available displays
-  int display_count = M5.getDisplayCount();
-
-  for (int i = 0; i < display_count; ++i) {
-  // All displays are available in M5.Displays.
-  // ※ Note that the order of which displays are numbered is the order in which they are detected, so the order may change.
-
-    int textsize = M5.Displays(i).height() / 60;
-    if (textsize == 0) { textsize = 1; }
-    M5.Displays(i).setTextSize(textsize);
-    M5.Displays(i).printf("No.%d\n", i);
-  }
 
   // Examine the indexes of a given type of display
   int index_module_display = M5.getDisplayIndex(m5::board_t::board_M5ModuleDisplay);

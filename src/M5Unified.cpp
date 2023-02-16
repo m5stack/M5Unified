@@ -22,6 +22,7 @@
 m5::M5Unified M5;
 
 #include <soc/efuse_reg.h>
+#include <soc/gpio_periph.h>
 
 #if __has_include (<driver/adc.h>)
  #include <driver/adc.h>

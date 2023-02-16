@@ -62,9 +62,17 @@ void setup(void)
 {
   auto cfg = M5.config();
 
-//cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
+  // If you want to play sound from ModuleDisplay, write this
+//  cfg.external_speaker.module_display = true;
+
+  // If you want to play sound from ModuleRCA, write this
+//  cfg.external_speaker.module_rca     = true;
+
+  // If you want to play sound from HAT Speaker, write this
+  cfg.external_speaker.hat_spk        = true;
+
+  // If you want to play sound from ATOMIC Speaker, write this
+  cfg.external_speaker.atomic_spk     = true;
 
   M5.begin(cfg);
 

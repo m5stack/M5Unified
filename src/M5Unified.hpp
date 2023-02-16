@@ -57,7 +57,7 @@ namespace m5
           uint8_t atomic_spk : 1;
           uint8_t reserve : 4;
         } external_speaker;
-        uint8_t external_speaker_value;
+        uint8_t external_speaker_value = 0x00;
       };
 
       union

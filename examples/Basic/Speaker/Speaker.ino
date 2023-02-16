@@ -1,6 +1,31 @@
+
+// If you use ATOMDisplay, write this.
+#include <M5AtomDisplay.h>
+
+// If you use ModuleDisplay, write this.
+#include <M5ModuleDisplay.h>
+
+// If you use ModuleRCA, write this.
+// #include <M5ModuleRCA.h>
+
+// If you use Unit LCD, write this.
 #include <M5UnitLCD.h>
+
+// If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use UnitRCA (for Video output), write this.
+// #include <M5UnitRCA.h>
+
+// * The display header must be included before the M5Unified library.
+
+//----------------------------------------------------------------
+
+// Include this to enable the M5 global instance.
 #include <M5Unified.h>
+
+
+//----------------------------------------------------------------
 
 /// 8bit unsigned 44.1kHz mono (exclude wav header)
 extern const uint8_t wav_unsigned_8bit_click[46000];
@@ -133,17 +158,39 @@ void setup(void)
 {
   auto cfg = M5.config();
 
-//cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
+  // If you want to play sound from ModuleDisplay, write this
+//  cfg.external_speaker.module_display = true;
+
+  // If you want to play sound from ModuleRCA, write this
+//  cfg.external_speaker.module_rca     = true;
+
+  // If you want to play sound from HAT Speaker, write this
+//  cfg.external_speaker.hat_spk        = true;
+
+  // If you want to play sound from ATOMIC Speaker, write this
+//  cfg.external_speaker.atomic_spk     = true;
 
   M5.begin(cfg);
 
-  { /// I2S custom setting
+// If an external display is to be used as the main display, it can be listed in order of priority.
+  M5.setPrimaryDisplayType( {
+      m5::board_t::board_M5ModuleDisplay,
+      m5::board_t::board_M5AtomDisplay,
+      m5::board_t::board_M5ModuleRCA,
+   // m5::board_t::board_M5UnitOLED,
+   // m5::board_t::board_M5UnitLCD,
+   // m5::board_t::board_M5UnitRCA,
+  } );
+
+
+  { /// I2S Custom configurations are available if you desire.
     auto spk_cfg = M5.Speaker.config();
 
+    if (spk_cfg.use_dac || spk_cfg.buzzer)
+    {
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
-    spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+      spk_cfg.sample_rate = 192000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+    }
 /*
     spk_cfg.pin_data_out=8;
     spk_cfg.pin_bck=7;
