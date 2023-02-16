@@ -158,8 +158,11 @@ void setup(void)
 {
   auto cfg = M5.config();
 
+  // If you want to play sound from ATOMIC Speaker, write this
+  cfg.external_speaker.atomic_spk     = true;
+
   // If you want to play sound from ModuleDisplay, write this
-//  cfg.external_speaker.module_display = true;
+  cfg.external_speaker.module_display = true;
 
   // If you want to play sound from ModuleRCA, write this
 //  cfg.external_speaker.module_rca     = true;
@@ -167,21 +170,7 @@ void setup(void)
   // If you want to play sound from HAT Speaker, write this
 //  cfg.external_speaker.hat_spk        = true;
 
-  // If you want to play sound from ATOMIC Speaker, write this
-//  cfg.external_speaker.atomic_spk     = true;
-
   M5.begin(cfg);
-
-// If an external display is to be used as the main display, it can be listed in order of priority.
-  M5.setPrimaryDisplayType( {
-      m5::board_t::board_M5ModuleDisplay,
-      m5::board_t::board_M5AtomDisplay,
-      m5::board_t::board_M5ModuleRCA,
-   // m5::board_t::board_M5UnitOLED,
-   // m5::board_t::board_M5UnitLCD,
-   // m5::board_t::board_M5UnitRCA,
-  } );
-
 
   { /// I2S Custom configurations are available if you desire.
     auto spk_cfg = M5.Speaker.config();
@@ -214,6 +203,16 @@ void setup(void)
   {
     M5.Display.setRotation(M5.Display.getRotation() ^ 1);
   }
+
+// If an external display is to be used as the main display, it can be listed in order of priority.
+  M5.setPrimaryDisplayType( {
+      m5::board_t::board_M5ModuleDisplay,
+      m5::board_t::board_M5AtomDisplay,
+      m5::board_t::board_M5ModuleRCA,
+   // m5::board_t::board_M5UnitOLED,
+   // m5::board_t::board_M5UnitLCD,
+   // m5::board_t::board_M5UnitRCA,
+  } );
 
   if (M5.Display.width() < 100)
   {

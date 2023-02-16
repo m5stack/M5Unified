@@ -782,56 +782,49 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (cfg.external_speaker_value)
+      if (cfg.external_speaker_value && (cfg.external_speaker.module_display || cfg.external_speaker.module_rca))
       {
-        if (cfg.external_speaker.module_display || cfg.external_speaker.module_rca)
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+        if (_board == board_t::board_M5StackCoreS3)
+#else
+        if (  _board == board_t::board_M5Stack
+           || _board == board_t::board_M5StackCore2
+           || _board == board_t::board_M5Tough)
+#endif
         {
           bool use_module_display = cfg.external_speaker.module_display
                                 && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
-          spk_cfg.i2s_port = I2S_NUM_1;
-          spk_cfg.magnification = 16;
-          spk_cfg.buzzer = false;
-          spk_cfg.use_dac = false;
-          spk_cfg.stereo = true;
-          spk_cfg.pin_ws = 0;     // LRCK
-          spk_cfg.pin_data_out = 2;
-
           if (use_module_display) {
             spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
-
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-            {
-              spk_cfg.pin_bck = 6;
-              spk_cfg.pin_data_out = 13;
-            }
-#else
-            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
-            {
-              spk_cfg.pin_bck = 27;
-            }
-            else
-            {
-              spk_cfg.pin_data_out = 15;
-              spk_cfg.pin_bck = 12;
-            }
-#endif
-          } else if (cfg.external_speaker.module_rca) {
-
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-#else
-
-            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
-            {
-              spk_cfg.pin_bck = 19;
-            }
-            else
-            {
-              spk_cfg.pin_data_out = 15;
-              spk_cfg.pin_bck = 13;
-            }
-
-#endif
           }
+          uint32_t pins_index = use_module_display;
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+          static constexpr const uint8_t pins[][2] =
+          {// DOUT       , BCK
+            { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
+            { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
+          };
+#else
+          static constexpr const uint8_t pins[][2] =
+          {// DOUT       , BCK
+            { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
+            { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
+            { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
+            { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
+          };
+          // !core is (Core2 + Tough)
+          if (M5.getBoard() == m5::board_t::board_M5Stack) {
+            pins_index += 2;            
+          }
+#endif
+          spk_cfg.pin_data_out = pins[pins_index][0];
+          spk_cfg.pin_bck      = pins[pins_index][1];
+          spk_cfg.i2s_port = I2S_NUM_1;
+          spk_cfg.magnification = 16;
+          spk_cfg.stereo = true;
+          spk_cfg.buzzer = false;
+          spk_cfg.use_dac = false;
+          spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
         }
       }
 
