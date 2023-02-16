@@ -16,15 +16,9 @@
 //----------------------------------------------------------------
 
 // If you use ATOMDisplay, write this.
-// #define M5ATOMDISPLAY_LOGICAL_WIDTH  1280  // width
-// #define M5ATOMDISPLAY_LOGICAL_HEIGHT  720  // height
-// #define M5ATOMDISPLAY_REFRESH_RATE     60  // refresh rate
 #include <M5AtomDisplay.h>
 
 // If you use ModuleDisplay, write this.
-// #define M5MODULEDISPLAY_LOGICAL_WIDTH  1280  // width
-// #define M5MODULEDISPLAY_LOGICAL_HEIGHT  720  // height
-// #define M5MODULEDISPLAY_REFRESH_RATE     60  // refresh rate
 #include <M5ModuleDisplay.h>
 
 // If you use ModuleRCA, write this.
@@ -66,6 +60,7 @@ void setup(void)
   cfg.internal_mic  = true;  // default=true. use internal microphone.
   cfg.external_imu  = true;  // default=false. use Unit Accel & Gyro.
   cfg.external_rtc  = true;  // default=false. use Unit RTC.
+  cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
 
   // external speaker setting.
   cfg.external_speaker.module_display = true;  // default=false. use ModuleDisplay AudioOutput
@@ -78,13 +73,72 @@ void setup(void)
   cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
   cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
   cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
-  cfg.external_display.unit_rca       = false; // default=false. use UnitRCA VideoOutput
-  cfg.external_display.module_rca     = false; // default=false. use ModuleRCA VideoOutput
+  cfg.external_display.unit_rca       = true;  // default=true. use UnitRCA VideoOutput
+  cfg.external_display.module_rca     = true;  // default=true. use ModuleRCA VideoOutput
+/*
+※ Display with auto-detection
+ - module_display
+ - atom_display
+ - unit_oled
+ - unit_lcd
 
-  cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
+※ Displays that cannot be auto-detected
+ - module_rca
+ - unit_rca
+//*/
 
+// Set individual parameters for external displays.
+// (※ Use only the items you wish to change. Basically, it can be omitted.)
+#if defined ( __M5GFX_M5ATOMDISPLAY__ ) // setting for ATOM Display.
+// cfg.atom_display.logical_width  = 1280;
+// cfg.atom_display.logical_height = 720;
+// cfg.atom_display.refresh_rate   = 60;
+#endif
+#if defined ( __M5GFX_M5MODULEDISPLAY__ ) // setting for Module Display.
+// cfg.module_display.logical_width  = 1280;
+// cfg.module_display.logical_height = 720;
+// cfg.module_display.refresh_rate   = 60;
+#endif
+#if defined ( __M5GFX_M5MODULERCA__ ) // setting for Module RCA.
+// cfg.module_rca.logical_width  = 216;
+// cfg.module_rca.logical_height = 144;
+// cfg.module_rca.signal_type    = M5ModuleRCA::signal_type_t::PAL;
+// cfg.module_rca.use_psram      = M5ModuleRCA::use_psram_t::psram_use;
+#endif
+#if defined ( __M5GFX_M5UNITRCA__ ) // setting for Unit RCA.
+// cfg.unit_rca.logical_width  = 216;
+// cfg.unit_rca.logical_height = 144;
+// cfg.unit_rca.signal_type    = M5UnitRCA::signal_type_t::PAL;
+// cfg.unit_rca.use_psram      = M5UnitRCA::use_psram_t::psram_use;
+#endif
+#if defined ( __M5GFX_M5UNITOLED__ ) // setting for Unit OLED.
+// cfg.unit_oled.pin_sda  = GPIO_NUM_21;
+// cfg.unit_oled.pin_scl  = GPIO_NUM_22;
+// cfg.unit_oled.i2c_addr = 0x3C;
+// cfg.unit_oled.i2c_freq = 400000;
+// cfg.unit_oled.i2c_port = I2C_NUM_0;
+#endif
+#if defined ( __M5GFX_M5UNITLCD__ ) // setting for Unit LCD.
+// cfg.unit_lcd.pin_sda  = GPIO_NUM_21;
+// cfg.unit_lcd.pin_scl  = GPIO_NUM_22;
+// cfg.unit_lcd.i2c_addr = 0x3E;
+// cfg.unit_lcd.i2c_freq = 400000;
+// cfg.unit_lcd.i2c_port = I2C_NUM_0;
+#endif
 
+  // begin M5Unified.
   M5.begin(cfg);
+
+
+// If an external display is to be used as the main display, it can be listed in order of priority.
+  M5.setPrimaryDisplayType( {
+      m5::board_t::board_M5ModuleDisplay,
+      m5::board_t::board_M5AtomDisplay,
+//    m5::board_t::board_M5ModuleRCA,
+//    m5::board_t::board_M5UnitOLED,
+//    m5::board_t::board_M5UnitLCD,
+//    m5::board_t::board_M5UnitRCA,
+  } );
 
   if (M5.Speaker.isEnabled())
   {
@@ -240,6 +294,17 @@ void loop(void)
   int h = M5.Display.height() / 8;
 
   M5.update();
+
+  if (M5.BtnA.wasPressed())
+  {
+    M5.Display.sleep();
+  }
+  if (M5.BtnA.wasReleased())
+  {
+    M5.Display.wakeup();
+  }
+  
+
 //------------------- Button test
 /*
 /// List of available buttons:

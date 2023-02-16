@@ -22,6 +22,7 @@
 m5::M5Unified M5;
 
 #include <soc/efuse_reg.h>
+#include <soc/gpio_periph.h>
 
 #if __has_include (<driver/adc.h>)
  #include <driver/adc.h>
@@ -112,7 +113,7 @@ namespace m5
     case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if (self->_cfg.external_speaker.hat_spk)
+      if (self->use_hat_spi)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (enabled)
@@ -224,6 +225,7 @@ for (int i = 0; i < 0x50; ++i)
   static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
+
   board_t M5Unified::_check_boardtype(board_t board)
   {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -291,6 +293,61 @@ for (int i = 0; i < 0x50; ++i)
       }
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    if (board == board_t::board_unknown)
+    { // AtomS3Lite or StampS3 ?
+      uint32_t g4backup = *((volatile uint32_t *)(IO_MUX_GPIO4_REG));
+      m5gfx::pinMode(GPIO_NUM_4, m5gfx::pin_mode_t::input_pullup);
+      // AtomS3Lite has an IR LED connected to GPIO4, which is LOW when read even with input_pullup.
+      // Therefore, if it is HIGH, it can be determined that it is not AtomS3Lite and can be assumed to be StampS3.
+      // However, even if it goes LOW, something may be connected to GPIO4 at StampS3, so it is treated as unknown.
+      // The AtomS3Lite determination uses the fallback_board setting.
+      if (m5gfx::gpio_in(GPIO_NUM_4) == true)
+      {
+        board = board_t::board_M5StampS3;
+      }
+      else
+      {
+        uint32_t g41backup = *((volatile uint32_t *)(IO_MUX_GPIO41_REG));
+        // AtomS3Lite has a button on GPIO 41.
+        // If both pull-up and pull-down readings are performed and both give the same result, we assume that it is AtomS3Lite.
+        m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input_pulldown);
+        auto tmp1 = m5gfx::gpio_in(GPIO_NUM_41);
+        m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input_pullup);
+        auto tmp2 = m5gfx::gpio_in(GPIO_NUM_41);
+        if (tmp1 == tmp2)
+        {
+          board = board_t::board_M5AtomS3Lite;
+        }
+        *((volatile uint32_t *)(IO_MUX_GPIO41_REG)) = g41backup;
+      }
+      *((volatile uint32_t *)(IO_MUX_GPIO4_REG)) = g4backup;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+    if (board == board_t::board_unknown)
+    { // StampC3 or StampC3U ?
+      uint32_t tmp = *((volatile uint32_t *)(IO_MUX_GPIO20_REG));
+      m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
+      // StampC3 has a strong external pull-up on GPIO20, which is HIGH even when input_pulldown is set.
+      // Therefore, if it is LOW, it is not StampC3 and can be assumed to be StampC3U.
+      // However, even if it goes HIGH, something may be connected to GPIO20 by StampC3U, so it is treated as unknown.
+      // The StampC3U determination uses the fallback_board setting.
+      if (m5gfx::gpio_in(GPIO_NUM_20) == false)
+      {
+        board = board_t::board_M5StampC3U;
+      }
+      *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
+    }
+
+#endif
+
+    return board;
+  }
+
+  void M5Unified::_setup_i2c(board_t board)
+  {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     { /// setup Internal I2C
       i2c_port_t in_port = I2C_NUM_1;
       gpio_num_t in_sda = GPIO_NUM_21;
@@ -355,10 +412,6 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (board == board_t::board_unknown) {
-      board = board_t::board_M5AtomS3Lite;
-    }
-
     i2c_port_t in_port = I2C_NUM_1;
     gpio_num_t in_sda = GPIO_NUM_38;
     gpio_num_t in_scl = GPIO_NUM_39;
@@ -378,6 +431,13 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5AtomS3Lite:
       break;
 
+    case board_t::board_M5StampS3:
+      in_sda = GPIO_NUM_NC;
+      in_scl = GPIO_NUM_NC;
+      ex_sda = GPIO_NUM_13;
+      ex_scl = GPIO_NUM_15;
+      break;
+
     default:
       break;
     }
@@ -391,17 +451,6 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
-
-    if (board == board_t::board_unknown)
-    {
-      uint32_t tmp = *((volatile uint32_t *)(IO_MUX_GPIO20_REG));
-      m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
-      board = m5gfx::gpio_in(GPIO_NUM_20)
-            ? board_t::board_M5StampC3
-            : board_t::board_M5StampC3U
-            ;
-      *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
-    }
     /// StampC3 does not have internal i2c.
     In_I2C.setPort(-1, -1, -1);
 
@@ -412,25 +461,26 @@ for (int i = 0; i < 0x50; ++i)
       Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
     }
 #endif
-
-    return board;
   }
 
-  void M5Unified::_begin(void)
+  void M5Unified::_begin(const config_t& cfg)
   {
     /// setup power management ic
     Power.begin();
-    Power.setExtPower(_cfg.output_power);
-    if (_cfg.led_brightness)
+    Power.setExtPower(cfg.output_power);
+    if (cfg.led_brightness)
     {
-      M5.Power.setLed(_cfg.led_brightness);
+      M5.Power.setLed(cfg.led_brightness);
     }
-    if (Power.getType() == Power_Class::pmic_t::pmic_axp192)
-    { /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
+    if (Power.getType() == Power_Class::pmic_t::pmic_axp2101
+     || Power.getType() == Power_Class::pmic_t::pmic_axp192)
+    {
+      use_pmic_button = cfg.pmic_button;
+      /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
       BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
     }
 
-    if (_cfg.clear_display)
+    if (cfg.clear_display)
     {
       Display.clear();
     }
@@ -459,9 +509,9 @@ for (int i = 0; i < 0x50; ++i)
 
 #if defined ( ARDUINO )
 
-    if (_cfg.serial_baudrate)
+    if (cfg.serial_baudrate)
     {
-      Serial.begin(_cfg.serial_baudrate);
+      Serial.begin(cfg.serial_baudrate);
     }
 
 #endif
@@ -514,6 +564,10 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5StampS3:
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
+      break;
+
 #endif
 
     default:
@@ -521,9 +575,9 @@ for (int i = 0; i < 0x50; ++i)
     }
   }
 
-  void M5Unified::_begin_spk( void )
+  void M5Unified::_begin_spk(config_t& cfg)
   {
-    if (_cfg.internal_mic)
+    if (cfg.internal_mic)
     {
       auto mic_cfg = Mic.config();
 
@@ -533,7 +587,7 @@ for (int i = 0; i < 0x50; ++i)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
-        if (_cfg.internal_mic)
+        if (cfg.internal_mic)
         {
           mic_cfg.magnification = 1;
           mic_cfg.over_sampling = 1;
@@ -548,7 +602,7 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
       case board_t::board_M5Stack:
-        if (_cfg.internal_mic)
+        if (cfg.internal_mic)
         {
           mic_cfg.pin_data_in = GPIO_NUM_34;  // M5GO bottom MIC
           mic_cfg.i2s_port = I2S_NUM_0;
@@ -562,7 +616,7 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5StickCPlus:
       case board_t::board_M5Tough:
       case board_t::board_M5StackCore2:
-        if (_cfg.internal_mic)
+        if (cfg.internal_mic)
         { /// builtin PDM mic
           mic_cfg.pin_data_in = GPIO_NUM_34;
           mic_cfg.pin_ws = GPIO_NUM_0;
@@ -594,12 +648,12 @@ for (int i = 0; i < 0x50; ++i)
       }
     }
 
-    if (_cfg.external_spk_detail.enabled && _cfg.external_speaker_value == 0) {
-      _cfg.external_speaker.atomic_spk = !_cfg.external_spk_detail.omit_atomic_spk;
-      _cfg.external_speaker.hat_spk = !_cfg.external_spk_detail.omit_spk_hat;
+    if (cfg.external_spk_detail.enabled && cfg.external_speaker_value == 0) {
+      cfg.external_speaker.atomic_spk = !cfg.external_spk_detail.omit_atomic_spk;
+      cfg.external_speaker.hat_spk = !cfg.external_spk_detail.omit_spk_hat;
     }
 
-    if (_cfg.internal_spk || _cfg.external_speaker_value)
+    if (cfg.internal_spk || cfg.external_speaker_value)
     {
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
@@ -609,7 +663,7 @@ for (int i = 0; i < 0x50; ++i)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
-        if (_cfg.internal_spk)
+        if (cfg.internal_spk)
         {
           spk_cfg.pin_bck = GPIO_NUM_34;
           spk_cfg.pin_ws = GPIO_NUM_33;
@@ -621,18 +675,16 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5AtomS3:
       case board_t::board_M5AtomS3Lite:
-        if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
-          gpio_num_t pin = GPIO_NUM_7;
-          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
+          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
           if (m5gfx::gpio_in(GPIO_NUM_6)
-            && m5gfx::gpio_in(GPIO_NUM_7)
-            && m5gfx::gpio_in(GPIO_NUM_8))
+            && m5gfx::gpio_in(GPIO_NUM_7))
           {
-            _cfg.internal_imu = false; /// avoid conflict with i2c
-            _cfg.internal_rtc = false; /// avoid conflict with i2c
+            ESP_LOGD("M5Unified", "ATOMIC SPK");
+            cfg.internal_imu = false; /// avoid conflict with i2c
+            cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_5;
             spk_cfg.pin_ws = GPIO_NUM_39;
             spk_cfg.pin_data_out = GPIO_NUM_38;
@@ -643,7 +695,7 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
       case board_t::board_M5Stack:
-        if (_cfg.internal_spk)
+        if (cfg.internal_spk)
         {
           m5gfx::gpio_lo(GPIO_NUM_25);
           m5gfx::pinMode(GPIO_NUM_25, m5gfx::pin_mode_t::output);
@@ -656,7 +708,7 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5StackCoreInk:
       case board_t::board_M5StickCPlus:
-        if (_cfg.internal_spk)
+        if (cfg.internal_spk)
         {
           spk_cfg.buzzer = true;
           spk_cfg.pin_data_out = GPIO_NUM_2;
@@ -664,8 +716,9 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5StickC:
-        if (_cfg.external_speaker.hat_spk)
+        if (cfg.external_speaker.hat_spk)
         { /// for SPK HAT
+          use_hat_spi = true;
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
           m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
@@ -684,7 +737,7 @@ for (int i = 0; i < 0x50; ++i)
         spk_cfg.magnification = 24;
         NON_BREAK;
       case board_t::board_M5StackCore2:
-        if (_cfg.internal_spk)
+        if (cfg.internal_spk)
         {
           spk_cfg.pin_bck = GPIO_NUM_12;
           spk_cfg.pin_ws = GPIO_NUM_0;
@@ -693,7 +746,7 @@ for (int i = 0; i < 0x50; ++i)
         break;
 
       case board_t::board_M5Atom:
-        if (_cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOM ECHO
           spk_cfg.pin_bck = GPIO_NUM_19;
           spk_cfg.pin_ws = GPIO_NUM_33;
@@ -702,19 +755,18 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5AtomPsram:
-        if (_cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
-          // 19,23,33 pulldown read check ( all high = ATOMIC_SPK ? )
+          // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
           gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
-          m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(GPIO_NUM_33, m5gfx::pin_mode_t::input_pulldown);
-          m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown);
+          m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
+          m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
           if (m5gfx::gpio_in(GPIO_NUM_19)
-            && m5gfx::gpio_in(GPIO_NUM_33)
             && m5gfx::gpio_in(pin        ))
           {
-            _cfg.internal_imu = false; /// avoid conflict with i2c
-            _cfg.internal_rtc = false; /// avoid conflict with i2c
+            ESP_LOGD("M5Unified", "ATOMIC SPK");
+            cfg.internal_imu = false; /// avoid conflict with i2c
+            cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_22;
             spk_cfg.pin_ws = GPIO_NUM_21;
             spk_cfg.pin_data_out = GPIO_NUM_25;
@@ -730,62 +782,49 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (_cfg.external_speaker_value) {
-        bool exists_module_display = false;
-        bool exists_module_rca = false;
-        bool exists_unit_rca = false;
-        for (auto &dsp : _displays) {
-          auto board = dsp.getBoard();
-          if (board == m5gfx::board_M5ModuleDisplay) { exists_module_display = true; }
-          else if (board == m5gfx::board_M5ModuleRCA) { exists_module_rca = true; }
-          else if (board == m5gfx::board_M5UnitRCA) { exists_unit_rca = true; }
-        }
-
-        if ((exists_module_display && _cfg.external_speaker.module_display) || _cfg.external_speaker.module_rca) {
+      if (cfg.external_speaker_value && (cfg.external_speaker.module_display || cfg.external_speaker.module_rca))
+      {
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+        if (_board == board_t::board_M5StackCoreS3)
+#else
+        if (  _board == board_t::board_M5Stack
+           || _board == board_t::board_M5StackCore2
+           || _board == board_t::board_M5Tough)
+#endif
+        {
+          bool use_module_display = cfg.external_speaker.module_display
+                                && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
+          if (use_module_display) {
+            spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
+          }
+          uint32_t pins_index = use_module_display;
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+          static constexpr const uint8_t pins[][2] =
+          {// DOUT       , BCK
+            { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
+            { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
+          };
+#else
+          static constexpr const uint8_t pins[][2] =
+          {// DOUT       , BCK
+            { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
+            { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
+            { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
+            { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
+          };
+          // !core is (Core2 + Tough)
+          if (M5.getBoard() == m5::board_t::board_M5Stack) {
+            pins_index += 2;            
+          }
+#endif
+          spk_cfg.pin_data_out = pins[pins_index][0];
+          spk_cfg.pin_bck      = pins[pins_index][1];
           spk_cfg.i2s_port = I2S_NUM_1;
           spk_cfg.magnification = 16;
+          spk_cfg.stereo = true;
           spk_cfg.buzzer = false;
           spk_cfg.use_dac = false;
-          spk_cfg.stereo = true;
-          spk_cfg.pin_ws = 0;     // LRCK
-          spk_cfg.pin_data_out = 2;
-
-          if (exists_module_display && _cfg.external_speaker.module_display) {
-            spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
-
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-            {
-              spk_cfg.pin_bck = 6;
-              spk_cfg.pin_data_out = 13;
-            }
-#else
-            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
-            {
-              spk_cfg.pin_bck = 27;
-            }
-            else
-            {
-              spk_cfg.pin_data_out = 15;
-              spk_cfg.pin_bck = 12;
-            }
-#endif
-          } else if (_cfg.external_speaker.module_rca) {
-
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-#else
-
-            if (M5.getBoard() == m5::board_t::board_M5StackCore2)
-            {
-              spk_cfg.pin_bck = 19;
-            }
-            else
-            {
-              spk_cfg.pin_data_out = 15;
-              spk_cfg.pin_bck = 13;
-            }
-
-#endif
-          }
+          spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
         }
       }
 
@@ -797,26 +836,26 @@ for (int i = 0; i < 0x50; ++i)
     }
   }
 
-  bool M5Unified::_begin_rtc_imu( void )
+  bool M5Unified::_begin_rtc_imu(const config_t& cfg)
   {
     bool port_a_used = false;
-    if (_cfg.external_rtc || _cfg.external_imu)
+    if (cfg.external_rtc || cfg.external_imu)
     {
       M5.Ex_I2C.begin();
     }
 
-    if (_cfg.internal_rtc && In_I2C.isEnabled())
+    if (cfg.internal_rtc && In_I2C.isEnabled())
     {
       M5.Rtc.begin();
     }
-    if (!M5.Rtc.isEnabled() && _cfg.external_rtc)
+    if (!M5.Rtc.isEnabled() && cfg.external_rtc)
     {
       port_a_used = M5.Rtc.begin(&M5.Ex_I2C);
     }
 
     M5.Rtc.setSystemTimeFromRtc();
 
-    if (_cfg.internal_imu && In_I2C.isEnabled())
+    if (cfg.internal_imu && In_I2C.isEnabled())
     {
       if (M5.Imu.begin())
       {
@@ -826,7 +865,7 @@ for (int i = 0; i < 0x50; ++i)
         }
       }
     }
-    if (!M5.Imu.isEnabled() && _cfg.external_imu)
+    if (!M5.Imu.isEnabled() && cfg.external_imu)
     {
       port_a_used = M5.Imu.begin(&M5.Ex_I2C) || port_a_used;
     }
@@ -911,7 +950,7 @@ for (int i = 0; i < 0x50; ++i)
     BtnA.setRawState(ms, btn_bits & 1);
     BtnB.setRawState(ms, btn_bits & 2);
     BtnC.setRawState(ms, btn_bits & 4);
-    if (Power.Axp192.isEnabled() && _cfg.pmic_button)
+    if (use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
       bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
@@ -936,9 +975,13 @@ for (int i = 0; i < 0x50; ++i)
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
       break;
 
+    case board_t::board_M5StampS3:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_0));
+      break;
+
     default:
 
-      if (Power.Axp2101.isEnabled() && _cfg.pmic_button)
+      if (use_pmic_button)
       {
         Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
         bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
@@ -973,5 +1016,57 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #endif
+  }
+
+  std::size_t M5Unified::addDisplay(M5GFX& dsp) {
+    this->_displays.push_back(dsp);
+    auto res = this->_displays.size() - 1;
+    setPrimaryDisplay(res == 0 ? 0 : _primary_display_index);
+
+    // Touch screen operation is always limited to the first display.
+    Touch.begin(_displays.front().touch() ? &_displays.front() : nullptr);
+
+    return res;
+  }
+
+  int32_t M5Unified::getDisplayIndex(m5gfx::board_t board) {
+    for (int32_t i = 0; i < _displays.size(); ++i) {
+      if (board == _displays[i].getBoard()) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  bool M5Unified::setPrimaryDisplay(std::size_t index) {
+    if (index >= _displays.size()) { return false; }
+    std::size_t pdi = _primary_display_index;
+
+    if (pdi < _displays.size()) {
+      _displays[pdi] = _primaryDisplay;
+    }
+    _primary_display_index = index;
+    _primaryDisplay = _displays[index];
+    return true;
+  }
+
+  bool M5Unified::setPrimaryDisplayType(m5gfx::board_t board) {
+    int32_t i = getDisplayIndex(board);
+    if (i >= 0) {
+      setPrimaryDisplay(i);
+      return true;
+    }
+    return false;
+  }
+
+  bool M5Unified::setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit) {
+    for (auto b : board_lsit) {
+      int32_t i = getDisplayIndex(b);
+      if (i >= 0) {
+        setPrimaryDisplay(i);
+        return true;
+      }
+    }
+    return false;
   }
 }

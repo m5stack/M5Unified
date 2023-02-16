@@ -44,7 +44,7 @@ namespace m5
     uint8_t magnification = 16;
 
     /// for I2S dma_buf_len
-    size_t dma_buf_len = 128;
+    size_t dma_buf_len = 256;
 
     /// for I2S dma_buf_count
     size_t dma_buf_count = 8;

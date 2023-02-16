@@ -57,7 +57,7 @@ namespace m5
           uint8_t atomic_spk : 1;
           uint8_t reserve : 4;
         } external_speaker;
-        uint8_t external_speaker_value;
+        uint8_t external_speaker_value = 0x00;
       };
 
       union
@@ -72,7 +72,7 @@ namespace m5
           uint8_t module_rca : 1;
           uint8_t reserve : 2;
         } external_display;
-        uint8_t external_display_value = 0x0F;
+        uint8_t external_display_value = 0xFF;
       };
 
       /// Clear the screen when startup.
@@ -105,11 +105,22 @@ namespace m5
       /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
       uint8_t led_brightness = 0;
 
+      /// If auto-detection fails, the board will operate as the board configured here.
+      board_t fallback_board
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+                             = board_t::board_M5AtomS3Lite;
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+                             = board_t::board_M5StampC3;
+#elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
+                             = board_t::board_M5Atom;
+#else
+                             = board_t::board_unknown;
+#endif
 
       union
       {
-        [[deprecated("Change to external_speaker")]]
         uint8_t external_spk = 0;
+        [[deprecated("Change to external_speaker")]]
         struct
         {
           uint8_t enabled : 1;
@@ -118,158 +129,27 @@ namespace m5
           uint8_t reserve : 5;
         } external_spk_detail;
       };
-    };
-
-    config_t config(void) const { return _cfg; }
-
-    void config(const config_t& cfg) { _cfg = cfg; }
-
-    /// get the board type of the runtime environment.
-    /// @return board type
-    board_t getBoard(void) const { return _board; }
-
-    /// Perform initialization process at startup.
-    void begin(const config_t& cfg)
-    {
-      _cfg = cfg;
-      begin();
-    }
-
-    void begin(void)
-    {
-      auto brightness = _primaryDisplay.getBrightness();
-      _primaryDisplay.setBrightness(0);
-      bool res = _primaryDisplay.init_without_reset();
-      _board = _check_boardtype(_primaryDisplay.getBoard());
-      if (res && getDisplayCount() == 0) {
-        addDisplay(_primaryDisplay);
-      }
 
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
-      if (_cfg.external_display.atom_display) {
-        if (_board == board_t::board_M5Atom || _board == board_t::board_M5AtomPsram || _board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite)
-        {
-          M5AtomDisplay dsp;
-          if (dsp.init_without_reset()) {
-            addDisplay(dsp);
-          }
-        }
-      }
+      M5AtomDisplay::config_t atom_display;
 #endif
-#endif
-
-      _begin();
-
-
-      // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
-        if (_cfg.external_display.module_display) {
-          if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough || _board == board_t::board_M5StackCoreS3)
-          {
-            M5ModuleDisplay dsp;
-            if (dsp.init()) {
-              addDisplay(dsp);
-            }
-          }
-        }
+      M5ModuleDisplay::config_t module_display;
 #endif
-#endif
-
-
-      // Speaker selection is performed after the Module Display has been determined.
-      _begin_spk();
-
-      bool port_a_used = _begin_rtc_imu();
-
-      if (_cfg.external_display_value)
-      {
-#if defined ( __M5GFX_M5UNITOLED__ )
-        if (_cfg.external_display.unit_oled)
-        {
-          M5UnitOLED dsp = { (uint8_t)Ex_I2C.getSDA(), (uint8_t)Ex_I2C.getSCL(), 400000, (int8_t)Ex_I2C.getPort() };
-          if (dsp.init()) {
-            addDisplay(dsp);
-            port_a_used = true;
-          }
-        }
-#endif
-
-#if defined ( __M5GFX_M5UNITLCD__ )
-        if (_cfg.external_display.unit_lcd)
-        {
-          M5UnitLCD dsp = { (uint8_t)Ex_I2C.getSDA(), (uint8_t)Ex_I2C.getSCL(), 400000, (int8_t)Ex_I2C.getPort() };
-          int retry = 8;
-          do {
-            delay(32);
-            if (dsp.init()) {
-              addDisplay(dsp);
-              port_a_used = true;
-              break;
-            }
-          } while (--retry);
-        }
-#endif
-
-// RCAはESP32S3では使用できない
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-#if defined ( __M5GFX_M5MODULERCA__ ) || defined ( __M5GFX_M5UNITRCA__ )
-        {
-          bool unit_rca = _cfg.external_display.unit_rca;
-          auto board = getBoard();
 #if defined ( __M5GFX_M5MODULERCA__ )
-          if (_cfg.external_display.module_rca)
-          {
-            if (board == board_t::board_M5Stack
-            || board == board_t::board_M5StackCore2
-            || board == board_t::board_M5Tough
-            ) {
-              // When ModuleRCA is used, UnitRCA is not used.
-              unit_rca = false;
-              M5ModuleRCA dsp;
-              if (dsp.init()) {
-                addDisplay(dsp);
-              }
-            }
-          }
+      M5ModuleRCA::config_t module_rca;
 #endif
 #if defined ( __M5GFX_M5UNITRCA__ )
-          if (unit_rca)
-          {
-            if ( board == board_t::board_M5Stack
-              || board == board_t::board_M5StackCore2
-              || board == board_t::board_M5Paper
-              || board == board_t::board_M5Tough
-              || board == board_t::board_M5Station
-              || (!port_a_used && ( // ATOM does not allow video output via UnitRCA when PortA is used.
-                   board == board_t::board_M5Atom
-                || board == board_t::board_M5AtomPsram
-                || board == board_t::board_M5AtomU
-              )))
-            {
-              M5UnitRCA dsp;
-              if (dsp.init()) {
-                addDisplay(dsp);
-              }
-            }
-          }
+      M5UnitRCA::config_t unit_rca;
 #endif
-        }
+#if defined ( __M5GFX_M5UNITOLED__ )
+      M5UnitOLED::config_t unit_oled;
 #endif
+#if defined ( __M5GFX_M5UNITLCD__ )
+      M5UnitLCD::config_t unit_lcd;
 #endif
-      }
 
-      _primaryDisplay.setBrightness(brightness);
-
-      update();
-    }
-
-    /// To call this function in a loop function.
-    void update(void);
-
-    /// milli seconds at the time the update was called
-    std::uint32_t getUpdateMsec(void) const { return _updateMsec; }
+    };
 
     M5GFX &Display = _primaryDisplay;
     M5GFX &Lcd = _primaryDisplay;
@@ -307,51 +187,217 @@ namespace m5
 
     Mic_Class Mic;
 
-    M5GFX& Displays(size_t index) { return index == _primary_display_index ? _primaryDisplay : this->_displays[index]; }
+    M5GFX& Displays(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
+
+    M5GFX& getDisplay(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
 
     std::size_t getDisplayCount(void) const { return this->_displays.size(); }
 
-    M5GFX& getDisplay(size_t index) { return index == _primary_display_index ? _primaryDisplay : this->_displays[index]; }
+    std::size_t addDisplay(M5GFX& dsp);
 
-    std::size_t addDisplay(M5GFX& dsp) {
-      this->_displays.push_back(dsp);
-      auto res = this->_displays.size() - 1;
-      setPrimaryDisplay(res == 0 ? 0 : _primary_display_index);
+    // Get the display index of the type matching the argument.
+    // Returns -1 if not found.
+    int32_t getDisplayIndex(m5gfx::board_t board);
 
-      // Touch screen operation is always limited to the first display.
-      Touch.begin(_displays.front().touch() ? &_displays.front() : nullptr);
+    // Designates the display of the specified index as PrimaryDisplay.
+    bool setPrimaryDisplay(std::size_t index);
 
-      return res;
+    // Find a display that matches the specified display type and designate it as PrimaryDisplay.
+    bool setPrimaryDisplayType(m5gfx::board_t board);
+
+    // Find a display that matches the specified display type and designate it as PrimaryDisplay.
+    // Multiple display types can be specified in the initializer list.
+    bool setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit);
+
+    /// milli seconds at the time the update was called
+    std::uint32_t getUpdateMsec(void) const { return _updateMsec; }
+
+    static inline config_t config(void)
+    {
+      return config_t();
     }
 
-    bool setPrimaryDisplay(std::size_t index) {
-      if (index >= _displays.size()) { return false; }
-      std::size_t pdi = _primary_display_index;
-      // if (pdi == index) { return true; }
-      if (pdi < _displays.size()) {
-        _displays[pdi] = _primaryDisplay;
+    /// get the board type of the runtime environment.
+    /// @return board type
+    board_t getBoard(void) const { return _board; }
+
+    /// To call this function in a loop function.
+    void update(void);
+
+    /// Perform initialization process at startup.
+    void begin(void)
+    {
+      if (_board != m5gfx::board_t::board_unknown) { return; }
+      config_t cfg;
+      begin(cfg);
+    }
+
+    /// Perform initialization process at startup.
+    void begin(config_t cfg)
+    {
+      // Allow begin execution only once.
+      if (_board != m5gfx::board_t::board_unknown) { return; }
+
+      auto brightness = _primaryDisplay.getBrightness();
+      _primaryDisplay.setBrightness(0);
+      bool res = _primaryDisplay.init_without_reset();
+      auto board = _check_boardtype(_primaryDisplay.getBoard());
+      if (board == board_t::board_unknown) { board = cfg.fallback_board; }
+      _board = board;
+      _setup_i2c(board);
+      if (res && getDisplayCount() == 0) {
+        addDisplay(_primaryDisplay);
       }
-      _primary_display_index = index;
-      _primaryDisplay = _displays[index];
-      return true;
+
+#if defined ( __M5GFX_M5ATOMDISPLAY__ )
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+      if (cfg.external_display.atom_display) {
+        if (_board == board_t::board_M5Atom || _board == board_t::board_M5AtomPsram || _board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite)
+        {
+          M5AtomDisplay dsp(cfg.atom_display);
+          if (dsp.init_without_reset()) {
+            addDisplay(dsp);
+          }
+        }
+      }
+#endif
+#endif
+
+      _begin(cfg);
+
+
+      // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
+#if defined ( __M5GFX_M5MODULEDISPLAY__ )
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+      if (cfg.external_display.module_display) {
+        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough || _board == board_t::board_M5StackCoreS3)
+        {
+          M5ModuleDisplay dsp(cfg.module_display);
+          if (dsp.init()) {
+            addDisplay(dsp);
+          }
+        }
+      }
+#endif
+#endif
+
+      // Speaker selection is performed after the Module Display has been determined.
+      _begin_spk(cfg);
+
+      bool port_a_used = _begin_rtc_imu(cfg);
+      (void)port_a_used;
+
+      if (cfg.external_display_value)
+      {
+#if defined ( __M5GFX_M5UNITOLED__ )
+        if (cfg.external_display.unit_oled)
+        {
+          if (cfg.unit_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_oled.i2c_port < 0) { cfg.unit_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+
+          M5UnitOLED dsp(cfg.unit_oled);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
+#if defined ( __M5GFX_M5UNITLCD__ )
+        if (cfg.external_display.unit_lcd)
+        {
+          if (cfg.unit_lcd.pin_sda >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_lcd.pin_scl >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_lcd.i2c_port < 0) { cfg.unit_lcd.i2c_port = (int8_t)Ex_I2C.getPort(); }
+
+          M5UnitLCD dsp(cfg.unit_lcd);
+          int retry = 8;
+          do {
+            m5gfx::delay(32);
+            if (dsp.init()) {
+              addDisplay(dsp);
+              port_a_used = true;
+              break;
+            }
+          } while (--retry);
+        }
+#endif
+
+// RCA is not available on ESP32S3
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined ( __M5GFX_M5MODULERCA__ ) || defined ( __M5GFX_M5UNITRCA__ )
+        {
+          bool unit_rca = cfg.external_display.unit_rca;
+          (void)unit_rca;
+#if defined ( __M5GFX_M5MODULERCA__ )
+          if (cfg.external_display.module_rca)
+          {
+            if (board == board_t::board_M5Stack
+            || board == board_t::board_M5StackCore2
+            || board == board_t::board_M5Tough
+            ) {
+              // When ModuleRCA is used, UnitRCA is not used.
+              unit_rca = false;
+              M5ModuleRCA dsp(cfg.module_rca);
+              if (dsp.init()) {
+                addDisplay(dsp);
+              }
+            }
+          }
+#endif
+#if defined ( __M5GFX_M5UNITRCA__ )
+          if (unit_rca)
+          {
+            if ( board == board_t::board_M5Stack
+              || board == board_t::board_M5StackCore2
+              || board == board_t::board_M5Paper
+              || board == board_t::board_M5Tough
+              || board == board_t::board_M5Station
+              || (!port_a_used && ( // ATOM does not allow video output via UnitRCA when PortA is used.
+                   board == board_t::board_M5Atom
+                || board == board_t::board_M5AtomPsram
+                || board == board_t::board_M5AtomU
+              )))
+            {
+              M5UnitRCA dsp(cfg.unit_rca);
+              if (dsp.init()) {
+                addDisplay(dsp);
+              }
+            }
+          }
+#endif
+        }
+#endif
+#endif
+      }
+
+      if (_primaryDisplay.getBoard() != board_t::board_unknown)
+      {
+        _primaryDisplay.setBrightness(brightness);
+      }
+
+      update();
     }
 
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
     std::uint32_t _updateMsec = 0;
-    config_t _cfg;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
     M5GFX _primaryDisplay;  // setPrimaryされたディスプレイのインスタンス
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
+    bool use_pmic_button = false;
+    bool use_hat_spi = false;
 
-    void _begin(void);
-    void _begin_spk(void);
-    bool _begin_rtc_imu(void);
+    void _begin(const config_t& cfg);
+    void _begin_spk(config_t& cfg);
+    bool _begin_rtc_imu(const config_t& cfg);
 
     board_t _check_boardtype(board_t);
+    void _setup_i2c(board_t);
 
     static bool _speaker_enabled_cb(void* args, bool enabled);
     static bool _microphone_enabled_cb(void* args, bool enabled);
