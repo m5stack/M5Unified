@@ -330,7 +330,7 @@ void loop(void)
             : M5.BtnPWR.wasClicked() ? 2
             : M5.BtnPWR.wasPressed() ? 3
             : M5.BtnPWR.wasReleased() ? 4
-            : M5.BtnPWR.wasDeciedClickCount() ? 5
+            : M5.BtnPWR.wasDecideClickCount() ? 5
             : 0;
   if (state)
   {
@@ -349,7 +349,7 @@ void loop(void)
         : M5.BtnA.wasClicked() ? 2
         : M5.BtnA.wasPressed() ? 3
         : M5.BtnA.wasReleased() ? 4
-        : M5.BtnA.wasDeciedClickCount() ? 5
+        : M5.BtnA.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -367,7 +367,7 @@ void loop(void)
         : M5.BtnB.wasClicked() ? 2
         : M5.BtnB.wasPressed() ? 3
         : M5.BtnB.wasReleased() ? 4
-        : M5.BtnB.wasDeciedClickCount() ? 5
+        : M5.BtnB.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -385,7 +385,7 @@ void loop(void)
         : M5.BtnC.wasClicked() ? 2
         : M5.BtnC.wasPressed() ? 3
         : M5.BtnC.wasReleased() ? 4
-        : M5.BtnC.wasDeciedClickCount() ? 5
+        : M5.BtnC.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -403,7 +403,7 @@ void loop(void)
         : M5.BtnEXT.wasClicked() ? 2
         : M5.BtnEXT.wasPressed() ? 3
         : M5.BtnEXT.wasReleased() ? 4
-        : M5.BtnEXT.wasDeciedClickCount() ? 5
+        : M5.BtnEXT.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {

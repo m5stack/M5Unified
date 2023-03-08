@@ -625,7 +625,7 @@ void loop(void)
   {
     M5.Speaker.tone(440, 50);
   }
-  if (M5.BtnA.wasDeciedClickCount())
+  if (M5.BtnA.wasDecideClickCount())
   {
     switch (M5.BtnA.getClickCount())
     {

@@ -31,7 +31,10 @@ namespace m5
     bool wasDoubleClicked(void) const { return _currentState == state_decide_click_count && _clickCount == 2; }
 
     /// Returns true when some time has passed since the button was multiple clicked.
-    bool wasDeciedClickCount(void) const { return _currentState == state_decide_click_count; }
+    bool wasDecideClickCount(void) const { return _currentState == state_decide_click_count; }
+
+    [[deprecated("use wasDecideClickCount()")]]
+    inline bool wasDeciedClickCount(void) const { return wasDecideClickCount(); }
 
     std::uint8_t getClickCount(void) const { return _clickCount; }
 
