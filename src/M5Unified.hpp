@@ -55,7 +55,8 @@ namespace m5
           uint8_t module_rca : 1;
           uint8_t hat_spk : 1;
           uint8_t atomic_spk : 1;
-          uint8_t reserve : 4;
+          uint8_t hat_spk2 : 1;
+          uint8_t reserve : 3;
         } external_speaker;
         uint8_t external_speaker_value = 0x00;
       };
@@ -68,9 +69,10 @@ namespace m5
           uint8_t atom_display : 1;
           uint8_t unit_oled : 1;
           uint8_t unit_lcd : 1;
+          uint8_t unit_glass : 1;
           uint8_t unit_rca : 1;
           uint8_t module_rca : 1;
-          uint8_t reserve : 2;
+          uint8_t reserve : 1;
         } external_display;
         uint8_t external_display_value = 0xFF;
       };
@@ -139,8 +141,8 @@ namespace m5
 #if defined ( __M5GFX_M5MODULERCA__ )
       M5ModuleRCA::config_t module_rca;
 #endif
-#if defined ( __M5GFX_M5UNITRCA__ )
-      M5UnitRCA::config_t unit_rca;
+#if defined ( __M5GFX_M5UNITGLASS__ )
+      M5UnitGLASS::config_t unit_glass;
 #endif
 #if defined ( __M5GFX_M5UNITOLED__ )
       M5UnitOLED::config_t unit_oled;
@@ -148,7 +150,9 @@ namespace m5
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
 #endif
-
+#if defined ( __M5GFX_M5UNITRCA__ )
+      M5UnitRCA::config_t unit_rca;
+#endif
     };
 
     M5GFX &Display = _primaryDisplay;
@@ -304,6 +308,21 @@ namespace m5
         }
 #endif
 
+#if defined ( __M5GFX_M5UNITGLASS__ )
+        if (cfg.external_display.unit_glass)
+        {
+          if (cfg.unit_glass.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_glass.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_glass.i2c_port < 0) { cfg.unit_glass.i2c_port = (int8_t)Ex_I2C.getPort(); }
+
+          M5UnitGLASS dsp(cfg.unit_glass);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
 #if defined ( __M5GFX_M5UNITLCD__ )
         if (cfg.external_display.unit_lcd)
         {
@@ -390,7 +409,7 @@ namespace m5
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
     bool use_pmic_button = false;
-    bool use_hat_spi = false;
+    bool use_hat_spk = false;
 
     void _begin(const config_t& cfg);
     void _begin_spk(config_t& cfg);

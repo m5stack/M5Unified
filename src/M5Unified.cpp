@@ -113,7 +113,7 @@ namespace m5
     case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if (self->use_hat_spi)
+      if (self->use_hat_spk)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (enabled)
@@ -716,9 +716,19 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5StickC:
-        if (cfg.external_speaker.hat_spk)
-        { /// for SPK HAT
-          use_hat_spi = true;
+        if (cfg.external_speaker.hat_spk2 && (_board != board_t::board_M5StackCoreInk))
+        { /// for HAT SPK2 (for StickC/StickCPlus.  CoreInk does not support.)
+          spk_cfg.pin_data_out = GPIO_NUM_25;
+          spk_cfg.pin_bck = GPIO_NUM_26;
+          spk_cfg.pin_ws = GPIO_NUM_0;
+          spk_cfg.i2s_port = I2S_NUM_1;
+          spk_cfg.use_dac = false;
+          spk_cfg.buzzer = false;
+          spk_cfg.magnification = 16;
+        }
+        else if (cfg.external_speaker.hat_spk)
+        { /// for HAT SPK
+          use_hat_spk = true;
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
           m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
@@ -782,49 +792,52 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (cfg.external_speaker_value && (cfg.external_speaker.module_display || cfg.external_speaker.module_rca))
+      if (cfg.external_speaker_value)
       {
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
         if (_board == board_t::board_M5StackCoreS3)
 #else
         if (  _board == board_t::board_M5Stack
-           || _board == board_t::board_M5StackCore2
-           || _board == board_t::board_M5Tough)
+          || _board == board_t::board_M5StackCore2
+          || _board == board_t::board_M5Tough)
 #endif
         {
           bool use_module_display = cfg.external_speaker.module_display
                                 && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
-          if (use_module_display) {
-            spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
+          if (use_module_display || cfg.external_speaker.module_rca)
+          {
+            if (use_module_display) {
+              spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
+            }
+            uint32_t pins_index = use_module_display;
+  #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+            static constexpr const uint8_t pins[][2] =
+            {// DOUT       , BCK
+              { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
+              { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
+            };
+  #else
+            static constexpr const uint8_t pins[][2] =
+            {// DOUT       , BCK
+              { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
+              { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
+              { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
+              { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
+            };
+            // !core is (Core2 + Tough)
+            if (_board == m5::board_t::board_M5Stack) {
+              pins_index += 2;            
+            }
+  #endif
+            spk_cfg.pin_data_out = pins[pins_index][0];
+            spk_cfg.pin_bck      = pins[pins_index][1];
+            spk_cfg.i2s_port = I2S_NUM_1;
+            spk_cfg.magnification = 16;
+            spk_cfg.stereo = true;
+            spk_cfg.buzzer = false;
+            spk_cfg.use_dac = false;
+            spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
           }
-          uint32_t pins_index = use_module_display;
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-          static constexpr const uint8_t pins[][2] =
-          {// DOUT       , BCK
-            { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
-            { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
-          };
-#else
-          static constexpr const uint8_t pins[][2] =
-          {// DOUT       , BCK
-            { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
-            { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
-            { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
-            { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
-          };
-          // !core is (Core2 + Tough)
-          if (M5.getBoard() == m5::board_t::board_M5Stack) {
-            pins_index += 2;            
-          }
-#endif
-          spk_cfg.pin_data_out = pins[pins_index][0];
-          spk_cfg.pin_bck      = pins[pins_index][1];
-          spk_cfg.i2s_port = I2S_NUM_1;
-          spk_cfg.magnification = 16;
-          spk_cfg.stereo = true;
-          spk_cfg.buzzer = false;
-          spk_cfg.use_dac = false;
-          spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
         }
       }
 

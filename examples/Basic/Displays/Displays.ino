@@ -24,11 +24,14 @@
 // If you use Module RCA, write this.
 #include <M5ModuleRCA.h>
 
-// If you use Unit LCD, write this.
-#include <M5UnitLCD.h>
+// If you use Unit GLASS, write this.
+#include <M5UnitGLASS.h>
 
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use Unit LCD, write this.
+#include <M5UnitLCD.h>
 
 // If you use Unit RCA (for Video output), write this.
 #include <M5UnitRCA.h>
@@ -48,6 +51,7 @@ void setup(void)
   // external display setting. (Pre-include required)
   cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
   cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
+  cfg.external_display.unit_glass     = true;  // default=true. use UnitGLASS
   cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
   cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
   cfg.external_display.unit_rca       = true;  // default=true. use UnitRCA VideoOutput
@@ -57,6 +61,7 @@ void setup(void)
  Display with auto-detection
  - module_display
  - atom_display
+ - unit_glass
  - unit_oled
  - unit_lcd
 
@@ -112,6 +117,13 @@ void setup(void)
 // cfg.unit_rca.pin_dac        = GPIO_NUM_26;
 // cfg.unit_rca.output_level   = 128;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS__ ) // setting for Unit GLASS.
+// cfg.unit_glass.pin_sda  = GPIO_NUM_21;
+// cfg.unit_glass.pin_scl  = GPIO_NUM_22;
+// cfg.unit_glass.i2c_addr = 0x3D;
+// cfg.unit_glass.i2c_freq = 400000;
+// cfg.unit_glass.i2c_port = I2C_NUM_0;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ ) // setting for Unit OLED.
 // cfg.unit_oled.pin_sda  = GPIO_NUM_21;
 // cfg.unit_oled.pin_scl  = GPIO_NUM_22;
@@ -150,6 +162,7 @@ void setup(void)
       m5::board_t::board_M5ModuleDisplay,
       m5::board_t::board_M5AtomDisplay,
 //    m5::board_t::board_M5ModuleRCA,
+//    m5::board_t::board_M5UnitGLASS,
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
@@ -164,6 +177,7 @@ void setup(void)
   int index_module_display = M5.getDisplayIndex(m5::board_t::board_M5ModuleDisplay);
   int index_atom_display = M5.getDisplayIndex(m5::board_t::board_M5AtomDisplay);
   int index_module_rca = M5.getDisplayIndex(m5::board_t::board_M5ModuleRCA);
+  int index_unit_glass = M5.getDisplayIndex(m5::board_t::board_M5UnitGLASS);
   int index_unit_oled = M5.getDisplayIndex(m5::board_t::board_M5UnitOLED);
   int index_unit_lcd = M5.getDisplayIndex(m5::board_t::board_M5UnitLCD);
   int index_unit_rca = M5.getDisplayIndex(m5::board_t::board_M5UnitRCA);
@@ -176,6 +190,9 @@ void setup(void)
   }
   if (index_module_rca >= 0) {
     M5.Displays(index_module_rca).print("This is Module RCA\n");
+  }
+  if (index_unit_glass >= 0) {
+    M5.Displays(index_unit_glass).print("This is Unit GLASS\n");
   }
   if (index_unit_oled >= 0) {
     M5.Displays(index_unit_oled).print("This is Unit OLED\n");
