@@ -28,6 +28,10 @@ m5::M5Unified M5;
  #include <driver/adc.h>
 #endif
 
+#if __has_include (<driver/i2s.h>)
+ #include <driver/i2s.h>
+#endif
+
 void __attribute((weak)) adc_power_acquire(void)
 {
 #if defined (ESP_IDF_VERSION_VAL)
@@ -658,7 +662,11 @@ for (int i = 0; i < 0x50; ++i)
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
       spk_cfg.magnification = 16;
+#if defined SOC_I2S_NUM
+      spk_cfg.i2s_port = (i2s_port_t)(SOC_I2S_NUM - 1);
+#else
       spk_cfg.i2s_port = (i2s_port_t)(I2S_NUM_MAX - 1);
+#endif
       switch (_board)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -795,13 +803,16 @@ for (int i = 0; i < 0x50; ++i)
       if (cfg.external_speaker_value)
       {
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+ #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3)
-#else
+#elif defined ( CONFIG_IDF_TARGET_ESP32 ) || !defined ( CONFIG_IDF_TARGET )
+ #define ENABLE_M5MODULE
         if (  _board == board_t::board_M5Stack
           || _board == board_t::board_M5StackCore2
           || _board == board_t::board_M5Tough)
 #endif
         {
+#ifdef ENABLE_M5MODULE
           bool use_module_display = cfg.external_speaker.module_display
                                 && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
           if (use_module_display || cfg.external_speaker.module_rca)
@@ -838,6 +849,8 @@ for (int i = 0; i < 0x50; ++i)
             spk_cfg.use_dac = false;
             spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
           }
+ #undef ENABLE_M5MODULE
+#endif
         }
       }
 
