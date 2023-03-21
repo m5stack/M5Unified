@@ -52,7 +52,7 @@ namespace m5
     void setGyroFsr(Gscale scale);
     void setAccelFsr(Ascale scale);
 
-    float aRes, gRes;
+    float _aRes, _gRes;
     Gscale _gscale;
     Ascale _ascale;
     std::uint8_t _device_id = 0;
