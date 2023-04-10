@@ -256,27 +256,27 @@ for (int i = 0; i < 0x50; ++i)
 
       default:
 
-#if defined ( ARDUINO_M5Stack_Core_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE )
+#if defined ( ARDUINO_M5STACK_CORE_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE ) || defined ( ARDUINO_M5Stack_Core_ESP32 )
 
         board = board_t::board_M5Stack;
 
-#elif defined ( ARDUINO_M5STACK_Core2 )
+#elif defined ( ARDUINO_M5STACK_CORE2 ) || defined ( ARDUINO_M5STACK_Core2 )
 
         board = board_t::board_M5StackCore2;
 
-#elif defined ( ARDUINO_M5Stick_C )
+#elif defined ( ARDUINO_M5STICK_C ) || defined ( ARDUINO_M5Stick_C )
 
         board = board_t::board_M5StickC;
 
-#elif defined ( ARDUINO_M5Stick_C_Plus )
+#elif defined ( ARDUINO_M5STICK_C_PLUS ) || defined ( ARDUINO_M5Stick_C_Plus )
 
         board = board_t::board_M5StickCPlus;
 
-#elif defined ( ARDUINO_M5Stack_CoreInk )
+#elif defined ( ARDUINO_M5STACK_COREINK ) || defined ( ARDUINO_M5Stack_CoreInk )
 
         board = board_t::board_M5StackCoreInk;
 
-#elif defined ( ARDUINO_M5STACK_Paper )
+#elif defined ( ARDUINO_M5STACK_PAPER ) || defined ( ARDUINO_M5STACK_Paper )
 
         board = board_t::board_M5Paper;
 
@@ -284,11 +284,11 @@ for (int i = 0; i < 0x50; ++i)
 
         board = board_t::board_M5Tough;
 
-#elif defined ( ARDUINO_M5Stack_ATOM )
+#elif defined ( ARDUINO_M5STACK_ATOM ) || defined ( ARDUINO_M5Stack_ATOM )
 
         board = board_t::board_M5Atom;
 
-#elif defined ( ARDUINO_M5Stack_Timer_CAM )
+#elif defined ( ARDUINO_M5STACK_TIMER_CAM ) || defined ( ARDUINO_M5Stack_Timer_CAM )
 
         board = board_t::board_M5TimerCam;
 
