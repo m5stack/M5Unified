@@ -8,12 +8,13 @@
 ## Supported device
  - M5Stack BASIC / GRAY / GO / FIRE
  - M5Stack Core2 / Tough
+ - M5Stack CoreS3
  - M5Stick C / CPlus
  - M5Stack CoreInk
  - M5Station
  - M5Paper
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
- - M5ATOMS3 / Lite
+ - M5ATOMS3 / S3Lite
  - M5STAMP PICO
  - M5STAMPC3 / C3U
  - M5STAMPS3
@@ -28,7 +29,7 @@
 
 ## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
- - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3)
+ - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
  - Module RCA (with M5Stack / Core2 / Tough)
 
@@ -40,13 +41,13 @@
 |:------------------:|:---------------------------------:|:---------------------------------:|:-------------------------------------:|:----------------------------:|:----------------------:|:---------------------:|:---------------------:|:---------------------------------------:|:------------------:|:------------------:|
 |GPIO 0<BR>`ADC2_CH1`|`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>**SPK_LRCK<BR>PDM_C**(Core2)|`HAT`<BR>`PAD`<BR>**PDM_C**   |**EPD_RST**             | ---                   | ---                   | ---                                     |                    |GPIO 0<BR>`ADC2_CH1`|
 |GPIO 1<BR>`USB_TX`  |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**                  |**Serial**                    |**Serial**              |**Serial**             |**Serial**             |**Serial**                               |**Serial**          |GPIO 1<BR>`USB_TX`  |
-|GPIO 2<BR>`ADC2_CH2`|`M-Bus`<BR>                        |`M-Bus`<BR>                        |`M-Bus`<BR>**SPK D**                   |`PAD`<BR>**Beep**(CPlus)      |**Beep**                |**PW_Hold**            |**ReadEn**             | ---                                     | ---                |GPIO 2<BR>`ADC2_CH2`|
+|GPIO 2<BR>`ADC2_CH2`|`M-Bus`<BR>                        |`M-Bus`<BR>                        |`M-Bus`<BR>**SPK_D**                   |`PAD`<BR>**Beep**(CPlus)      |**Beep**                |**PW_Hold**            |**ReadEn**             | ---                                     | ---                |GPIO 2<BR>`ADC2_CH2`|
 |GPIO 3<BR>`USB_RX`  |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**                  |**Serial**                    |**Serial**              |**Serial**             |**Serial**             |**Serial**                               |**Serial**          |GPIO 3<BR>`USB_RX`  |
 |GPIO 4<BR>`ADC2_CH0`|**TF_CS**                          |**TF_CS**                          |**TF_CS**                              | ---                          |**EPD_BUSY**            |**TF_CS**              |**RGB LED**            | ---                                     | ---                |GPIO 4<BR>`ADC2_CH0`|
 |GPIO 5              |`M-Bus`                            |`M-Bus`                            |**LCD_CS**                             |**LCD_CS**                    |**BTN_HAT**             |**EXT_5V**             |**LCD_CS**             |`Bus`(P)<BR>**PDM_C**(U)                  | ---                |GPIO 5              |
 |GPIO 9              | ---                               | ---                               | ---                                   |**InfraRed**                  |**EPD_CS**              | ---                   | ---                   | ---                                     | ---                |GPIO 9              |
 |GPIO10              | ---                               | ---                               | ---                                   |**LED**                       |**LED**                 | ---                   | ---                   | ---                                     | ---                |GPIO10              |
-|GPIO12<BR>`ADC2_CH5`|`M-Bus`<BR>IIS_SK                  |`M-Bus`<BR>IIS_SK                  |**SPK BCLK**                           | ---                          |**PW_Hold**             |**SPI_MOSI**           |**USB_PW**             |**InfraRed**                             | ---                |GPIO12<BR>`ADC2_CH5`|
+|GPIO12<BR>`ADC2_CH5`|`M-Bus`<BR>IIS_SK                  |`M-Bus`<BR>IIS_SK                  |**SPK_BCLK**                           | ---                          |**PW_Hold**             |**SPI_MOSI**           |**USB_PW**             |**InfraRed**                             | ---                |GPIO12<BR>`ADC2_CH5`|
 |GPIO13<BR>`ADC2_CH4`|`M-Bus`<BR>IIS_WS                  |`M-Bus`<BR>IIS_WS                  |`M-Bus`<BR>RXD2                        |**SPI_SCLK**                  |`MI-Bus`<BR>RXD2        |**SPI_MISO**           |`PORT.C1`              | ---                                     | ---                |GPIO13<BR>`ADC2_CH4`|
 |GPIO14<BR>`ADC2_CH6`|**LCD_CS**                         |**LCD_CS**                         |`M-Bus`<BR>TXD2                        | ---                          |`MI-Bus`<BR>TXD2        |**SPI_SCLK**           |`PORT.C1`              | ---                                     | ---                |GPIO14<BR>`ADC2_CH6`|
 |GPIO15<BR>`ADC2_CH3`|`M-Bus`<BR>IIS_OUT                 |`M-Bus`<BR>**RGB LED**             |**LCD_D/C**                            |**SPI_MOSI**                  |**EPD_D/C**             |**EPD_CS**             |**LCD_RST**            | ---                                     | ---                |GPIO15<BR>`ADC2_CH3`|
@@ -93,44 +94,47 @@
 
 
 ### ESP32S3 GPIO list
-|                    |M5ATOMS3 <BR>/ Lite      |                    |
-|:------------------:|:-----------------------:|:------------------:|
-|GPIO 0              | ---                     |GPIO 0              |
-|GPIO 1              |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
-|GPIO 2              |`PORT.A`<BR>**I2C0_SDA** |GPIO 2              |
-|GPIO 3              |vdd3v3                   |GPIO 3              |
-|GPIO 4              |**InfraRed**             |GPIO 4              |
-|GPIO 5              |`Bus`                    |GPIO 5              |
-|GPIO 6              |`Bus`                    |GPIO 6              |
-|GPIO 7              |`Bus`                    |GPIO 7              |
-|GPIO 8              |`Bus`                    |GPIO 8              |
-|GPIO 9              | ---                     |GPIO 9              |
-|GPIO10              | ---                     |GPIO10              |
-|GPIO11              | ---                     |GPIO11              |
-|GPIO13              | ---                     |GPIO13              |
-|GPIO14              | ---                     |GPIO14              |
-|GPIO15              |**LCD_CS**               |GPIO15              |
-|GPIO16              |**LCD_BL**               |GPIO16              |
-|GPIO17              |**LCD_SCLK**             |GPIO17              |
-|GPIO18              | ---                     |GPIO18              |
-|GPIO19              |`USB`<BR>**D--**         |GPIO19              |
-|GPIO20              |`USB`<BR>**D++**         |GPIO20              |
-|GPIO21              |**LCD_MOSI**             |GPIO21              |
-|GPIO33              |**LCD_DC**               |GPIO33              |
-|GPIO34              |**LCD_RST**              |GPIO34              |
-|GPIO35              |**RGB LED**              |GPIO35              |
-|GPIO36              | ---                     |GPIO36              |
-|GPIO37              | ---                     |GPIO37              |
-|GPIO38              |`Bus`<BR>**I2C1_SDA**    |GPIO38              |
-|GPIO39              |`Bus`<BR>**I2C1_SCL**    |GPIO39              |
-|GPIO40              | ---                     |GPIO40              |
-|GPIO41              |**BTN_A**                |GPIO41              |
-|GPIO42              | ---                     |GPIO42              |
-|GPIO43              | ---                     |GPIO43              |
-|GPIO44              | ---                     |GPIO44              |
-|GPIO45              | ---                     |GPIO45              |
-|GPIO46              | ---                     |GPIO46              |
-|                    |M5ATOMS3 <BR>/ Lite      |                    |
+|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |                    |
+|:------------------:|:-------------------------------:|:-----------------------:|:------------------:|
+|GPIO 0              |`M-Bus`<BR>**SPK_LRCK**          | ---                     |GPIO 0              |
+|GPIO 1              |`PORT.A`<BR>**I2C0_SCL**         |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
+|GPIO 2              |`PORT.A`<BR>**I2C0_SDA**         |`PORT.A`<BR>**I2C0_SDA** |GPIO 2              |
+|GPIO 3              |**LCD_CS**                       |vdd3v3                   |GPIO 3              |
+|GPIO 4              |**TF_CS**                        |**InfraRed**             |GPIO 4              |
+|GPIO 5              |`M-Bus`                          |`Bus`                    |GPIO 5              |
+|GPIO 6              |`M-Bus`                          |`Bus`                    |GPIO 6              |
+|GPIO 7              |`M-Bus`                          |`Bus`                    |GPIO 7              |
+|GPIO 8              |`M-Bus`<BR>`PORT.B`              |`Bus`                    |GPIO 8              |
+|GPIO 9              |`M-Bus`<BR>`PORT.B`              | ---                     |GPIO 9              |
+|GPIO10              |`M-Bus`                          | ---                     |GPIO10              |
+|GPIO11              |**I2C1_SCL**                     | ---                     |GPIO11              |
+|GPIO12              |**I2C1_SDA**                     | ---                     |GPIO12              |
+|GPIO13              |`M-Bus`<BR>**SPK_D**             | ---                     |GPIO13              |
+|GPIO14              |`M-Bus`<BR>**MIC_IN**            | ---                     |GPIO14              |
+|GPIO15              |**CAM_D6**                       |**LCD_CS**               |GPIO15              |
+|GPIO16              |**CAM_D7**                       |**LCD_BL**               |GPIO16              |
+|GPIO17              |`M-Bus`<BR>`PORT.C`              |**LCD_SCLK**             |GPIO17              |
+|GPIO18              |`M-Bus`<BR>`PORT.C`              | ---                     |GPIO18              |
+|GPIO19              |`USB`<BR>**D--**                 |`USB`<BR>**D--**         |GPIO19              |
+|GPIO20              |`USB`<BR>**D++**                 |`USB`<BR>**D++**         |GPIO20              |
+|GPIO21              |**I2C_INT**                      |**LCD_MOSI**             |GPIO21              |
+|GPIO33              |**SPK_WCK**                      |**LCD_DC**               |GPIO33              |
+|GPIO34              |**SPK_BCK**                      |**LCD_RST**              |GPIO34              |
+|GPIO35              |`M-Bus`<BR>**SPI_MISO<BR>LCD DC**|**RGB LED**              |GPIO35              |
+|GPIO36              |`M-Bus`<BR>**SPI_SCLK**          | ---                     |GPIO36              |
+|GPIO37              |`M-Bus`<BR>**SPI_MOSI**          | ---                     |GPIO37              |
+|GPIO38              |**CAM_HREF**                     |`Bus`<BR>**I2C1_SDA**    |GPIO38              |
+|GPIO39              |**CAM_D2**                       |`Bus`<BR>**I2C1_SCL**    |GPIO39              |
+|GPIO40              |**CAM_D3**                       | ---                     |GPIO40              |
+|GPIO41              |**CAM_D4**                       |**BTN_A**                |GPIO41              |
+|GPIO42              |**CAM_D5**                       | ---                     |GPIO42              |
+|GPIO43              |`M-Bus`<BR>**SerialTX**          | ---                     |GPIO43              |
+|GPIO44              |`M-Bus`<BR>**SerialRX**          | ---                     |GPIO44              |
+|GPIO45              |**CAM_PCLK**                     | ---                     |GPIO45              |
+|GPIO46              |**CAM_VSYNC**                    | ---                     |GPIO46              |
+|GPIO47              |**CAM_D9**                       | ---                     |GPIO47              |
+|GPIO48              |**CAM_D8**                       | ---                     |GPIO48              |
+|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |                    |
 
 ### AXP192 IO list
 |              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
@@ -155,38 +159,64 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH width="24%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
-  <TH width="24%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH width="33%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
+  <TH width="33%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH width="33%">M5Stack<BR>CoreS3</TH>
+ </TR>
+ <TR align="center">
+  <TD rowspan="2">Bus</TD>
+  <TD><IMG src="docs/img/pin_def_core_bus.svg" ><BR>M-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_core2_bus.svg"><BR>M-Bus</TD>
+  <TD><IMG src="docs/img/pin_def_cores3_bus.svg"><BR>M-Bus</TD>
+ </TR>
+ <TR align="center">
+  <TD colspan="3">
+  ※ HPWR=not connected to the ESP32.
+   Used by modules capable of supplying 12V power.
+  </TD>
+ </TR>
+</TABLE>
+
+<TABLE>
+ <TR>
+  <TH></TH>
+  <TH width="16%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
+  <TH width="16%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
+  <TH width="16%">M5Stack<BR>CoreS3</TH>
   <TH width="16%"> M5Paper </TH>
   <TH width="32%" colspan="2"> M5Station </TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
-  <TD><IMG src="docs/img/pin_def_core_porta.svg"    title="G,V,21,22"><BR>PortA</TD>
-  <TD><IMG src="docs/img/pin_def_core2_porta.svg"   title="G,V,32,33"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_core_porta.svg"   title="G,V,21,22"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_core2_porta.svg"  title="G,V,32,33"><BR>PortA</TD>
+  <TD><IMG src="docs/img/pin_def_cores3_porta.svg" title="G,V,2,1"><BR>PortA</TD>
   <TD><IMG src="docs/img/pin_def_paper_porta.svg"   title="G,V,25,32"><BR>PortA</TD>
   <TD colspan="2"><IMG src="docs/img/pin_def_station_porta.svg" title="G,V,32,33"><BR>PortA</TD>
  </TR>
  <TR align="center">
   <TD>PortB</TD>
-  <TD><IMG src="docs/img/pin_def_core_portb.svg"     title="G,V,26,36"><BR>PortB</TD>
-  <TD><IMG src="docs/img/pin_def_core2_portb.svg"    title="G,V,26,36"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_core_portb.svg"   title="G,V,26,36"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portb.svg"  title="G,V,26,36"><BR>PortB</TD>
+  <TD><IMG src="docs/img/pin_def_cores3_portb.svg" title="G,V,9,8"><BR>PortB</TD>
   <TD><IMG src="docs/img/pin_def_paper_portb.svg"    title="G,V,26,33"><BR>PortB</TD>
   <TD><IMG src="docs/img/pin_def_station_portb1.svg" title="G,V,25,35"><BR>PortB1</TD>
   <TD><IMG src="docs/img/pin_def_station_portb2.svg" title="G,V,26,36"><BR>PortB2</TD>
  </TR>
  <TR align="center">
   <TD>PortC</TD>
-  <TD><IMG src="docs/img/pin_def_core_portc.svg"     title="G,V,17,16"><BR>PortC</TD>
-  <TD><IMG src="docs/img/pin_def_core2_portc.svg"    title="G,V,14,13"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_core_portc.svg"   title="G,V,17,16"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portc.svg"  title="G,V,14,13"><BR>PortC</TD>
+  <TD><IMG src="docs/img/pin_def_cores3_portc.svg" title="G,V,17,18"><BR>PortC</TD>
   <TD><IMG src="docs/img/pin_def_paper_portc.svg"    title="G,V,18,19"><BR>PortC</TD>
   <TD><IMG src="docs/img/pin_def_station_portc1.svg" title="G,V,14,13"><BR>PortC1</TD>
   <TD><IMG src="docs/img/pin_def_station_portc2.svg" title="G,V,17,16"><BR>PortC2</TD>
  </TR>
  <TR align="center">
   <TD>PortD</TD>
-  <TD><IMG src="docs/img/pin_def_core_portd.svg"  title="G,V,35,34"><BR>PortD</TD>
-  <TD><IMG src="docs/img/pin_def_core2_portd.svg" title="G,V,35,34"><BR>PortD</TD>
+  <TD><IMG src="docs/img/pin_def_core_portd.svg"   title="G,V,35,34"><BR>PortD</TD>
+  <TD><IMG src="docs/img/pin_def_core2_portd.svg"  title="G,V,35,34"><BR>PortD</TD>
+  <TD></TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
@@ -195,20 +225,6 @@
   <TD><IMG src="docs/img/pin_def_core_porte.svg"  title="G,V,13,5" ><BR>PortE</TD>
   <TD><IMG src="docs/img/pin_def_core2_porte.svg" title="G,V,19,27"><BR>PortE / 485<BR>TOUGH485:12V</TD>
   <TD></TD>
-  <TD colspan="2"></TD>
- </TR>
- <TR align="center">
-  <TD rowspan="2">Bus</TD>
-  <TD><IMG src="docs/img/pin_def_core_bus.svg" ><BR>M-Bus</TD>
-  <TD><IMG src="docs/img/pin_def_core2_bus.svg"><BR>M-Bus</TD>
-  <TD></TD>
-  <TD colspan="2"></TD>
- </TR>
- <TR align="center">
-  <TD colspan="2">
-  ※ HPWR=not connected to the ESP32.
-   Used by modules capable of supplying 12V power.
-  </TD>
   <TD></TD>
   <TD colspan="2"></TD>
  </TR>
@@ -276,7 +292,7 @@
 <TABLE>
  <TR>
   <TH></TH>
-  <TH>ATOMS3<BR>/Lite</TH>
+  <TH>ATOMS3<BR>/S3Lite</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
