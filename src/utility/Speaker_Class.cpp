@@ -628,7 +628,7 @@ label_continue_sample:
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(uint32_t));
+      size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if portNUM_PROCESSORS > 1
       if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
