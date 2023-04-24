@@ -72,29 +72,26 @@ namespace m5
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Speaker.config();
-        if (cfg.pin_bck == GPIO_NUM_34)
+        if (cfg.pin_bck == GPIO_NUM_34 && enabled)
         {
-          if (enabled)
-          {
-            self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-            /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
-            static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
-            size_t reg0x06_value = 0;
-            size_t rate = (cfg.sample_rate + 1102) / 2205;
-            while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
+          self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+          /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
+          static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
+          size_t reg0x06_value = 0;
+          size_t rate = (cfg.sample_rate + 1102) / 2205;
+          while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
 
-            reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
-            aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
-            aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
-            aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
-            aw88298_write_reg( 0x06, reg0x06_value );
-            aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
-          }
-          else
-          {
-            aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
-            self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-          }
+          reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
+          aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
+          aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
+          aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
+          aw88298_write_reg( 0x06, reg0x06_value );
+          aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
+        }
+        else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+        {
+          aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
+          self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
         }
       }
       break;

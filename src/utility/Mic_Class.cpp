@@ -20,6 +20,9 @@
 #include <esp_log.h>
 #include <math.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 namespace m5
 {
 #if defined ( ESP_PLATFORM )
@@ -31,16 +34,26 @@ namespace m5
  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 3)
   #define SAMPLE_RATE_TYPE uint32_t
  #endif
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  #define MIC_CLASS_ADC_WIDTH_BITS ADC_WIDTH_BIT_12
+  #define MIC_CLASS_ADC_ATTEN_DB ADC_ATTEN_DB_11
+ #endif
 #endif
 
 #ifndef COMM_FORMAT_I2S
-#define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
-#define COMM_FORMAT_MSB (I2S_COMM_FORMAT_I2S_MSB)
+ #define COMM_FORMAT_I2S (I2S_COMM_FORMAT_I2S)
+ #define COMM_FORMAT_MSB (I2S_COMM_FORMAT_I2S_MSB)
 #endif
 
 #ifndef SAMPLE_RATE_TYPE
-#define SAMPLE_RATE_TYPE int
+ #define SAMPLE_RATE_TYPE int
 #endif
+
+#ifndef MIC_CLASS_ADC_WIDTH_BITS
+ #define MIC_CLASS_ADC_WIDTH_BITS ADC_WIDTH_12Bit
+ #define MIC_CLASS_ADC_ATTEN_DB ADC_ATTEN_11db
+#endif
+
 
   uint32_t Mic_Class::_calc_rec_rate(void) const
   {
@@ -61,7 +74,7 @@ namespace m5
 */
     bool use_pdm = (_cfg.pin_bck < 0);
     if (_cfg.use_adc) { sample_rate >>= 4; use_pdm = false;}
-ESP_LOGV("Mic","sampling rate:%d", sample_rate);
+//  ESP_LOGV("Mic","sampling rate:%" PRIu32 , sample_rate);
     i2s_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_config_t));
     i2s_config.mode                 = use_pdm
@@ -97,7 +110,7 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_adc)
     {
-        if (((size_t)_cfg.pin_data_in) > 39) { return ESP_FAIL; }
+      if (((size_t)_cfg.pin_data_in) > 39) { return ESP_FAIL; }
       static constexpr const uint8_t adc_table[] =
       {
         ADC2_CHANNEL_1 , // GPIO  0
@@ -128,15 +141,15 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
       if (adc_ch == 255) { return ESP_FAIL; }
 
       adc_unit_t unit = _cfg.pin_data_in >= 32 ? ADC_UNIT_1 : ADC_UNIT_2;
-      adc_set_data_width(unit, ADC_WIDTH_12Bit);
+      adc_set_data_width(unit, MIC_CLASS_ADC_WIDTH_BITS);
       err = i2s_set_adc_mode(unit, (adc1_channel_t)adc_ch);
       if (unit == ADC_UNIT_1)
       {
-        adc1_config_channel_atten((adc1_channel_t)adc_ch, ADC_ATTEN_11db);
+        adc1_config_channel_atten((adc1_channel_t)adc_ch, MIC_CLASS_ADC_ATTEN_DB);
       }
       else
       {
-        adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_11db);
+        adc2_config_channel_atten((adc2_channel_t)adc_ch, MIC_CLASS_ADC_ATTEN_DB);
       }
       if (_cfg.i2s_port == I2S_NUM_0)
       { /// レジスタを操作してADCモードの設定を有効にする ;
@@ -179,8 +192,8 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
 
-    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
-    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_RATE_MS);
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
 
     while (self->_task_running)
     {
@@ -212,7 +225,7 @@ ESP_LOGV("Mic","sampling rate:%d", sample_rate);
       {
         if (src_idx >= src_len)
         {
-          i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_RATE_MS);
+          i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
           src_len >>= 1;
           src_idx = 0;
         }

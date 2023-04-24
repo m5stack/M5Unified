@@ -49,6 +49,7 @@ namespace m5
       break;
 
     case board_t::board_M5StackCoreS3:
+      M5.In_I2C.bitOn(aw9523_i2c_addr, 0x03, 0b10000000, 100000L);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
       static constexpr std::uint8_t reg_data_array[] =
