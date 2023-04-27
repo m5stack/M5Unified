@@ -28,6 +28,10 @@ m5::M5Unified M5;
  #include <driver/adc.h>
 #endif
 
+#if __has_include (<driver/i2s.h>)
+ #include <driver/i2s.h>
+#endif
+
 void __attribute((weak)) adc_power_acquire(void)
 {
 #if defined (ESP_IDF_VERSION_VAL)
@@ -68,29 +72,26 @@ namespace m5
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Speaker.config();
-        if (cfg.pin_bck == GPIO_NUM_34)
+        if (cfg.pin_bck == GPIO_NUM_34 && enabled)
         {
-          if (enabled)
-          {
-            self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-            /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
-            static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
-            size_t reg0x06_value = 0;
-            size_t rate = (cfg.sample_rate + 1102) / 2205;
-            while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
+          self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+          /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
+          static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
+          size_t reg0x06_value = 0;
+          size_t rate = (cfg.sample_rate + 1102) / 2205;
+          while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
 
-            reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
-            aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
-            aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
-            aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
-            aw88298_write_reg( 0x06, reg0x06_value );
-            aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
-          }
-          else
-          {
-            aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
-            self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-          }
+          reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
+          aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
+          aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
+          aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
+          aw88298_write_reg( 0x06, reg0x06_value );
+          aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
+        }
+        else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+        {
+          aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
+          self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
         }
       }
       break;
@@ -113,7 +114,7 @@ namespace m5
     case board_t::board_M5StickCPlus:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
-      if (self->use_hat_spi)
+      if (self->use_hat_spk)
       {
         gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
         if (enabled)
@@ -252,27 +253,27 @@ for (int i = 0; i < 0x50; ++i)
 
       default:
 
-#if defined ( ARDUINO_M5Stack_Core_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE )
+#if defined ( ARDUINO_M5STACK_CORE_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE ) || defined ( ARDUINO_M5Stack_Core_ESP32 )
 
         board = board_t::board_M5Stack;
 
-#elif defined ( ARDUINO_M5STACK_Core2 )
+#elif defined ( ARDUINO_M5STACK_CORE2 ) || defined ( ARDUINO_M5STACK_Core2 )
 
         board = board_t::board_M5StackCore2;
 
-#elif defined ( ARDUINO_M5Stick_C )
+#elif defined ( ARDUINO_M5STICK_C ) || defined ( ARDUINO_M5Stick_C )
 
         board = board_t::board_M5StickC;
 
-#elif defined ( ARDUINO_M5Stick_C_Plus )
+#elif defined ( ARDUINO_M5STICK_C_PLUS ) || defined ( ARDUINO_M5Stick_C_Plus )
 
         board = board_t::board_M5StickCPlus;
 
-#elif defined ( ARDUINO_M5Stack_CoreInk )
+#elif defined ( ARDUINO_M5STACK_COREINK ) || defined ( ARDUINO_M5Stack_CoreInk )
 
         board = board_t::board_M5StackCoreInk;
 
-#elif defined ( ARDUINO_M5STACK_Paper )
+#elif defined ( ARDUINO_M5STACK_PAPER ) || defined ( ARDUINO_M5STACK_Paper )
 
         board = board_t::board_M5Paper;
 
@@ -280,11 +281,11 @@ for (int i = 0; i < 0x50; ++i)
 
         board = board_t::board_M5Tough;
 
-#elif defined ( ARDUINO_M5Stack_ATOM )
+#elif defined ( ARDUINO_M5STACK_ATOM ) || defined ( ARDUINO_M5Stack_ATOM )
 
         board = board_t::board_M5Atom;
 
-#elif defined ( ARDUINO_M5Stack_Timer_CAM )
+#elif defined ( ARDUINO_M5STACK_TIMER_CAM ) || defined ( ARDUINO_M5Stack_Timer_CAM )
 
         board = board_t::board_M5TimerCam;
 
@@ -658,7 +659,11 @@ for (int i = 0; i < 0x50; ++i)
       auto spk_cfg = Speaker.config();
       // set default speaker gain.
       spk_cfg.magnification = 16;
+#if defined SOC_I2S_NUM
+      spk_cfg.i2s_port = (i2s_port_t)(SOC_I2S_NUM - 1);
+#else
       spk_cfg.i2s_port = (i2s_port_t)(I2S_NUM_MAX - 1);
+#endif
       switch (_board)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -716,9 +721,19 @@ for (int i = 0; i < 0x50; ++i)
         }
         NON_BREAK;
       case board_t::board_M5StickC:
-        if (cfg.external_speaker.hat_spk)
-        { /// for SPK HAT
-          use_hat_spi = true;
+        if (cfg.external_speaker.hat_spk2 && (_board != board_t::board_M5StackCoreInk))
+        { /// for HAT SPK2 (for StickC/StickCPlus.  CoreInk does not support.)
+          spk_cfg.pin_data_out = GPIO_NUM_25;
+          spk_cfg.pin_bck = GPIO_NUM_26;
+          spk_cfg.pin_ws = GPIO_NUM_0;
+          spk_cfg.i2s_port = I2S_NUM_1;
+          spk_cfg.use_dac = false;
+          spk_cfg.buzzer = false;
+          spk_cfg.magnification = 16;
+        }
+        else if (cfg.external_speaker.hat_spk)
+        { /// for HAT SPK
+          use_hat_spk = true;
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
           m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
@@ -782,49 +797,57 @@ for (int i = 0; i < 0x50; ++i)
         break;
       }
 
-      if (cfg.external_speaker_value && (cfg.external_speaker.module_display || cfg.external_speaker.module_rca))
+      if (cfg.external_speaker_value)
       {
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+ #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3)
-#else
+#elif defined ( CONFIG_IDF_TARGET_ESP32 ) || !defined ( CONFIG_IDF_TARGET )
+ #define ENABLE_M5MODULE
         if (  _board == board_t::board_M5Stack
-           || _board == board_t::board_M5StackCore2
-           || _board == board_t::board_M5Tough)
+          || _board == board_t::board_M5StackCore2
+          || _board == board_t::board_M5Tough)
 #endif
         {
+#ifdef ENABLE_M5MODULE
           bool use_module_display = cfg.external_speaker.module_display
                                 && (0 <= getDisplayIndex(m5gfx::board_M5ModuleDisplay));
-          if (use_module_display) {
-            spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
+          if (use_module_display || cfg.external_speaker.module_rca)
+          {
+            if (use_module_display) {
+              spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
+            }
+            uint32_t pins_index = use_module_display;
+  #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+            static constexpr const uint8_t pins[][2] =
+            {// DOUT       , BCK
+              { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
+              { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
+            };
+  #else
+            static constexpr const uint8_t pins[][2] =
+            {// DOUT       , BCK
+              { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
+              { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
+              { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
+              { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
+            };
+            // !core is (Core2 + Tough)
+            if (_board == m5::board_t::board_M5Stack) {
+              pins_index += 2;            
+            }
+  #endif
+            spk_cfg.pin_data_out = pins[pins_index][0];
+            spk_cfg.pin_bck      = pins[pins_index][1];
+            spk_cfg.i2s_port = I2S_NUM_1;
+            spk_cfg.magnification = 16;
+            spk_cfg.stereo = true;
+            spk_cfg.buzzer = false;
+            spk_cfg.use_dac = false;
+            spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
           }
-          uint32_t pins_index = use_module_display;
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-          static constexpr const uint8_t pins[][2] =
-          {// DOUT       , BCK
-            { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
-            { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
-          };
-#else
-          static constexpr const uint8_t pins[][2] =
-          {// DOUT       , BCK
-            { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
-            { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
-            { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
-            { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
-          };
-          // !core is (Core2 + Tough)
-          if (M5.getBoard() == m5::board_t::board_M5Stack) {
-            pins_index += 2;            
-          }
+ #undef ENABLE_M5MODULE
 #endif
-          spk_cfg.pin_data_out = pins[pins_index][0];
-          spk_cfg.pin_bck      = pins[pins_index][1];
-          spk_cfg.i2s_port = I2S_NUM_1;
-          spk_cfg.magnification = 16;
-          spk_cfg.stereo = true;
-          spk_cfg.buzzer = false;
-          spk_cfg.use_dac = false;
-          spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
         }
       }
 

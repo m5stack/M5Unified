@@ -24,11 +24,14 @@
 // If you use ModuleRCA, write this.
 #include <M5ModuleRCA.h>
 
-// If you use Unit LCD, write this.
-#include <M5UnitLCD.h>
+// If you use Unit GLASS, write this.
+#include <M5UnitGLASS.h>
 
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use Unit LCD, write this.
+#include <M5UnitLCD.h>
 
 // If you use UnitRCA (for Video output), write this.
 #include <M5UnitRCA.h>
@@ -65,12 +68,14 @@ void setup(void)
   // external speaker setting.
   cfg.external_speaker.module_display = true;  // default=false. use ModuleDisplay AudioOutput
   cfg.external_speaker.hat_spk        = true;  // default=false. use HAT SPK
+  cfg.external_speaker.hat_spk2       = true;  // default=false. use HAT SPK2
   cfg.external_speaker.atomic_spk     = true;  // default=false. use ATOMIC SPK
   cfg.external_speaker.module_rca     = false; // default=false. use ModuleRCA AudioOutput
 
   // external display setting. (Pre-include required)
   cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
   cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
+  cfg.external_display.unit_glass     = true;  // default=true. use UnitGLASS
   cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
   cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
   cfg.external_display.unit_rca       = true;  // default=true. use UnitRCA VideoOutput
@@ -79,6 +84,7 @@ void setup(void)
 ※ Display with auto-detection
  - module_display
  - atom_display
+ - unit_glass
  - unit_oled
  - unit_lcd
 
@@ -111,6 +117,13 @@ void setup(void)
 // cfg.unit_rca.signal_type    = M5UnitRCA::signal_type_t::PAL;
 // cfg.unit_rca.use_psram      = M5UnitRCA::use_psram_t::psram_use;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS__ ) // setting for Unit GLASS.
+// cfg.unit_glass.pin_sda  = GPIO_NUM_21;
+// cfg.unit_glass.pin_scl  = GPIO_NUM_22;
+// cfg.unit_glass.i2c_addr = 0x3D;
+// cfg.unit_glass.i2c_freq = 400000;
+// cfg.unit_glass.i2c_port = I2C_NUM_0;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ ) // setting for Unit OLED.
 // cfg.unit_oled.pin_sda  = GPIO_NUM_21;
 // cfg.unit_oled.pin_scl  = GPIO_NUM_22;
@@ -135,6 +148,7 @@ void setup(void)
       m5::board_t::board_M5ModuleDisplay,
       m5::board_t::board_M5AtomDisplay,
 //    m5::board_t::board_M5ModuleRCA,
+//    m5::board_t::board_M5UnitGLASS,
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
@@ -330,7 +344,7 @@ void loop(void)
             : M5.BtnPWR.wasClicked() ? 2
             : M5.BtnPWR.wasPressed() ? 3
             : M5.BtnPWR.wasReleased() ? 4
-            : M5.BtnPWR.wasDeciedClickCount() ? 5
+            : M5.BtnPWR.wasDecideClickCount() ? 5
             : 0;
   if (state)
   {
@@ -349,7 +363,7 @@ void loop(void)
         : M5.BtnA.wasClicked() ? 2
         : M5.BtnA.wasPressed() ? 3
         : M5.BtnA.wasReleased() ? 4
-        : M5.BtnA.wasDeciedClickCount() ? 5
+        : M5.BtnA.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -367,7 +381,7 @@ void loop(void)
         : M5.BtnB.wasClicked() ? 2
         : M5.BtnB.wasPressed() ? 3
         : M5.BtnB.wasReleased() ? 4
-        : M5.BtnB.wasDeciedClickCount() ? 5
+        : M5.BtnB.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -385,7 +399,7 @@ void loop(void)
         : M5.BtnC.wasClicked() ? 2
         : M5.BtnC.wasPressed() ? 3
         : M5.BtnC.wasReleased() ? 4
-        : M5.BtnC.wasDeciedClickCount() ? 5
+        : M5.BtnC.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {
@@ -403,7 +417,7 @@ void loop(void)
         : M5.BtnEXT.wasClicked() ? 2
         : M5.BtnEXT.wasPressed() ? 3
         : M5.BtnEXT.wasReleased() ? 4
-        : M5.BtnEXT.wasDeciedClickCount() ? 5
+        : M5.BtnEXT.wasDecideClickCount() ? 5
         : 0;
   if (state)
   {

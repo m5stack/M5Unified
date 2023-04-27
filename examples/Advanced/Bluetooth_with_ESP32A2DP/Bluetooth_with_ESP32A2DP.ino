@@ -567,7 +567,6 @@ void gfxLoop(LGFX_Device* gfx)
   }
 }
 
-
 void setup(void)
 {
   auto cfg = M5.config();
@@ -580,6 +579,9 @@ void setup(void)
 
   // If you want to play sound from HAT Speaker, write this
   cfg.external_speaker.hat_spk        = true;
+
+  // If you want to play sound from HAT Speaker2, write this
+//  cfg.external_speaker.hat_spk2       = true;
 
   // If you want to play sound from ATOMIC Speaker, write this
   cfg.external_speaker.atomic_spk     = true;
@@ -625,7 +627,7 @@ void loop(void)
   {
     M5.Speaker.tone(440, 50);
   }
-  if (M5.BtnA.wasDeciedClickCount())
+  if (M5.BtnA.wasDecideClickCount())
   {
     switch (M5.BtnA.getClickCount())
     {

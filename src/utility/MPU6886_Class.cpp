@@ -80,7 +80,7 @@ namespace m5
     , 1000.0f / 32768.0f   // GFS_1000DPS
     , 2000.0f / 32768.0f   // GFS_2000DPS
     };
-    gRes = table[scale];
+    _gRes = table[scale];
   }
 
   void MPU6886_Class::setAccelFsr(Ascale scale)
@@ -95,7 +95,7 @@ namespace m5
     ,  8.0f / 32768.0f  // AFS_8G
     , 16.0f / 32768.0f  // AFS_16G
     };
-    aRes = table[scale];
+    _aRes = table[scale];
   }
 
   bool MPU6886_Class::setINTPinActiveLogic(bool level)
@@ -128,9 +128,9 @@ namespace m5
 
   bool MPU6886_Class::getAccel(float* ax, float* ay, float* az) const
   {
-    static constexpr float aRes = 8.0f / 32768.0f;
     std::uint8_t buf[6];
     bool res = readRegister(0x3B, buf, 6);
+    auto aRes = _aRes;
     *ax = (std::int16_t)((buf[0] << 8) + buf[1]) * aRes;
     *ay = (std::int16_t)((buf[2] << 8) + buf[3]) * aRes;
     *az = (std::int16_t)((buf[4] << 8) + buf[5]) * aRes;
@@ -139,9 +139,9 @@ namespace m5
 
   bool MPU6886_Class::getGyro(float* gx, float* gy, float* gz) const
   {
-    static constexpr float gRes = 2000.0f / 32768.0f;
     std::uint8_t buf[6];
     bool res = readRegister(0x43, buf, 6);
+    auto gRes = _gRes;
     *gx = (std::int16_t)((buf[0] << 8) + buf[1]) * gRes;
     *gy = (std::int16_t)((buf[2] << 8) + buf[3]) * gRes;
     *gz = (std::int16_t)((buf[4] << 8) + buf[5]) * gRes;
