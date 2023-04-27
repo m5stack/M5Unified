@@ -23,12 +23,14 @@
  - Unit LCD
  - Unit OLED
  - Unit RCA
+ - Unit GLASS
  - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
  - Module RCA (with M5Stack / Core2 / Tough)
 
 ## Supported device (external speaker)
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
+ - SPK HAT2 (with M5StickCPlus)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
  - Module RCA (with M5Stack / Core2 / Tough)
