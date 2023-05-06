@@ -282,6 +282,9 @@ namespace m5
           current_rec->length = 0;
           break;
         }
+        if (!self->_task_running) {
+          break;
+        }
       }
     }
     self->_is_recording = false;
