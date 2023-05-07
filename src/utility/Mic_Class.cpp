@@ -277,12 +277,14 @@ namespace m5
           current_rec->data = dst;
         }
         value = 0;
+        *(current_rec->rec_len) += 1;
         if (--dst_remain == 0)
         {
           current_rec->length = 0;
           break;
         }
         if (!self->_task_running) {
+          current_rec->length = 0;
           break;
         }
       }

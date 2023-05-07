@@ -105,7 +105,8 @@ namespace m5
     /// @param sample_rate the sampling rate (Hz)
     bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate)
     {
-      return _rec_raw(rec_data, array_len, false, sample_rate);
+      size_t rec_len=0;
+      return _rec_raw(rec_data, &rec_len, array_len, false, sample_rate);
     }
 
     /// record raw sound wave data.
@@ -114,7 +115,8 @@ namespace m5
     /// @param sample_rate the sampling rate (Hz)
     bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate)
     {
-      return _rec_raw(rec_data, array_len,  true, sample_rate);
+      size_t rec_len=0;
+      return _rec_raw(rec_data, &rec_len, array_len,  true, sample_rate);
     }
 
     /// record raw sound wave data.
@@ -122,7 +124,8 @@ namespace m5
     /// @param array_len Number of data array elements.
     bool record(uint8_t* rec_data, size_t array_len)
     {
-      return _rec_raw(rec_data, array_len, false, _cfg.sample_rate);
+      size_t rec_len=0;
+      return _rec_raw(rec_data, &rec_len, array_len, false, _cfg.sample_rate);
     }
 
     /// record raw sound wave data.
@@ -130,7 +133,46 @@ namespace m5
     /// @param array_len Number of data array elements.
     bool record(int16_t* rec_data, size_t array_len)
     {
-      return _rec_raw(rec_data, array_len,  true, _cfg.sample_rate);
+      size_t rec_len=0;
+      return _rec_raw(rec_data, &rec_len, array_len,  true, _cfg.sample_rate);
+    }
+
+    /// record raw sound wave data.
+    /// @param rec_data Recording destination array.
+    /// @param rec_len Recorded size.
+    /// @param array_len Number of data array elements.
+    /// @param sample_rate the sampling rate (Hz)
+    bool record(uint8_t* rec_data, size_t* rec_len, size_t array_len, uint32_t sample_rate)
+    {
+      return _rec_raw(rec_data, rec_len, array_len, false, sample_rate);
+    }
+
+    /// record raw sound wave data.
+    /// @param rec_data Recording destination array.
+    /// @param rec_len Recorded size.
+    /// @param array_len Number of data array elements.
+    /// @param sample_rate the sampling rate (Hz)
+    bool record(int16_t* rec_data, size_t* rec_len, size_t array_len, uint32_t sample_rate)
+    {
+      return _rec_raw(rec_data, rec_len, array_len,  true, sample_rate);
+    }
+
+    /// record raw sound wave data.
+    /// @param rec_data Recording destination array.
+    /// @param rec_len Recorded size.
+    /// @param array_len Number of data array elements.
+    bool record(uint8_t* rec_data, size_t* rec_len, size_t array_len)
+    {
+      return _rec_raw(rec_data, rec_len, array_len, false, _cfg.sample_rate);
+    }
+
+    /// record raw sound wave data.
+    /// @param rec_data Recording destination array.
+    /// @param rec_len Recorded size.
+    /// @param array_len Number of data array elements.
+    bool record(int16_t* rec_data, size_t* rec_len, size_t array_len)
+    {
+      return _rec_raw(rec_data, rec_len, array_len,  true, _cfg.sample_rate);
     }
 
   protected:
@@ -142,6 +184,7 @@ namespace m5
       void* data = nullptr;
       size_t length = 0;
       bool is_16bit = false;
+      size_t* rec_len = nullptr;
     };
 
     recording_info_t _rec_info[2];
@@ -151,7 +194,7 @@ namespace m5
 
     uint32_t _calc_rec_rate(void) const;
     esp_err_t _setup_i2s(void);
-    bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate);
+    bool _rec_raw(void* recdata, size_t* rec_len, size_t array_len, bool flg_16bit, uint32_t sample_rate);
 
     mic_config_t _cfg;
     uint32_t _rec_sample_rate = 0;
