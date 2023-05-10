@@ -73,24 +73,24 @@
 
 
 ### ESP32C3 GPIO list
-|                    |M5Stamp<BR>C3           |M5Stamp<BR>C3U                  |
-|:------------------:|:----------------------:|:------------------------------:|
-|GPIO 0              |`PORT.A`<BR>**I2C0SCL** |`PORT.A`<BR>**I2C_SCL**         |
-|GPIO 1              |`PORT.A`<BR>**I2C0SDA** |`PORT.A`<BR>**I2C_SDA**         |
-|GPIO 2              |**RGB LED**             |**RGB LED**                     |
-|GPIO 3              |**BTN_A**               |`Bus`                           |
-|GPIO 4              |`Bus`                   |`Bus`                           |
-|GPIO 5              |`Bus`                   |`Bus`                           |
-|GPIO 6              |`Bus`                   |`Bus`                           |
-|GPIO 7              |`Bus`                   |`Bus`                           |
-|GPIO 8              |`Bus`                   |`Bus`                           |
-|GPIO 9              | ---                    |**BTN_A**                       |
-|GPIO10              |`Bus`                   |`Bus`                           |
-|GPIO18              |`PORT.U`<BR>**D-**      |`USB`<BR>`PORT.U`<BR>**D-**     |
-|GPIO19              |`PORT.U`<BR>**D+**      |`USB`<BR>`PORT.U`<BR>**D+**     |
-|GPIO20              |`USB`<BR>**Serial**     |`Bus`<BR>                       |
-|GPIO21              |`USB`<BR>**Serial**     |`Bus`<BR>                       |
-|                    |M5Stamp<BR>C3           |M5Stamp<BR>C3U                  |
+|                    |M5Stamp<BR>C3            |M5Stamp<BR>C3U                  |
+|:------------------:|:-----------------------:|:------------------------------:|
+|GPIO 0              |`PORT.A`<BR>**I2C0_SCL** |`PORT.A`<BR>**I2C_SCL**         |
+|GPIO 1              |`PORT.A`<BR>**I2C0_SDA** |`PORT.A`<BR>**I2C_SDA**         |
+|GPIO 2              |**RGB LED**              |**RGB LED**                     |
+|GPIO 3              |**BTN_A**                |`Bus`                           |
+|GPIO 4              |`Bus`                    |`Bus`                           |
+|GPIO 5              |`Bus`                    |`Bus`                           |
+|GPIO 6              |`Bus`                    |`Bus`                           |
+|GPIO 7              |`Bus`                    |`Bus`                           |
+|GPIO 8              |`Bus`                    |`Bus`                           |
+|GPIO 9              | ---                     |**BTN_A**                       |
+|GPIO10              |`Bus`                    |`Bus`                           |
+|GPIO18              |`PORT.U`<BR>**D-**       |`USB`<BR>`PORT.U`<BR>**D-**     |
+|GPIO19              |`PORT.U`<BR>**D+**       |`USB`<BR>`PORT.U`<BR>**D+**     |
+|GPIO20              |`USB`<BR>**Serial**      |`Bus`<BR>                       |
+|GPIO21              |`USB`<BR>**Serial**      |`Bus`<BR>                       |
+|                    |M5Stamp<BR>C3            |M5Stamp<BR>C3U                  |
 
 
 ### ESP32S3 GPIO list
