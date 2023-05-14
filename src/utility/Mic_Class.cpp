@@ -181,7 +181,7 @@ namespace m5
     else if (oversampling > 8) { oversampling = 8; }
     int32_t gain = self->_cfg.magnification;
     const float f_gain = (float)gain / oversampling;
-    int32_t offset = self->_cfg.input_offset;
+    int32_t offset = 0;
     size_t src_idx = ~0u;
     size_t src_len = 0;
     int32_t value = 0;
@@ -234,7 +234,7 @@ namespace m5
         {
           do
           {
-            value += (src_buf[src_idx^1] & 0x0FFF) + (offset - 2048);
+            value += (src_buf[src_idx^1] & 0x0FFF) - 2048;
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
@@ -242,12 +242,17 @@ namespace m5
         {
           do
           {
-            value += src_buf[src_idx] + offset;
+            value += src_buf[src_idx];
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
         if (os_remain) { continue; }
         os_remain = oversampling;
+
+        auto value_tmp = value;
+        value += offset;
+        // Automatic zero level adjustment
+        offset = (16 + offset * 31 - value_tmp) >> 5;
 
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)
