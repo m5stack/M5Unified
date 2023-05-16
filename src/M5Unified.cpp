@@ -511,7 +511,8 @@ for (int i = 0; i < 0x50; ++i)
 #if defined ( ARDUINO )
 
     if (cfg.serial_baudrate)
-    {
+    { // Wait with delay to prevent startup log output from disappearing.
+      delay(16);
       Serial.begin(cfg.serial_baudrate);
     }
 
