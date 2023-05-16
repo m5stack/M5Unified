@@ -348,12 +348,13 @@ namespace m5
     i2s_driver_uninstall(_cfg.i2s_port);
   }
 
-  bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
+  bool Mic_Class::_rec_raw(void* recdata, size_t* rec_len, size_t array_len, bool flg_16bit, uint32_t sample_rate)
   {
     recording_info_t info;
     info.data = recdata;
     info.length = array_len;
     info.is_16bit = flg_16bit;
+    info.rec_len = rec_len;
 
     _cfg.sample_rate = sample_rate;
 

@@ -195,6 +195,11 @@ namespace m5
     uint32_t _calc_rec_rate(void) const;
     esp_err_t _setup_i2s(void);
     bool _rec_raw(void* recdata, size_t* rec_len, size_t array_len, bool flg_16bit, uint32_t sample_rate);
+    bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
+    {
+      size_t rec_len = 0;
+      return _rec_raw(recdata, &rec_len, array_len, flg_16bit, sample_rate);
+    };
 
     mic_config_t _cfg;
     uint32_t _rec_sample_rate = 0;
