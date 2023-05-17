@@ -278,25 +278,26 @@ namespace m5
     return (_pmic != pmic_t::pmic_unknown);
   }
 
-  void Power_Class::setExtPower(bool enable, ext_port_mask_t port_mask)
+  void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
   {
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
+        // AW9523 Port0 のビット1 = BUS OUT EN
+        static constexpr const uint32_t port0_bitmask = 0b00000010;
+        static constexpr const uint32_t freq = 400000;
+        static constexpr const uint8_t reg = 0x02;
         if (enable)
-        {
-          // AW9523を操作して5V output ON;
-          M5.In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
-          // Axp2101.setReg0x20Bit0(true);
+        { // AW9523 Port0のビットをオン (出力を有効にする)
+          M5.In_I2C.bitOn(aw9523_i2c_addr, reg, port0_bitmask, freq);
         }
         else
-        {
-          // AW9523を操作して5V output OFF;
-          M5.In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000010, 400000);
-          // Axp2101.setReg0x20Bit0(false);
+        { // AW9523 Port0のビットをオフ (出力を無効にする)
+          M5.In_I2C.bitOff(aw9523_i2c_addr, reg, port0_bitmask, freq);
         }
+//      Axp2101.setReg0x20Bit0(enable);
       }
       break;
 
@@ -346,6 +347,34 @@ namespace m5
     default:
       break;
     }
+  }
+
+  void Power_Class::setUsbOutput(bool enable)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5StackCoreS3:
+      {
+        // AW9523 Port0 のビット5 = USB OTG
+        static constexpr const uint32_t port0_bitmask = 0b00100000;
+        static constexpr const uint32_t freq = 400000;
+        static constexpr const uint8_t reg = 0x02;
+        if (enable)
+        { // AW9523 Port0のビットをオン (出力を有効にする)
+          M5.In_I2C.bitOn(aw9523_i2c_addr, reg, port0_bitmask, freq);
+        }
+        else
+        { // AW9523 Port0のビットをオフ (出力を無効にする)
+          M5.In_I2C.bitOff(aw9523_i2c_addr, reg, port0_bitmask, freq);
+        }
+      }
+      break;
+
+    default:
+      break;
+    }
+#endif
   }
 
   void Power_Class::setLed(uint8_t brightness)

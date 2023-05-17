@@ -18,12 +18,13 @@ namespace m5
 
   enum ext_port_mask_t
   { ext_none = 0
+  // For individual control of external ports of M5Station
   , ext_PA   = 0b00000001
   , ext_PB1  = 0b00000010
   , ext_PB2  = 0b00000100
   , ext_PC1  = 0b00001000
   , ext_PC2  = 0b00010000
-  , ext_USB  = 0b00100000
+  , ext_USB  = 0b00100000 // M5Station external USB.   ※ Not for CoreS3 main USB.
   , ext_MAIN = 0b10000000
   };
 
@@ -48,10 +49,20 @@ namespace m5
 
     bool begin(void);
 
-    /// Set power supply to external ports.
+    /// Set power output to external ports.
     /// @param enable true=output / false=input
     /// @param port_mask for M5Station. ext_port (bitmask).
-    void setExtPower(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
+    void setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
+
+    /// deprecated : Change to "setExtOutput"
+    [[deprecated("Change to setExtOutput")]]
+    void setExtPower(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF) { setExtOutput(enable, port_mask); }
+
+    /// Set power output to main USB ports.
+    /// @param enable true=output / false=input
+    /// @attention for M5Stack CoreS3 main USB port.
+    /// @attention ※ Not for M5Station external USB.
+    void setUsbOutput(bool enable);
 
     /// Turn on/off the power LED.
     /// @param brightness 0=OFF: 1~255=ON (Set brightness if possible.)
