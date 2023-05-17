@@ -47,6 +47,12 @@ namespace m5
 
     /// Output regardless of log level setting.
     void printf(const char* format, ...);
+
+    /// Output regardless of log level setting.
+    void println(const char* string) { return printf("%s\n", string); }
+
+    /// Output regardless of log level setting.
+    void println(void) { return printf("\n"); }
  
     /// Set whether or not to change the color for each log level.
     void setEnableColor(log_target_t target, bool enable) { if (target < log_target_max) { _use_color[target] = enable; } }
@@ -83,7 +89,7 @@ namespace m5
 #else
     esp_log_level_t _level_maximum  = (esp_log_level_t)CONFIG_LOG_DEFAULT_LEVEL;
 #endif
-    esp_log_level_t _log_level[log_target_max]   = { _level_maximum, _level_maximum, _level_maximum };
+    esp_log_level_t _log_level[log_target_max]   = { _level_maximum, (esp_log_level_t)-1, _level_maximum };
 
     const char* _suffix[log_target_max] = { str_crlf, str_crlf, str_crlf };
 
