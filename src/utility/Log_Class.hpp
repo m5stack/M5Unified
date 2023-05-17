@@ -49,6 +49,9 @@ namespace m5
     void printf(const char* format, ...);
 
     /// Output regardless of log level setting.
+    void print(const char* string) { return printf("%s", string); }
+
+    /// Output regardless of log level setting.
     void println(const char* string) { return printf("%s\n", string); }
 
     /// Output regardless of log level setting.
