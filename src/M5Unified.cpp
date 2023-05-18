@@ -468,7 +468,7 @@ for (int i = 0; i < 0x50; ++i)
   {
     /// setup power management ic
     Power.begin();
-    Power.setExtPower(cfg.output_power);
+    Power.setExtOutput(cfg.output_power);
     if (cfg.led_brightness)
     {
       M5.Power.setLed(cfg.led_brightness);
