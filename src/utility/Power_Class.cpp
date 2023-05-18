@@ -377,6 +377,28 @@ namespace m5
 #endif
   }
 
+  bool Power_Class::getUsbOutput(void)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5StackCoreS3:
+      {
+        // AW9523 Port0 のビット5 = USB OTG
+        static constexpr const uint32_t port0_bitmask = 0b00100000;
+        static constexpr const uint32_t freq = 400000;
+        static constexpr const uint8_t reg = 0x02;
+        return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, freq) & port0_bitmask;
+      }
+      break;
+
+    default:
+      break;
+    }
+#endif
+    return false;
+  }
+
   void Power_Class::setLed(uint8_t brightness)
   {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
