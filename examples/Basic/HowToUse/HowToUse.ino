@@ -214,6 +214,9 @@ void setup(void)
   case m5::board_t::board_M5StackCoreS3:
     name = "StackS3";
     break;
+  case m5::board_t::board_M5StampS3:
+    name = "StampS3";
+    break;
   case m5::board_t::board_M5AtomS3Lite:
     name = "ATOMS3Lite";
     break;
