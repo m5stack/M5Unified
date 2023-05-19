@@ -76,17 +76,8 @@ namespace m5
 
   private:
     std::size_t readRegister12(std::uint8_t addr);
-    std::size_t readRegister13(std::uint8_t addr);
+    std::size_t readRegister14(std::uint8_t addr);
     std::size_t readRegister16(std::uint8_t addr);
-    std::size_t readRegister24(std::uint8_t addr);
-    std::size_t readRegister32(std::uint8_t addr);
-/*
-    void _set_DCDC(std::uint8_t num, int voltage);
-    void _set_LDO(std::uint8_t num, int voltage);
-    void _set_LDO2_LDO3(std::uint8_t num, int voltage);
-    void _set_GPIO0_2(std::uint8_t num, bool state);
-    void _set_GPIO3_4(std::uint8_t num, bool state);
-*/
   };
 }
 

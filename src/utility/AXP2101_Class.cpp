@@ -65,10 +65,33 @@ ESP_LOGE("AXP2101","setReg0x20Bit0 : %d", flg);
 
   void AXP2101_Class::setChargeCurrent(std::uint16_t max_mA)
   {
+    max_mA /= 5;
+    if (max_mA > 1000/5) { max_mA = 1000/5; }
+    static constexpr std::uint8_t table[] = { 125 / 5, 150 / 5, 175 / 5, 200 / 5, 300 / 5, 400 / 5, 500 / 5, 600 / 5, 700 / 5, 800 / 5, 900 / 5, 1000 / 5, 255 };
+
+    size_t i = 0;
+    while (table[i] <= max_mA) { ++i; }
+    i += 4;
+    writeRegister8(0x62, i);
   }
 
   void AXP2101_Class::setChargeVoltage(std::uint16_t max_mV)
   {
+    max_mV = (max_mV / 10) - 400;
+    if (max_mV > 460 - 400) { max_mV = 460 - 400; }
+    static constexpr std::uint8_t table[] =
+      { 410 - 400  /// 4100mV
+      , 420 - 400  /// 4200mV
+      , 435 - 400  /// 4350mV
+      , 440 - 400  /// 4400mV
+      , 460 - 400  /// 4600mV
+      , 255
+      };
+    size_t i = 0;
+    while (table[i] <= max_mV) { ++i; }
+
+    if (++i >= 0b110) { i = 0; }
+    writeRegister8(0x64, i);
   }
 
   std::int8_t AXP2101_Class::getBatteryLevel(void)
@@ -144,13 +167,13 @@ return 0;
 return false;
   }
   bool AXP2101_Class::isVBUS(void)
-  {
-return false;
+  { // VBUS good indication
+    return readRegister8(0x00) & 0x20;
   }
 
   bool AXP2101_Class::getBatState(void)
-  {
-return false;
+  { // Battery present state
+    return readRegister8(0x00) & 0x04;
   }
 
   std::uint8_t AXP2101_Class::getPekPress(void)
@@ -192,7 +215,7 @@ return 0;
 
   float AXP2101_Class::getBatteryVoltage(void)
   {
-return 0;
+    return readRegister14(0x34) / 1000.0f;
   }
 
   float AXP2101_Class::getBatteryChargeCurrent(void)
@@ -215,13 +238,13 @@ return 0;
   {
     std::uint8_t buf[2] = {0};
     readRegister(addr, buf, 2);
-    return buf[0] << 4 | buf[1];
+    return (buf[0] & 0x0F) << 8 | buf[1];
   }
-  std::size_t AXP2101_Class::readRegister13(std::uint8_t addr)
+  std::size_t AXP2101_Class::readRegister14(std::uint8_t addr)
   {
     std::uint8_t buf[2] = {0};
     readRegister(addr, buf, 2);
-    return buf[0] << 5 | buf[1];
+    return (buf[0] & 0x3F) << 8 | buf[1];
   }
   std::size_t AXP2101_Class::readRegister16(std::uint8_t addr)
   {
@@ -229,16 +252,5 @@ return 0;
     readRegister(addr, buf, 2);
     return buf[0] << 8 | buf[1];
   }
-  std::size_t AXP2101_Class::readRegister24(std::uint8_t addr)
-  {
-    std::uint8_t buf[3] = {0};
-    readRegister(addr, buf, 3);
-    return buf[0] << 16 | buf[1] << 8 | buf[2];
-  }
-  std::size_t AXP2101_Class::readRegister32(std::uint8_t addr)
-  {
-    std::uint8_t buf[4] = {0};
-    readRegister(addr, buf, 4);
-    return buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
-  }
+
 }
