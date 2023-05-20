@@ -191,9 +191,9 @@ namespace m5
 
     Mic_Class Mic;
 
-    M5GFX& Displays(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
+    M5GFX& getDisplay(size_t index);
 
-    M5GFX& getDisplay(size_t index) { return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay; }
+    M5GFX& Displays(size_t index) { return getDisplay(index); }
 
     std::size_t getDisplayCount(void) const { return this->_displays.size(); }
 
@@ -203,15 +203,24 @@ namespace m5
     // Returns -1 if not found.
     int32_t getDisplayIndex(m5gfx::board_t board);
 
+    int32_t getDisplayIndex(std::initializer_list<m5gfx::board_t> board_list);
+
     // Designates the display of the specified index as PrimaryDisplay.
     bool setPrimaryDisplay(std::size_t index);
 
     // Find a display that matches the specified display type and designate it as PrimaryDisplay.
-    bool setPrimaryDisplayType(m5gfx::board_t board);
+    // Multiple display types can be specified in the initializer list.
+    bool setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_list);
 
     // Find a display that matches the specified display type and designate it as PrimaryDisplay.
-    // Multiple display types can be specified in the initializer list.
-    bool setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit);
+    bool setPrimaryDisplayType(m5gfx::board_t board) { return setPrimaryDisplayType( { board } ); };
+
+    /// Set the display to show logs.
+    void setLogDisplayIndex(size_t index);
+
+    void setLogDisplayType(std::initializer_list<m5gfx::board_t> board_list);
+
+    void setLogDisplayType(m5gfx::board_t board) { setLogDisplayType( { board } ); };
 
     /// milli seconds at the time the update was called
     std::uint32_t getUpdateMsec(void) const { return _updateMsec; }

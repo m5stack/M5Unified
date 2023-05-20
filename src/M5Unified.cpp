@@ -1042,7 +1042,13 @@ for (int i = 0; i < 0x50; ++i)
 #endif
   }
 
-  std::size_t M5Unified::addDisplay(M5GFX& dsp) {
+  M5GFX& M5Unified::getDisplay(size_t index)
+  {
+    return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay;
+  }
+
+  std::size_t M5Unified::addDisplay(M5GFX& dsp)
+  {
     this->_displays.push_back(dsp);
     auto res = this->_displays.size() - 1;
     setPrimaryDisplay(res == 0 ? 0 : _primary_display_index);
@@ -1054,19 +1060,32 @@ for (int i = 0; i < 0x50; ++i)
   }
 
   int32_t M5Unified::getDisplayIndex(m5gfx::board_t board) {
-    for (int32_t i = 0; i < _displays.size(); ++i) {
-      if (board == _displays[i].getBoard()) {
-        return i;
-      }
+    int i = 0;
+    for (auto &d : _displays)
+    {
+      if (board == d.getBoard()) { return i; }
+      ++i;
     }
     return -1;
   }
 
-  bool M5Unified::setPrimaryDisplay(std::size_t index) {
+  int32_t M5Unified::getDisplayIndex(std::initializer_list<m5gfx::board_t> board_list)
+  {
+    for (auto b : board_list)
+    {
+      int32_t i = getDisplayIndex(b);
+      if (i >= 0) { return i; }
+    }
+    return -1;
+  }
+
+  bool M5Unified::setPrimaryDisplay(std::size_t index)
+  {
     if (index >= _displays.size()) { return false; }
     std::size_t pdi = _primary_display_index;
 
-    if (pdi < _displays.size()) {
+    if (pdi < _displays.size())
+    {
       _displays[pdi] = _primaryDisplay;
     }
     _primary_display_index = index;
@@ -1074,23 +1093,22 @@ for (int i = 0; i < 0x50; ++i)
     return true;
   }
 
-  bool M5Unified::setPrimaryDisplayType(m5gfx::board_t board) {
-    int32_t i = getDisplayIndex(board);
-    if (i >= 0) {
-      setPrimaryDisplay(i);
-      return true;
-    }
-    return false;
+  bool M5Unified::setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_list)
+  {
+    auto i = getDisplayIndex(board_list);
+    bool res = (i >= 0);
+    if (res) { setPrimaryDisplay(i); }
+    return res;
   }
 
-  bool M5Unified::setPrimaryDisplayType(std::initializer_list<m5gfx::board_t> board_lsit) {
-    for (auto b : board_lsit) {
-      int32_t i = getDisplayIndex(b);
-      if (i >= 0) {
-        setPrimaryDisplay(i);
-        return true;
-      }
-    }
-    return false;
+  void M5Unified::setLogDisplayIndex(size_t index)
+  {
+    Log.setDisplay(getDisplay(index));
+  }
+
+  void M5Unified::setLogDisplayType(std::initializer_list<m5gfx::board_t> board_list)
+  {
+    auto i = getDisplayIndex(board_list);
+    if (i >= 0) { Log.setDisplay(getDisplay(i)); }
   }
 }
