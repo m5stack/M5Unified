@@ -58,6 +58,10 @@ namespace m5
     [[deprecated("Change to setExtOutput")]]
     void setExtPower(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF) { setExtOutput(enable, port_mask); }
 
+    /// Get power output of the external ports.
+    /// @return true=output enabled / false=output disabled
+    bool getExtOutput(void);
+
     /// Set power output of the main USB port.
     /// @param enable true=output / false=input
     /// @attention for M5Stack CoreS3 main USB port.

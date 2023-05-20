@@ -25,6 +25,7 @@
 
 namespace m5
 {
+  static constexpr const uint32_t i2c_freq = 100000;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr int aw9523_i2c_addr = 0x58;
 
@@ -49,7 +50,7 @@ namespace m5
       break;
 
     case board_t::board_M5StackCoreS3:
-      M5.In_I2C.bitOn(aw9523_i2c_addr, 0x03, 0b10000000, 100000L);  // SY7088 BOOST_EN
+      M5.In_I2C.bitOn(aw9523_i2c_addr, 0x03, 0b10000000, i2c_freq);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
       static constexpr std::uint8_t reg_data_array[] =
@@ -278,6 +279,43 @@ namespace m5
     return (_pmic != pmic_t::pmic_unknown);
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
+  static constexpr const uint32_t _core_s3_bus_en = 0b00000010; // BUS EN
+  static constexpr const uint32_t _core_s3_usb_en = 0b00100000; // USB OTG EN
+  static void _core_s3_output(uint8_t mask, bool enable)
+  {
+    static constexpr const uint8_t port0_reg = 0x02;
+    static constexpr const uint8_t port1_reg = 0x03;
+    static constexpr const uint32_t port1_bitmask_boost = 0b10000000; // BOOST_EN
+
+    uint8_t buf[2];
+
+    if (M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, buf, sizeof(buf), i2c_freq))
+    {
+      uint8_t p0 = buf[0] | mask;
+      uint8_t p1 = buf[1] | port1_bitmask_boost;
+
+      if (!enable) {
+        p0 = buf[0] & ~mask;
+        // if (0 == (p0 & (_core_s3_bus_en | _core_s3_usb_en))) // 両方が無効の場合のみ BOOST_EN を無効化する
+        if (0 == (p0 & _core_s3_bus_en))
+        {
+          p1 &= ~port1_bitmask_boost;
+        }
+      }
+// M5.Display.printf("%02x %02x\n", p0, p1);
+      buf[0] = p0;
+      buf[1] = p1;
+      M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, buf, sizeof(buf), i2c_freq);
+      // M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, p0, i2c_freq);
+      // M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, p1, i2c_freq);
+    }
+//      Axp2101.setReg0x20Bit0(enable);
+  }
+
+#endif
+
   void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
   {
     switch (M5.getBoard())
@@ -285,19 +323,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
-        // AW9523 Port0 のビット1 = BUS OUT EN
-        static constexpr const uint32_t port0_bitmask = 0b00000010;
-        static constexpr const uint32_t freq = 400000;
-        static constexpr const uint8_t reg = 0x02;
-        if (enable)
-        { // AW9523 Port0のビットをオン (出力を有効にする)
-          M5.In_I2C.bitOn(aw9523_i2c_addr, reg, port0_bitmask, freq);
-        }
-        else
-        { // AW9523 Port0のビットをオフ (出力を無効にする)
-          M5.In_I2C.bitOff(aw9523_i2c_addr, reg, port0_bitmask, freq);
-        }
-//      Axp2101.setReg0x20Bit0(enable);
+        _core_s3_output(_core_s3_bus_en, enable);
       }
       break;
 
@@ -349,26 +375,46 @@ namespace m5
     }
   }
 
+  bool Power_Class::getExtOutput(void)
+  {
+    switch (M5.getBoard())
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StackCoreS3:
+      {
+        static constexpr const uint32_t port0_bitmask = 0b00000010; // BUS EN
+        static constexpr const uint8_t port0_reg = 0x02;
+        return M5.In_I2C.readRegister8(aw9523_i2c_addr, port0_reg, i2c_freq) & port0_bitmask;
+      }
+      break;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case board_t::board_M5Paper:
+      return m5gfx::gpio_in(M5Paper_EXT5V_ENABLE_PIN);
+      break;
+
+    case board_t::board_M5StackCore2:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+    case board_t::board_M5Station:
+      Axp192.getEXTEN();
+      break;
+#endif
+
+    default:
+      break;
+    }
+    return false;
+  }
+
   void Power_Class::setUsbOutput(bool enable)
   {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
     case board_t::board_M5StackCoreS3:
-      {
-        // AW9523 Port0 のビット5 = USB OTG
-        static constexpr const uint32_t port0_bitmask = 0b00100000;
-        static constexpr const uint32_t freq = 400000;
-        static constexpr const uint8_t reg = 0x02;
-        if (enable)
-        { // AW9523 Port0のビットをオン (出力を有効にする)
-          M5.In_I2C.bitOn(aw9523_i2c_addr, reg, port0_bitmask, freq);
-        }
-        else
-        { // AW9523 Port0のビットをオフ (出力を無効にする)
-          M5.In_I2C.bitOff(aw9523_i2c_addr, reg, port0_bitmask, freq);
-        }
-      }
+      _core_s3_output(_core_s3_usb_en, enable);
       break;
 
     default:
@@ -384,11 +430,9 @@ namespace m5
     {
     case board_t::board_M5StackCoreS3:
       {
-        // AW9523 Port0 のビット5 = USB OTG
-        static constexpr const uint32_t port0_bitmask = 0b00100000;
-        static constexpr const uint32_t freq = 400000;
+        static constexpr const uint32_t port0_bitmask = 0b00100000; // USB OTG EN
         static constexpr const uint8_t reg = 0x02;
-        return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, freq) & port0_bitmask;
+        return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & port0_bitmask;
       }
       break;
 
@@ -753,7 +797,8 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
-    // case pmic_t::pmic_axp2101:
+    case pmic_t::pmic_axp2101:
+      return Axp2101.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
     //   return Axp2101.getChargeDirection() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
 #endif
