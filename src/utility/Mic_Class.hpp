@@ -59,10 +59,10 @@ namespace m5
     bool use_adc = false;
 
     /// for I2S dma_buf_len
-    size_t dma_buf_len = 64;
+    size_t dma_buf_len = 256;
 
     /// for I2S dma_buf_count
-    size_t dma_buf_count = 4;
+    size_t dma_buf_count = 3;
 
     /// background task priority
     UBaseType_t task_priority = 2;
@@ -103,18 +103,20 @@ namespace m5
     /// @param rec_data Recording destination array.
     /// @param array_len Number of data array elements.
     /// @param sample_rate the sampling rate (Hz)
-    bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate)
+    /// @param stereo true=data is stereo / false=data is monaural.
+    bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
-      return _rec_raw(rec_data, array_len, false, sample_rate);
+      return _rec_raw(rec_data, array_len, false, sample_rate, stereo);
     }
 
     /// record raw sound wave data.
     /// @param rec_data Recording destination array.
     /// @param array_len Number of data array elements.
     /// @param sample_rate the sampling rate (Hz)
-    bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate)
+    /// @param stereo true=data is stereo / false=data is monaural.
+    bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
-      return _rec_raw(rec_data, array_len,  true, sample_rate);
+      return _rec_raw(rec_data, array_len,  true, sample_rate, stereo);
     }
 
     /// record raw sound wave data.
@@ -122,7 +124,7 @@ namespace m5
     /// @param array_len Number of data array elements.
     bool record(uint8_t* rec_data, size_t array_len)
     {
-      return _rec_raw(rec_data, array_len, false, _cfg.sample_rate);
+      return _rec_raw(rec_data, array_len, false, _cfg.sample_rate, false);
     }
 
     /// record raw sound wave data.
@@ -130,7 +132,7 @@ namespace m5
     /// @param array_len Number of data array elements.
     bool record(int16_t* rec_data, size_t array_len)
     {
-      return _rec_raw(rec_data, array_len,  true, _cfg.sample_rate);
+      return _rec_raw(rec_data, array_len,  true, _cfg.sample_rate, false);
     }
 
   protected:
@@ -141,6 +143,8 @@ namespace m5
     {
       void* data = nullptr;
       size_t length = 0;
+      size_t index = 0;
+      bool is_stereo = false;
       bool is_16bit = false;
     };
 
@@ -151,7 +155,7 @@ namespace m5
 
     uint32_t _calc_rec_rate(void) const;
     esp_err_t _setup_i2s(void);
-    bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate);
+    bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool stereo);
 
     mic_config_t _cfg;
     uint32_t _rec_sample_rate = 0;
