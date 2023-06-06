@@ -14,25 +14,29 @@
 
 #include <M5GFX.h>
 
+namespace m5
+{
+  using board_t = m5gfx::board_t;
+  using touch_point_t = m5gfx::touch_point_t;
+};
+
 #include "gitTagVersion.h"
 #include "utility/RTC8563_Class.hpp"
 #include "utility/AXP192_Class.hpp"
 #include "utility/IP5306_Class.hpp"
-#include "utility/IMU_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
 #include "utility/Speaker_Class.hpp"
 #include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
 #include "utility/Log_Class.hpp"
+#include "utility/IMU_Class.hpp"
 
 #include <memory>
 #include <vector>
 
 namespace m5
 {
-  using board_t = m5gfx::board_t;
-  using touch_point_t = m5gfx::touch_point_t;
   using touch_detail_t = Touch_Class::touch_detail_t;
 
   class M5Unified

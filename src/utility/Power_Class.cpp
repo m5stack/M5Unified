@@ -533,7 +533,7 @@ namespace m5
       /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。;
       /// そのため、同じくGPIO35に接続されているMPU6886のINTピンを利用してプルアップを実施する。;
       /// IMUの種類がMPU6886でない個体は対応できない (SH200Qではできない);
-      M5.Imu.Mpu6886.setINTPinActiveLogic(true);
+      M5.Imu.setINTPinActiveLogic(true);
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
       esp_deep_sleep_start();
       return;
