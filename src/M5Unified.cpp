@@ -298,12 +298,14 @@ for (int i = 0; i < 0x50; ++i)
     if (board == board_t::board_unknown)
     { // AtomS3Lite or StampS3 ?
       uint32_t g4backup = *((volatile uint32_t *)(IO_MUX_GPIO4_REG));
+      uint32_t g12backup = *((volatile uint32_t *)(IO_MUX_GPIO12_REG));
       m5gfx::pinMode(GPIO_NUM_4, m5gfx::pin_mode_t::input_pullup);
+      m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input_pullup);
       // AtomS3Lite has an IR LED connected to GPIO4, which is LOW when read even with input_pullup.
       // Therefore, if it is HIGH, it can be determined that it is not AtomS3Lite and can be assumed to be StampS3.
       // However, even if it goes LOW, something may be connected to GPIO4 at StampS3, so it is treated as unknown.
       // The AtomS3Lite determination uses the fallback_board setting.
-      if (m5gfx::gpio_in(GPIO_NUM_4) == true)
+      if (m5gfx::gpio_in(GPIO_NUM_4) == true && m5gfx::gpio_in(GPIO_NUM_12) == true)
       {
         board = board_t::board_M5StampS3;
       }
@@ -318,11 +320,14 @@ for (int i = 0; i < 0x50; ++i)
         auto tmp2 = m5gfx::gpio_in(GPIO_NUM_41);
         if (tmp1 == tmp2)
         {
-          board = board_t::board_M5AtomS3Lite;
+          board = m5gfx::gpio_in(GPIO_NUM_12)
+                ? board_t::board_M5AtomS3Lite
+                : board_t::board_M5AtomS3U;
         }
         *((volatile uint32_t *)(IO_MUX_GPIO41_REG)) = g41backup;
       }
       *((volatile uint32_t *)(IO_MUX_GPIO4_REG)) = g4backup;
+      *((volatile uint32_t *)(IO_MUX_GPIO12_REG)) = g12backup;
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -430,6 +435,7 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5AtomS3:
     case board_t::board_M5AtomS3Lite:
+    case board_t::board_M5AtomS3U:
       break;
 
     case board_t::board_M5StampS3:
@@ -563,6 +569,7 @@ for (int i = 0; i < 0x50; ++i)
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5AtomS3:
     case board_t::board_M5AtomS3Lite:
+    case board_t::board_M5AtomS3U:
       m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
       break;
 
@@ -583,7 +590,7 @@ for (int i = 0; i < 0x50; ++i)
     {
       auto mic_cfg = Mic.config();
 
-      mic_cfg.over_sampling = 2;
+      mic_cfg.over_sampling = 1;
       mic_cfg.i2s_port = I2S_NUM_0;
       switch (_board)
       {
@@ -591,7 +598,7 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5StackCoreS3:
         if (cfg.internal_mic)
         {
-          mic_cfg.magnification = 1;
+          mic_cfg.magnification = 2;
           mic_cfg.over_sampling = 1;
           mic_cfg.pin_mck = GPIO_NUM_0;
           mic_cfg.pin_bck = GPIO_NUM_34;
@@ -602,6 +609,14 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
+      case board_t::board_M5AtomS3U:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_data_in = GPIO_NUM_38;
+          mic_cfg.pin_ws = GPIO_NUM_39;
+        }
+        break;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
       case board_t::board_M5Stack:
         if (cfg.internal_mic)
@@ -609,7 +624,6 @@ for (int i = 0; i < 0x50; ++i)
           mic_cfg.pin_data_in = GPIO_NUM_34;  // M5GO bottom MIC
           mic_cfg.i2s_port = I2S_NUM_0;
           mic_cfg.use_adc = true;    // use ADC analog input
-          mic_cfg.input_offset = 192;
           mic_cfg.over_sampling = 4;
         }
         break;
@@ -629,7 +643,6 @@ for (int i = 0; i < 0x50; ++i)
         { /// ATOM U builtin PDM mic
           mic_cfg.pin_data_in = GPIO_NUM_19;
           mic_cfg.pin_ws = GPIO_NUM_5;
-          mic_cfg.input_offset = - 768; /// TODO 固定値のオフセットを廃止し、HPFを実装する;
         }
         break;
 
@@ -881,13 +894,14 @@ for (int i = 0; i < 0x50; ++i)
 
     if (cfg.internal_imu && In_I2C.isEnabled())
     {
-      if (M5.Imu.begin())
-      {
-        if (M5.getBoard() == m5::board_t::board_M5Atom)
-        { // ATOM Matrix's IMU is oriented differently, so change the setting.
-          M5.Imu.setRotation(2);
-        }
-      }
+      M5.Imu.begin(&M5.In_I2C, M5.getBoard());
+      // if (M5.Imu.begin(&M5.In_I2C))
+      // {
+      //   if (M5.getBoard() == m5::board_t::board_M5Atom)
+      //   { // ATOM Matrix's IMU is oriented differently, so change the setting.
+      //     M5.Imu.setRotation(2);
+      //   }
+      // }
     }
     if (!M5.Imu.isEnabled() && cfg.external_imu)
     {
@@ -996,6 +1010,7 @@ for (int i = 0; i < 0x50; ++i)
     {
     case board_t::board_M5AtomS3:
     case board_t::board_M5AtomS3Lite:
+    case board_t::board_M5AtomS3U:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
       break;
 
