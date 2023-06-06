@@ -237,7 +237,11 @@ namespace m5
         {
           do
           {
+#if defined (CONFIG_IDF_TARGET_ESP32)
             sum_value[1 - (src_idx & 1)] += (src_buf[src_idx] & 0x0FFF) - 2048;
+#else
+            sum_value[src_idx & 1] += (src_buf[src_idx] & 0x0FFF) - 2048;
+#endif
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
@@ -245,7 +249,11 @@ namespace m5
         {
           do
           {
+#if defined (CONFIG_IDF_TARGET_ESP32)
             sum_value[1 - (src_idx & 1)] += src_buf[src_idx];
+#else
+            sum_value[src_idx & 1] += src_buf[src_idx];
+#endif
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
