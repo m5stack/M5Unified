@@ -9,6 +9,11 @@ namespace m5
 {
   #include "BMI270_config.inl"
 
+  BMI270_Class::~BMI270_Class() {}
+  BMI270_Class::BMI270_Class(std::uint8_t i2c_addr, std::uint32_t freq, I2C_Class* i2c)
+  : IMU_Base ( i2c_addr, freq, i2c )
+  {}
+
   bool BMI270_Class::_upload_file(const uint8_t *config_data, size_t index, size_t write_len)
   {
     uint8_t addr_array[2] = {

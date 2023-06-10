@@ -160,12 +160,10 @@ namespace m5
     if (_imu_instance[0]) { _imu_instance[0]->getConvertParam(&_convert_param); }
     if (_imu_instance[1]) { _imu_instance[1]->getConvertParam(&_convert_param); }
 
-    // 加速度は 1.0G ± 0.015625G の範囲に収まるよう調整
+    // 加速度は 1.0G ± 0.0625f の範囲に収まるよう調整
     _offset_data.accel.radius = 1.0f / _convert_param.accel_res;
-    _offset_data.accel.tolerance = (1.0f / 1024.0f) / _convert_param.accel_res;
+    _offset_data.accel.tolerance = (1.0f / 2048.0f) / _convert_param.accel_res;
     _offset_data.accel.noise_level = 0.0625f / _convert_param.accel_res;
-    // _offset_data.accel.tolerance = 0.015625f / _convert_param.accel_res;
-    // _offset_data.accel.noise_level = 0.015625f / _convert_param.accel_res;
     _offset_data.accel.average_shifter = 1;
 
     // ジャイロは 誤差 ±2.0度/sec の範囲に収まるよう調整
@@ -254,7 +252,7 @@ namespace m5
     std::uint_fast8_t axis2 = (1 << (axis0 >> 1) | 1 << (axis1 >> 1)) ^ 0b111;
     axis2 &= 0b110;
     std::uint_fast8_t ax0 = axis2 ? (axis2 - 2) : 4;
-    axis2 += ((axis0 & 0b110) == ax0) == (axis0 & 1) == (axis1 & 1);
+    axis2 += (bool)((axis0 & 0b110) == ax0) == (bool)((axis0 & 1) == (axis1 & 1));
     return (IMU_Class::axis_t)axis2;
   }
 
@@ -530,7 +528,7 @@ namespace m5
     // if (force <= 0.0f) { return; }
     if (force <= tolerance) { return; }
     // if (force > tolerance) { force = tolerance; }
-    if (signbit(measure_error)) { force = -force; }
+    if (measure_error < 0.0f) { force = -force; }
     float fk = force * (stillness * strength) / (distance * (255.0f * 255.0f));
     for (int i = 0; i < 3; ++i)
     {

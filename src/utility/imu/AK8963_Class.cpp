@@ -7,6 +7,11 @@
 
 namespace m5
 {
+  AK8963_Class::~AK8963_Class() {}
+  AK8963_Class::AK8963_Class(std::uint8_t i2c_addr, std::uint32_t freq, I2C_Class* i2c)
+  : IMU_Base ( i2c_addr, freq, i2c )
+  {}
+
   IMU_Base::imu_spec_t AK8963_Class::begin(I2C_Class* i2c)
   {
     if (i2c)

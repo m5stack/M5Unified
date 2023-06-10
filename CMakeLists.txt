@@ -4,6 +4,7 @@ set(COMPONENT_ADD_INCLUDEDIRS
 file(GLOB SRCS
      src/*.cpp
      src/utility/*.cpp
+     src/utility/imu/*.cpp
      )
 set(COMPONENT_SRCS ${SRCS})
 

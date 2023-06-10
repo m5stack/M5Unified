@@ -7,6 +7,11 @@
 
 namespace m5
 {
+  MPU6886_Class::~MPU6886_Class() {}
+  MPU6886_Class::MPU6886_Class(std::uint8_t i2c_addr, std::uint32_t freq, I2C_Class* i2c)
+  : IMU_Base ( i2c_addr, freq, i2c )
+  {}
+
   IMU_Base::imu_spec_t MPU6886_Class::begin(I2C_Class* i2c)
   {
     if (i2c)
@@ -30,7 +35,7 @@ namespace m5
     , REG_ACCEL_CONFIG  , 0x10  // ACCEL_CONFIG(0x1C) : +-8G
     , REG_GYRO_CONFIG   , 0x18  // GYRO_CONFIG(0x1B) : +-2000dps
     , REG_CONFIG        , 0x01  // CONFIG(0x1A)
-    , REG_SMPLRT_DIV    , 0x05  // SMPLRT_DIV(0x19)
+    , REG_SMPLRT_DIV    , 0x03  // SMPLRT_DIV(0x19)
     , REG_INT_ENABLE    , 0x00  // INT_ENABLE(0x38)
     , REG_ACCEL_CONFIG2 , 0x00  // ACCEL_CONFIG 2(0x1D)
     , REG_USER_CTRL     , 0x00  // USER_CTRL(0x6A)
@@ -71,7 +76,7 @@ namespace m5
     };
     return writeRegister(0x13, buffer, 6);
   }
-/*
+
   void MPU6886_Class::enableFIFO(Fodr output_data_rate)
   {
     auto regdata = readRegister8(REG_GYRO_CONFIG);
@@ -93,7 +98,8 @@ namespace m5
     writeRegister8(REG_CONFIG, regdata);
     vTaskDelay(10);
 
-    regdata = 0x18;  // Set GYRO_FIFO_EN and ACCEL_FIFO_EN bits to one in FIFO
+// MPU9250: 0x78(TEMP OUT + GYRO XOUT,YOUT,ZOUT + ACCEL)
+    regdata = 0xF8;  // Set GYRO_FIFO_EN and ACCEL_FIFO_EN bits to one in FIFO
                      // Enable register to enable FIFO on ALL sensor data
     writeRegister8(REG_FIFO_EN, regdata);
     vTaskDelay(10);
@@ -110,25 +116,25 @@ namespace m5
 
     _fifo_en = true;
   }
-
+/*
   void MPU6886_Class::disableFIFO(void)
   {
     _fifo_en = false;
     unsigned char regdata;
     regdata = 0x00;  // Clear GYRO_FIFO_EN and ACCEL_FIFO_EN bits to zero in
                      // FIFO Enable register
-    I2C_Write_NBytes(MPU6886_ADDRESS, MPU6886_FIFO_EN, 1, &regdata);
+    writeRegister8(REG_FIFO_EN, regdata);
     vTaskDelay(10);
 
-    I2C_Read_NBytes(MPU6886_ADDRESS, MPU6886_INT_ENABLE, 1, &regdata);
+    writeRegister8(REG_INT_ENABLE, regdata);
     regdata &=
         0xEF;  // Clear bit 4 to turn off interrupts on FIFO overflow events
-    I2C_Write_NBytes(MPU6886_ADDRESS, MPU6886_INT_ENABLE, 1, &regdata);
+    writeRegister8(REG_INT_ENABLE, regdata);
     vTaskDelay(10);
 
     regdata = 0x00;  // Set FIFO_EN bit to zero in User Control register to
                      // dsiable FIFO mode
-    I2C_Write_NBytes(MPU6886_ADDRESS, MPU6886_USER_CTRL, 1, &regdata);
+    writeRegister8(REG_USER_CTRL, regdata);
     vTaskDelay(10);
   }
 //*/
@@ -227,7 +233,11 @@ namespace m5
 
     if (_fifo_en)
     {
-      if (!readRegister(REG_FIFO_R_W, buf, 14) || (buf[0] == buf[1] && buf[0] == 0x7F))
+      if (!readRegister(REG_FIFO_COUNTH, buf, 2) || (buf[0] + buf[1] == 0))
+      {
+        return imu_spec_none;
+      }
+      if (!readRegister(REG_FIFO_R_W, buf, 14) || (buf[0] == 0x7F && buf[1] == 0x7F))
       {
         return imu_spec_none;
       }

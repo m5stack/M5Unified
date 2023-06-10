@@ -8,6 +8,10 @@
 
 namespace m5
 {
+  IMU_Base::~IMU_Base() {}
+  IMU_Base::IMU_Base(std::uint8_t i2c_addr, std::uint32_t freq, I2C_Class* i2c)
+  : I2C_Device ( i2c_addr, freq, i2c )
+  {}
 /*
   int32_t IMU_Base::point3d_i32_t::calibration(const point3d_i16_t& dst)
   {

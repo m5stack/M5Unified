@@ -65,9 +65,8 @@ namespace m5
       float temp_offset = 0.0f;
     };
 
-    IMU_Base(std::uint8_t i2c_addr, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
-    : I2C_Device ( i2c_addr, freq, i2c )
-    {}
+    virtual ~IMU_Base();
+    IMU_Base(std::uint8_t i2c_addr, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C);
     virtual imu_spec_t begin(I2C_Class* i2c = nullptr) = 0;
     virtual imu_spec_t getImuRawData(imu_raw_data_t* data) const = 0; //{ return (imu_spec_t)0; }
     virtual void getConvertParam(imu_convert_param_t* param) const = 0;//{}

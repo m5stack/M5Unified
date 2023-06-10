@@ -13,9 +13,8 @@ namespace m5
   public:
     static constexpr std::uint8_t DEFAULT_ADDRESS = 0x6C;
 
-    SH200Q_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
-    : IMU_Base ( i2c_addr, freq, i2c )
-    {}
+    virtual ~SH200Q_Class();
+    SH200Q_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C);
 
     imu_spec_t begin(I2C_Class* i2c = nullptr) override;
     imu_spec_t getImuRawData(imu_raw_data_t* data) const override;

@@ -8,6 +8,11 @@
 
 namespace m5
 {
+  SH200Q_Class::~SH200Q_Class() {}
+  SH200Q_Class::SH200Q_Class(std::uint8_t i2c_addr, std::uint32_t freq, I2C_Class* i2c)
+  : IMU_Base ( i2c_addr, freq, i2c )
+  {}
+
   IMU_Base::imu_spec_t SH200Q_Class::begin(I2C_Class* i2c)
   {
     if (i2c)

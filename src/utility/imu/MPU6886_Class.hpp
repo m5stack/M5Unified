@@ -44,8 +44,10 @@ namespace m5
     static constexpr const std::uint8_t REG_GYRO_CONFIG   = 0x1B;
     static constexpr const std::uint8_t REG_ACCEL_CONFIG  = 0x1C;
     static constexpr const std::uint8_t REG_ACCEL_CONFIG2 = 0x1D;
+    static constexpr const std::uint8_t REG_LP_MODE_CFG   = 0x1E;
     static constexpr const std::uint8_t REG_FIFO_EN       = 0x23;
 
+    static constexpr const std::uint8_t REG_FIFO_COUNTH   = 0x72;
     static constexpr const std::uint8_t REG_FIFO_R_W      = 0x74;
 
     enum Ascale
@@ -79,9 +81,8 @@ namespace m5
 
     static constexpr std::uint8_t DEFAULT_ADDRESS = 0x68;
 
-    MPU6886_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
-    : IMU_Base ( i2c_addr, freq, i2c )
-    {}
+    virtual ~MPU6886_Class();
+    MPU6886_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C);
 
     imu_spec_t begin(I2C_Class* i2c = nullptr) override;
     imu_spec_t getImuRawData(imu_raw_data_t* data) const override;
@@ -94,7 +95,7 @@ namespace m5
     bool getGyro(float* gx, float* gy, float* gz) const override;
     bool getTemp(float* t) const override;
 //*/
-    // void enableFIFO(Fodr output_data_rate);
+    void enableFIFO(Fodr output_data_rate);
     // void disableFIFO(void);
 
     bool setGyroAdcOffset(std::int16_t gx, std::int16_t gy, std::int16_t gz);
