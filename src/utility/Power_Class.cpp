@@ -59,8 +59,9 @@ namespace m5
       , 0x93, 33 -5 // ALDO2 set to 3.3v // for ES7210
       , 0x94, 33 -5 // ALDO3 set to 3.3v // for camera
       , 0x95, 33 -5 // ALDO3 set to 3.3v // for TF card slot
-// , 0x10, 0x30
-, 0x69, 0x11
+      , 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
+      , 0x69, 0x11 // CHGLED setting
+      , 0x10, 0x30 // PMU common config
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;

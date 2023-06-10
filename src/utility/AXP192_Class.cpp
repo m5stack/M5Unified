@@ -24,8 +24,8 @@ namespace m5
     _init = readRegister(0x03, &val, 1);
     if (_init)
     {
-      ESP_LOGI("AXP192", "reg03h:%02x", val);
       _init = (val == 0x03);
+      ESP_LOGV("AXP192", "reg03h:%02x : init:%d", val, _init);
     }
     return _init;
   }
