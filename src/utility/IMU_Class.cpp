@@ -127,9 +127,9 @@ namespace m5
     _update_convert_param();
     _update_axis_order();
 
-    setCalibration(255, 255, 255);
-
+    if (!loadOffsetFromNVS())
     {
+      setCalibration(255, 255, 255);
       update();
       for (int i = 0; i < 3; ++i)
       {
@@ -140,13 +140,10 @@ namespace m5
           _offset_data.sensor[i].avg_value[j] = d;
         }
         _offset_data.sensor[i].stillness = 255;
-        // _offset_data.sensor[i].getStillness(_raw_data.sensor[i], stillness);
-// for (int k = 0; k < 65536; ++k)
-    // for (int k = 0; k < 16; ++k)
         _offset_data.sensor[i].calibration();
       }
     }
-    setCalibration(0, 0, 64);
+    setCalibration(0, 0, 0);
 
 // debug
 // for(int i=0;i<3;++i){for(int j=0;j<3;++j){_offset_data.sensor[i].value[j] = 65536*512;}}
@@ -174,8 +171,8 @@ namespace m5
 
     // 地磁気は…パラメータ模索中…
     _offset_data.mag.radius = 384.0f / _convert_param.mag_res;
-    _offset_data.mag.tolerance = 32.0f / _convert_param.mag_res;
-    _offset_data.mag.noise_level = 128.0f / _convert_param.mag_res;
+    _offset_data.mag.tolerance = 64.0f / _convert_param.mag_res;
+    _offset_data.mag.noise_level = 32.0f / _convert_param.mag_res;
     _offset_data.mag.average_shifter = 1;
   }
 
@@ -325,14 +322,19 @@ namespace m5
 
   void IMU_Class::setOffsetData(size_t index, int32_t value)
   {
-    if (index > 9) { return; }
-    _offset_data.sensor[index / 3].value[index % 3] = value;
+    if (index < 9) {
+      _offset_data.sensor[index / 3].value[index % 3] = value;
+    }
   }
 
   int32_t IMU_Class::getOffsetData(size_t index)
   {
-    if (index > 9) { return 0; }
-    return _offset_data.sensor[index / 3].value[index % 3];
+    return index < 9 ? _offset_data.sensor[index / 3].value[index % 3] : 0;
+  }
+
+  int16_t IMU_Class::getRawData(size_t index)
+  {
+    return index < 9 ? _raw_data.value[index] : 0;
   }
 
   IMU_Class::sensor_mask_t IMU_Class::update(void)

@@ -24,7 +24,7 @@ namespace m5
   {
   public:
 
-    struct point3d_t
+    struct imu_3d_t
     {
       union
       {
@@ -44,12 +44,12 @@ namespace m5
       union
       {
         float value[9];
-        point3d_t sensor[3];
+        imu_3d_t sensor[3];
         struct
         {
-          point3d_t accel;
-          point3d_t gyro;
-          point3d_t mag;
+          imu_3d_t accel;
+          imu_3d_t gyro;
+          imu_3d_t mag;
         };
       };
     };
@@ -105,7 +105,7 @@ namespace m5
     bool getGyroMag(float* mx, float* my, float* mz) { return getMag(mx, my, mz); }
     bool getTemp(float *t);
 
-    bool isEnabled(void) const { return _imu != imu_unknown; }
+    bool isEnabled(void) const { return _imu != imu_none; }
 
     imu_t getType(void) const { return _imu; }
 
@@ -117,7 +117,6 @@ namespace m5
 
     bool setINTPinActiveLogic(bool level);
 
-
     // 各センサの自動オフセット調整機能の強さを指定する。 0=自動調整なし 1~255=自動調整あり
     void setCalibration(uint8_t accel_strength, uint8_t gyro_strength, uint8_t mag_strength);
 
@@ -127,11 +126,15 @@ namespace m5
     // NVSからオフセット調整値を読み込む
     bool loadOffsetFromNVS(void);
 
+    // オフセットデータをクリアする
     void clearOffsetData(void);
 
+    // OffsetData は RawData<<16 スケール(16bit固定小数扱い)
     void setOffsetData(size_t index, int32_t value);
 
     int32_t getOffsetData(size_t index);
+
+    int16_t getRawData(size_t index);
 
   private:
 
@@ -254,7 +257,7 @@ namespace m5
     internal_axisorder_t _internal_axisorder_user = (internal_axisorder_t)0;
   };
 
-  typedef IMU_Class::point3d_t point3d_t;
+  typedef IMU_Class::imu_3d_t imu_3d_t;
   typedef IMU_Class::imu_data_t imu_data_t;
 }
 #endif
