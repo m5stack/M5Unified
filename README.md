@@ -14,7 +14,7 @@
  - M5Station
  - M5Paper
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
- - M5ATOMS3 / S3Lite
+ - M5ATOMS3 / S3Lite / S3U
  - M5STAMP PICO
  - M5STAMPC3 / C3U
  - M5STAMPS3
@@ -96,47 +96,47 @@
 
 
 ### ESP32S3 GPIO list
-|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |                    |
-|:------------------:|:-------------------------------:|:-----------------------:|:------------------:|
-|GPIO 0              |`M-Bus`<BR>**SPK_LRCK**          | ---                     |GPIO 0              |
-|GPIO 1              |`PORT.A`<BR>**I2C0_SCL**         |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
-|GPIO 2              |`PORT.A`<BR>**I2C0_SDA**         |`PORT.A`<BR>**I2C0_SDA** |GPIO 2              |
-|GPIO 3              |**LCD_CS**                       |vdd3v3                   |GPIO 3              |
-|GPIO 4              |**TF_CS**                        |**InfraRed**             |GPIO 4              |
-|GPIO 5              |`M-Bus`                          |`Bus`                    |GPIO 5              |
-|GPIO 6              |`M-Bus`                          |`Bus`                    |GPIO 6              |
-|GPIO 7              |`M-Bus`                          |`Bus`                    |GPIO 7              |
-|GPIO 8              |`M-Bus`<BR>`PORT.B`              |`Bus`                    |GPIO 8              |
-|GPIO 9              |`M-Bus`<BR>`PORT.B`              | ---                     |GPIO 9              |
-|GPIO10              |`M-Bus`                          | ---                     |GPIO10              |
-|GPIO11              |**I2C1_SCL**                     | ---                     |GPIO11              |
-|GPIO12              |**I2C1_SDA**                     | ---                     |GPIO12              |
-|GPIO13              |`M-Bus`<BR>**SPK_D**             | ---                     |GPIO13              |
-|GPIO14              |`M-Bus`<BR>**MIC_IN**            | ---                     |GPIO14              |
-|GPIO15              |**CAM_D6**                       |**LCD_CS**               |GPIO15              |
-|GPIO16              |**CAM_D7**                       |**LCD_BL**               |GPIO16              |
-|GPIO17              |`M-Bus`<BR>`PORT.C`              |**LCD_SCLK**             |GPIO17              |
-|GPIO18              |`M-Bus`<BR>`PORT.C`              | ---                     |GPIO18              |
-|GPIO19              |`USB`<BR>**D--**                 |`USB`<BR>**D--**         |GPIO19              |
-|GPIO20              |`USB`<BR>**D++**                 |`USB`<BR>**D++**         |GPIO20              |
-|GPIO21              |**I2C_INT**                      |**LCD_MOSI**             |GPIO21              |
-|GPIO33              |**SPK_WCK**                      |**LCD_DC**               |GPIO33              |
-|GPIO34              |**SPK_BCK**                      |**LCD_RST**              |GPIO34              |
-|GPIO35              |`M-Bus`<BR>**SPI_MISO<BR>LCD DC**|**RGB LED**              |GPIO35              |
-|GPIO36              |`M-Bus`<BR>**SPI_SCLK**          | ---                     |GPIO36              |
-|GPIO37              |`M-Bus`<BR>**SPI_MOSI**          | ---                     |GPIO37              |
-|GPIO38              |**CAM_HREF**                     |`Bus`<BR>**I2C1_SDA**    |GPIO38              |
-|GPIO39              |**CAM_D2**                       |`Bus`<BR>**I2C1_SCL**    |GPIO39              |
-|GPIO40              |**CAM_D3**                       | ---                     |GPIO40              |
-|GPIO41              |**CAM_D4**                       |**BTN_A**                |GPIO41              |
-|GPIO42              |**CAM_D5**                       | ---                     |GPIO42              |
-|GPIO43              |`M-Bus`<BR>**SerialTX**          | ---                     |GPIO43              |
-|GPIO44              |`M-Bus`<BR>**SerialRX**          | ---                     |GPIO44              |
-|GPIO45              |**CAM_PCLK**                     | ---                     |GPIO45              |
-|GPIO46              |**CAM_VSYNC**                    | ---                     |GPIO46              |
-|GPIO47              |**CAM_D9**                       | ---                     |GPIO47              |
-|GPIO48              |**CAM_D8**                       | ---                     |GPIO48              |
-|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |                    |
+|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |M5ATOMS3U                |                    |
+|:------------------:|:-------------------------------:|:-----------------------:|:-----------------------:|:------------------:|
+|GPIO 0              |`M-Bus`<BR>**SPK_LRCK**          | ---                     | ---                     |GPIO 0              |
+|GPIO 1              |`PORT.A`<BR>**I2C0_SCL**         |`PORT.A`<BR>**I2C0_SCL** |`PORT.A`<BR>**I2C0_SCL** |GPIO 1              |
+|GPIO 2              |`PORT.A`<BR>**I2C0_SDA**         |`PORT.A`<BR>**I2C0_SDA** |`PORT.A`<BR>**I2C0_SDA** |GPIO 2              |
+|GPIO 3              |**LCD_CS**                       |vdd3v3                   |vdd3v3                   |GPIO 3              |
+|GPIO 4              |**TF_CS**                        |**InfraRed**             | ---                     |GPIO 4              |
+|GPIO 5              |`M-Bus`                          |`Bus`                    | ---                     |GPIO 5              |
+|GPIO 6              |`M-Bus`                          |`Bus`                    | ---                     |GPIO 6              |
+|GPIO 7              |`M-Bus`                          |`Bus`                    | ---                     |GPIO 7              |
+|GPIO 8              |`M-Bus`<BR>`PORT.B`              |`Bus`                    | ---                     |GPIO 8              |
+|GPIO 9              |`M-Bus`<BR>`PORT.B`              | ---                     | ---                     |GPIO 9              |
+|GPIO10              |`M-Bus`                          | ---                     | ---                     |GPIO10              |
+|GPIO11              |**I2C1_SCL**                     | ---                     | ---                     |GPIO11              |
+|GPIO12              |**I2C1_SDA**                     | ---                     |**InfraRed**             |GPIO12              |
+|GPIO13              |`M-Bus`<BR>**SPK_D**             | ---                     | ---                     |GPIO13              |
+|GPIO14              |`M-Bus`<BR>**MIC_IN**            | ---                     |`Bus`                    |GPIO14              |
+|GPIO15              |**CAM_D6**                       |**LCD_CS**               | ---                     |GPIO15              |
+|GPIO16              |**CAM_D7**                       |**LCD_BL**               | ---                     |GPIO16              |
+|GPIO17              |`M-Bus`<BR>`PORT.C`              |**LCD_SCLK**             |`Bus`                    |GPIO17              |
+|GPIO18              |`M-Bus`<BR>`PORT.C`              | ---                     | ---                     |GPIO18              |
+|GPIO19              |`USB`<BR>**D--**                 |`USB`<BR>**D--**         |`USB`<BR>**D--**         |GPIO19              |
+|GPIO20              |`USB`<BR>**D++**                 |`USB`<BR>**D++**         |`USB`<BR>**D++**         |GPIO20              |
+|GPIO21              |**I2C_INT**                      |**LCD_MOSI**             | ---                     |GPIO21              |
+|GPIO33              |**SPK_WCK**                      |**LCD_DC**               | ---                     |GPIO33              |
+|GPIO34              |**SPK_BCK**                      |**LCD_RST**              | ---                     |GPIO34              |
+|GPIO35              |`M-Bus`<BR>**SPI_MISO<BR>LCD DC**|**RGB LED**              |**RGB LED**              |GPIO35              |
+|GPIO36              |`M-Bus`<BR>**SPI_SCLK**          | ---                     | ---                     |GPIO36              |
+|GPIO37              |`M-Bus`<BR>**SPI_MOSI**          | ---                     | ---                     |GPIO37              |
+|GPIO38              |**CAM_HREF**                     |`Bus`<BR>**I2C1_SDA**    |**PDM_DAT**              |GPIO38              |
+|GPIO39              |**CAM_D2**                       |`Bus`<BR>**I2C1_SCL**    |**PDM_CLK**              |GPIO39              |
+|GPIO40              |**CAM_D3**                       | ---                     |`Bus`                    |GPIO40              |
+|GPIO41              |**CAM_D4**                       |**BTN_A**                |**BTN_A**                |GPIO41              |
+|GPIO42              |**CAM_D5**                       | ---                     |`Bus`                    |GPIO42              |
+|GPIO43              |`M-Bus`<BR>**SerialTX**          | ---                     | ---                     |GPIO43              |
+|GPIO44              |`M-Bus`<BR>**SerialRX**          | ---                     | ---                     |GPIO44              |
+|GPIO45              |**CAM_PCLK**                     | ---                     | ---                     |GPIO45              |
+|GPIO46              |**CAM_VSYNC**                    | ---                     | ---                     |GPIO46              |
+|GPIO47              |**CAM_D9**                       | ---                     | ---                     |GPIO47              |
+|GPIO48              |**CAM_D8**                       | ---                     | ---                     |GPIO48              |
+|                    |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |M5ATOMS3U                |                    |
 
 ### AXP192 IO list
 |              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
