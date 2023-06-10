@@ -16,14 +16,15 @@ void setup(void)
   ESP_LOGD("TAG", "using ESP_LOGD debug log.");    // Extra information which is not necessary for normal use (values, pointers, sizes, etc).
   ESP_LOGV("TAG", "using ESP_LOGV verbose log.");  // Bigger chunks of debugging information, or frequent messages which can potentially flood the output.
 
-
-
   M5.begin();
 
-  M5.Display.setTextWrap(true, true); /// use wrapping from bottom edge to top edge.
+  /// If you want to output logs to the display, write this.
+  M5.setLogDisplayIndex(0);
 
-//M5.Display.setTextScroll(true); /// use scrolling.
-
+  /// use wrapping from bottom edge to top edge.
+  M5.Display.setTextWrap(true, true);
+/// use scrolling.
+// M5.Display.setTextScroll(true);
 
 /// Example of M5Unified log output class usage.
 /// Unlike ESP_LOGx, the M5.Log series can output to serial, display, and user callback function in a single line of code.
@@ -80,6 +81,13 @@ void loop(void)
   static uint32_t counter = 0;
   if ((++counter & 0x3FF) == 0)
   {
+    static int prev_y;
+    int cursor_y = M5.Display.getCursorY();
+    if (prev_y > cursor_y)
+    {
+      M5.Display.clear();
+    }
+    prev_y = cursor_y;
     M5_LOGV("count:%d", counter >> 10);  
   }
 }
