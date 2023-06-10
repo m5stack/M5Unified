@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <functional>
 
+#include <M5GFX.h>
 
 /// Output log with source info.
 #ifndef M5UNIFIED_LOG_FORMAT
@@ -45,9 +46,22 @@ namespace m5
     /// Output log.
     void operator() (esp_log_level_t level, const char* format, ...);
 
-    /// Output regardless of log level setting.
+    /// Output text in a specified format.
+    /// @attention Output regardless of log level setting.
     void printf(const char* format, ...);
- 
+
+    /// Output text.
+    /// @attention Output regardless of log level setting.
+    void print(const char* string) { return printf("%s", string); }
+
+    /// Output text with line feeds.
+    /// @attention Output regardless of log level setting.
+    void println(const char* string) { return printf("%s\n", string); }
+
+    /// Output line feeds.
+    /// @attention Output regardless of log level setting.
+    void println(void) { return printf(str_crlf); }
+
     /// Set whether or not to change the color for each log level.
     void setEnableColor(log_target_t target, bool enable) { if (target < log_target_max) { _use_color[target] = enable; } }
 
@@ -67,10 +81,20 @@ namespace m5
     /// @param function Pointer to a user-defined function that takes three arguments: esp_log_level_t , bool, const char*.
     void setCallback(std::function<void(esp_log_level_t log_level, bool use_color, const char* log_text)> function) { _callback = function; };
 
+    /// Set the display to show logs.
+    /// @param target target display.
+    void setDisplay(M5GFX* target);
+
+    /// Set the display to show logs.
+    /// @param target target display.
+    void setDisplay(M5GFX& target) { setDisplay(&target); }
+
     /// not for use.
     static const char* pathToFileName(const char * path);
 
   private:
+    M5GFX* _display = nullptr;
+
     static constexpr const char str_crlf[3] = "\r\n";
 
     void output(esp_log_level_t level, bool suffix, const char* __restrict format, va_list arg);

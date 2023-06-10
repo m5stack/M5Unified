@@ -212,10 +212,13 @@ void setup(void)
   {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   case m5::board_t::board_M5StackCoreS3:
-    name = "StackS3";
+    name = "StackCoreS3";
     break;
   case m5::board_t::board_M5StampS3:
     name = "StampS3";
+    break;
+  case m5::board_t::board_M5AtomS3U:
+    name = "ATOMS3U";
     break;
   case m5::board_t::board_M5AtomS3Lite:
     name = "ATOMS3Lite";
@@ -292,6 +295,9 @@ void setup(void)
   case m5::imu_t::imu_mpu9250:
     name = "MPU9250";
     break;
+  case m5::imu_t::imu_bmi270:
+    name = "BMI270";
+    break;
   case m5::imu_t::imu_sh200q:
     name = "SH200Q";
     break;
@@ -331,9 +337,9 @@ void loop(void)
   M5Stick CoreInk:             BtnA,BtnB,BtnC,BtnPWR,BtnEXT
   M5Paper:                     BtnA,BtnB,BtnC
   M5Station:                   BtnA,BtnB,BtnC,BtnPWR
-  M5Tough:                                    BtnPWR
-  M5Atom M5AtomU:              BtnA
-  M5Stamp Pico/C3/C3U:         BtnA
+  M5Stack CoreS3,Tough:                       BtnPWR
+  M5Atom Series:               BtnA
+  M5Stamp Series:              BtnA
 */
 
   static constexpr const int colors[] = { TFT_WHITE, TFT_CYAN, TFT_RED, TFT_YELLOW, TFT_BLUE, TFT_GREEN };

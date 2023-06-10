@@ -3,8 +3,6 @@
 
 #include "Log_Class.hpp"
 
-#include <M5Unified.hpp>
-
 namespace m5
 {
   constexpr const char Log_Class::str_crlf[3];
@@ -98,27 +96,27 @@ namespace m5
       }
     }
 
-    if (_log_level[log_target_display] >= level)
+    if (_display && _log_level[log_target_display] >= level)
     {
       if (level != ESP_LOG_NONE && _use_color[log_target_display])
       {
-        auto style = M5.Display.getTextStyle();
+        auto style = _display->getTextStyle();
         if (style.fore_rgb888 == style.back_rgb888)
         {
-          M5.Display.setTextColor(log_colors_display[level]);
+          _display->setTextColor(log_colors_display[level]);
         }
         else
         {
-          M5.Display.setTextColor(log_colors_display[level], m5gfx::color_convert<m5gfx::rgb332_t, m5gfx::rgb888_t>(style.back_rgb888));
+          _display->setTextColor(log_colors_display[level], m5gfx::color_convert<m5gfx::rgb332_t, m5gfx::rgb888_t>(style.back_rgb888));
         }
-        M5.Display.print(str);
-        M5.Display.setTextStyle(style);
+        _display->print(str);
+        _display->setTextStyle(style);
       }
       else
       {
-        M5.Display.print(str);
+        _display->print(str);
       }
-      if (suffix && _suffix[log_target_display]) { M5.Display.print(_suffix[log_target_display]); }
+      if (suffix && _suffix[log_target_display]) { _display->print(_suffix[log_target_display]); }
     }
 
     if (_log_level[log_target_callback] >= level && _callback != nullptr)
@@ -126,5 +124,10 @@ namespace m5
       _callback(level, _log_level[log_target_callback], str);
       if (suffix && _suffix[log_target_callback]) { _callback(level, _log_level[log_target_callback], _suffix[log_target_callback]); }
     }
+  }
+
+  void Log_Class::setDisplay(M5GFX* target)
+  {
+    _display = target;
   }
 }

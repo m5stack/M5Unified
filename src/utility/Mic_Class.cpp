@@ -179,15 +179,15 @@ namespace m5
     int oversampling = self->_cfg.over_sampling;
     if (     oversampling < 1) { oversampling = 1; }
     else if (oversampling > 8) { oversampling = 8; }
+    oversampling <<= 1;
     int32_t gain = self->_cfg.magnification;
     const float f_gain = (float)gain / oversampling;
-    int32_t offset = self->_cfg.input_offset;
+    int32_t offset = 0;
     size_t src_idx = ~0u;
     size_t src_len = 0;
-    int32_t value = 0;
+    int32_t sum_value[4] = { 0,0 };
     int32_t prev_value[2] = { 0, 0 };
-    bool flip = false;
-    const bool stereo = self->_cfg.stereo;
+    const bool in_stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
@@ -215,7 +215,8 @@ namespace m5
           ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
           src_idx = ~0u;
           src_len = 0;
-          value = 0;
+          sum_value[0] = 0;
+          sum_value[1] = 0;
           continue;
         }
       }
@@ -234,7 +235,11 @@ namespace m5
         {
           do
           {
-            value += (src_buf[src_idx^1] & 0x0FFF) + (offset - 2048);
+#if defined (CONFIG_IDF_TARGET_ESP32)
+            sum_value[1 - (src_idx & 1)] += (src_buf[src_idx] & 0x0FFF) - 2048;
+#else
+            sum_value[src_idx & 1] += (src_buf[src_idx] & 0x0FFF) - 2048;
+#endif
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
@@ -242,42 +247,86 @@ namespace m5
         {
           do
           {
-            value += src_buf[src_idx] + offset;
+#if defined (CONFIG_IDF_TARGET_ESP32)
+            sum_value[1 - (src_idx & 1)] += src_buf[src_idx];
+#else
+            sum_value[src_idx & 1] += src_buf[src_idx];
+#endif
             ++src_idx;
           } while (--os_remain && (src_idx < src_len));
         }
         if (os_remain) { continue; }
         os_remain = oversampling;
 
+        auto sv0 = sum_value[0];
+        auto sv1 = sum_value[1];
+        auto value_tmp = sv0 + sv1;
+        sum_value[0] += offset;
+        sum_value[1] += offset;
+        // Automatic zero level adjustment
+        offset = (32 + offset * 62 - value_tmp) >> 6;
+
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)
         {
-          value = (value + prev_value[flip] * noise_filter) / (noise_filter + 1);
-          prev_value[flip] = value;
-          flip = stereo - flip;
-        }
-
-        value = value * f_gain;
-
-        if (current_rec->is_16bit)
-        {
-          if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
-          else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
-          auto dst = (int16_t*)(current_rec->data);
-          *dst++ = value;
-          current_rec->data = dst;
+          for (int i = 0; i < 2; ++i)
+          {
+            int32_t v = (sum_value[i] * (256 - noise_filter) + prev_value[i] * noise_filter + 128) >> 8;
+            prev_value[i] = v;
+            sum_value[i] = v * f_gain;
+          }
         }
         else
         {
-          value = ((value + 128) >> 8) + 128;
-          if (     value < 0) { value = 0; }
-          else if (value > 255) { value = 255; }
-          auto dst = (uint8_t*)(current_rec->data);
-          *dst++ = value;
-          current_rec->data = dst;
+          for (int i = 0; i < 2; ++i)
+          {
+            sum_value[i] *= f_gain;
+          }
         }
-        value = 0;
-        if (--dst_remain == 0)
+
+        int output_num = 2;
+
+        if (in_stereo != current_rec->is_stereo)
+        {
+          if (in_stereo)
+          { // stereo -> mono  convert.
+            sum_value[0] = (sum_value[0] + sum_value[1] + 1) >> 1;
+            output_num = 1;
+          }
+          else
+          { // mono -> stereo  convert.
+            auto tmp = sum_value[1];
+            sum_value[3] = tmp;
+            sum_value[2] = tmp;
+            sum_value[1] = sum_value[0];
+            output_num = 4;
+          }
+        }
+        for (int i = 0; i < output_num; ++i)
+        {
+          auto value = sum_value[i];
+          if (current_rec->is_16bit)
+          {
+            if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
+            else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
+            auto dst = (int16_t*)(current_rec->data);
+            *dst++ = value;
+            current_rec->data = dst;
+          }
+          else
+          {
+            value = ((value + 128) >> 8) + 128;
+            if (     value < 0) { value = 0; }
+            else if (value > 255) { value = 255; }
+            auto dst = (uint8_t*)(current_rec->data);
+            *dst++ = value;
+            current_rec->data = dst;
+          }
+        }
+        sum_value[0] = 0;
+        sum_value[1] = 0;
+        dst_remain -= output_num;
+        if ((int32_t)dst_remain <= 0)
         {
           current_rec->length = 0;
           break;
@@ -295,13 +344,14 @@ namespace m5
   {
     if (_task_running)
     {
-      if (_rec_sample_rate == _cfg.sample_rate)
+      auto rate = _calc_rec_rate();
+      if (_rec_sample_rate == rate)
       {
         return true;
       }
       do { vTaskDelay(1); } while (isRecording());
       end();
-      _rec_sample_rate = _cfg.sample_rate;
+      _rec_sample_rate = rate;
     }
 
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
@@ -343,12 +393,13 @@ namespace m5
     i2s_driver_uninstall(_cfg.i2s_port);
   }
 
-  bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate)
+  bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
   {
     recording_info_t info;
     info.data = recdata;
     info.length = array_len;
     info.is_16bit = flg_16bit;
+    info.is_stereo = flg_stereo;
 
     _cfg.sample_rate = sample_rate;
 

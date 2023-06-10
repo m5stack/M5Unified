@@ -95,7 +95,7 @@ void loop(void)
   delay(500);
 
   auto dt = M5.Rtc.getDateTime();
-  Serial.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n"
+  Serial.printf("RTC   UTC  :%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n"
                , dt.date.year
                , dt.date.month
                , dt.date.date
@@ -105,7 +105,7 @@ void loop(void)
                , dt.time.seconds
                );
   M5.Display.setCursor(0,0);
-  M5.Display.printf("RTC : %04d/%02d/%02d (%s)  %02d:%02d:%02d"
+  M5.Display.printf("RTC   UTC  :%04d/%02d/%02d (%s)  %02d:%02d:%02d"
                , dt.date.year
                , dt.date.month
                , dt.date.date
@@ -118,18 +118,31 @@ void loop(void)
 
  /// ESP32 internal timer
   auto t = time(nullptr);
-  auto tm = gmtime(&t);
-//auto tm = localtime(&t); // for local timezone.
+  {
+    auto tm = gmtime(&t);    // for UTC.
+    Serial.printf("ESP32 UTC  :%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n",
+          tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+          wd[tm->tm_wday],
+          tm->tm_hour, tm->tm_min, tm->tm_sec);
+    M5.Display.setCursor(0,20);
+    M5.Display.printf("ESP32 UTC  :%04d/%02d/%02d (%s)  %02d:%02d:%02d",
+          tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+          wd[tm->tm_wday],
+          tm->tm_hour, tm->tm_min, tm->tm_sec);
+  }
 
-  Serial.printf("ESP32:%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n",
-        tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
-        wd[tm->tm_wday],
-        tm->tm_hour, tm->tm_min, tm->tm_sec);
-  M5.Display.setCursor(0,20);
-  M5.Display.printf("ESP32:%04d/%02d/%02d (%s)  %02d:%02d:%02d",
-        tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
-        wd[tm->tm_wday],
-        tm->tm_hour, tm->tm_min, tm->tm_sec);
+  {
+    auto tm = localtime(&t); // for local timezone.
+    Serial.printf("ESP32 %s:%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n", NTP_TIMEZONE,
+          tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+          wd[tm->tm_wday],
+          tm->tm_hour, tm->tm_min, tm->tm_sec);
+    M5.Display.setCursor(0,40);
+    M5.Display.printf("ESP32 %s:%04d/%02d/%02d (%s)  %02d:%02d:%02d", NTP_TIMEZONE,
+          tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+          wd[tm->tm_wday],
+          tm->tm_hour, tm->tm_min, tm->tm_sec);
+  }
 
 }
 //*/
