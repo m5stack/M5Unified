@@ -174,7 +174,7 @@ namespace m5
 
     // 地磁気は…パラメータ模索中…
     _offset_data.mag.radius = 384.0f / _convert_param.mag_res;
-    _offset_data.mag.tolerance = 128.0f / _convert_param.mag_res;
+    _offset_data.mag.tolerance = 32.0f / _convert_param.mag_res;
     _offset_data.mag.noise_level = 128.0f / _convert_param.mag_res;
     _offset_data.mag.average_shifter = 1;
   }
