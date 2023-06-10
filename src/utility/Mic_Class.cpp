@@ -187,8 +187,6 @@ namespace m5
     size_t src_len = 0;
     int32_t sum_value[4] = { 0,0 };
     int32_t prev_value[2] = { 0, 0 };
-    bool out_flip = false;
-    bool in_flip = false;
     const bool in_stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;

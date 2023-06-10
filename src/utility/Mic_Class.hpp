@@ -43,7 +43,7 @@ namespace m5
     /// use stereo output
     bool stereo = false;
 
-    /// offset correction value of ADC input value
+    /// <<This value is no longer used>>
     int input_offset = 0;
 
     /// Sampling times of obtain the average value

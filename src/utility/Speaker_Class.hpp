@@ -43,7 +43,7 @@ namespace m5
     /// multiplier for output value
     uint8_t magnification = 16;
 
-    /// for I2S dma_buf_len
+    /// for I2S dma_buf_len (max 1024)
     size_t dma_buf_len = 256;
 
     /// for I2S dma_buf_count

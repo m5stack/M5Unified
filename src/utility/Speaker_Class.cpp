@@ -30,6 +30,12 @@ namespace m5
  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 3)
   #define SAMPLE_RATE_TYPE uint32_t
  #endif
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  #define I2S_DRIVER_VERSION 2
+ #endif
+#endif
+#ifndef I2S_DRIVER_VERSION
+#define I2S_DRIVER_VERSION 1
 #endif
 
 #ifndef COMM_FORMAT_I2S
@@ -61,10 +67,14 @@ namespace m5
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
                                     : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
+    i2s_config.tx_desc_auto_clear   = true;
+#if I2S_DRIVER_VERSION > 1
+    i2s_config.dma_desc_num         = _cfg.dma_buf_count;
+    i2s_config.dma_frame_num        = _cfg.dma_buf_len;
+#else
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
-    i2s_config.tx_desc_auto_clear   = true;
-
+#endif
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
     pin_config.bck_io_num     = _cfg.pin_bck;
