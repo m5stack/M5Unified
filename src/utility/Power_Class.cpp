@@ -287,7 +287,7 @@ namespace m5
   static void _core_s3_output(uint8_t mask, bool enable)
   {
     static constexpr const uint8_t port0_reg = 0x02;
-    static constexpr const uint8_t port1_reg = 0x03;
+    //static constexpr const uint8_t port1_reg = 0x03;
     static constexpr const uint32_t port1_bitmask_boost = 0b10000000; // BOOST_EN
 
     uint8_t buf[2];
