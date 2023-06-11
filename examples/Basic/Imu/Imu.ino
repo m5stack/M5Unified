@@ -142,6 +142,9 @@ void updateCalibration(uint32_t c, bool clear = false)
     // There are three arguments, which can be specified in the order of acceleration, gyro, and geomagnetism.
     // If you want to calibrate only the gyro, do the following.
     // M5.Imu.setCalibration(0, 100, 0);
+    //
+    // If you want to calibrate only the geomagnetism, do the following.
+    // M5.Imu.setCalibration(0, 0, 100);
     }
     else
     { // Stop calibration.
