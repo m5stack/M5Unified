@@ -157,7 +157,7 @@ namespace m5
     if (_imu_instance[0]) { _imu_instance[0]->getConvertParam(&_convert_param); }
     if (_imu_instance[1]) { _imu_instance[1]->getConvertParam(&_convert_param); }
 
-    // 加速度は 1.0G ± 0.0625f の範囲に収まるよう調整
+    // 加速度は 1.0G ± 0.000488f の範囲に収まるよう調整
     _offset_data.accel.radius = 1.0f / _convert_param.accel_res;
     _offset_data.accel.tolerance = (1.0f / 2048.0f) / _convert_param.accel_res;
     _offset_data.accel.noise_level = 0.0625f / _convert_param.accel_res;
@@ -172,7 +172,7 @@ namespace m5
     // 地磁気は…パラメータ模索中…
     _offset_data.mag.radius = 384.0f / _convert_param.mag_res;
     _offset_data.mag.tolerance = 64.0f / _convert_param.mag_res;
-    _offset_data.mag.noise_level = 32.0f / _convert_param.mag_res;
+    _offset_data.mag.noise_level = 96.0f / _convert_param.mag_res;
     _offset_data.mag.average_shifter = 1;
   }
 
