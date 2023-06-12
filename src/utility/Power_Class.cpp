@@ -187,6 +187,8 @@ namespace m5
     if (_pmic == Power_Class::pmic_t::pmic_axp192)
     {
       static constexpr std::uint8_t reg_data_array[] =
+        { 0x26, 0x6A    // reg26h DCDC1 3350mV (ESP32 VDD)
+
         ///       +--------- VBUS-IPSOUT channel selection control signal when VBUS is available (0:The N_VBUSEN pin determines whether to open this channel. / 1: The VBUS-IPSOUT path can be selected to be opened regardless of the status of N_VBUSEN)
         ///       |+-------- VBUS VHOLD pressure limit control (0:disable ; 1:enable)
         ///       ||+++----- VHOLD setting (x 100mV + 4.0V ;  000:4.0V ～ 111:4.7V)
@@ -194,7 +196,7 @@ namespace m5
         ///       ||||||+--- VBUS current limit control enable signal
         ///       |||||||+-- VBUS current limit control opens time limit flow selection (0:500mA ; 1:100mA)
         ///       ||||||||
-        { 0x30, 0b00000010 // reg30h VBUS-IPSOUT Pass-Through Management
+        , 0x30, 0b00000010 // reg30h VBUS-IPSOUT Pass-Through Management
 
         ///       ++++------ reserved
         ///       ||||+----- PWRON short press wake-up function enable setting in Sleep mode.
@@ -228,8 +230,10 @@ namespace m5
         , 0x98, 0x00    // PWM1 X
         , 0x99, 0xFF    // PWM1 Y1
         , 0x9A, 0xFF    // PWM1 Y1
-        , 0x12, 0x07    // reg12h enable DCDC1,DCDC3,LDO2  /  disable LDO3,DCDC2,EXTEN
-        , 0x26, 0x6A    // reg26h DCDC1 3350mV (ESP32 VDD)
+
+// 2023/06/12 以下の指定は削除。
+//      , 0x12, 0x07    // reg12h enable DCDC1,DCDC3,LDO2  /  disable LDO3,DCDC2,EXTEN
+// 理由:Core2本体リセット操作後、起動時にEXTEN disableとなって外部機器への電源供給が一瞬途切れるため。
         };
       Axp192.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
 
