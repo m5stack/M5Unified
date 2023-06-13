@@ -7,6 +7,11 @@ namespace m5
 {
   void Button_Class::setState(std::uint32_t msec, button_state_t state)
   {
+    if (_currentState == state_decide_click_count)
+    {
+      _clickCount = 0;
+    }
+
     _lastMsec = msec;
     bool flg_timeout = (msec - _lastClicked > _msecHold);
     switch (state)
@@ -25,10 +30,6 @@ namespace m5
     case state_clicked:
       ++_clickCount;
       _lastClicked = msec;
-      break;
-
-    case state_decide_click_count:
-      _clickCount = 0;
       break;
 
     default:
