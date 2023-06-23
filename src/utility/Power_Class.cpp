@@ -81,7 +81,7 @@ namespace m5
       m5gfx::gpio_hi(TimerCam_POWER_HOLD_PIN);
       m5gfx::pinMode(TimerCam_LED_PIN, m5gfx::pin_mode_t::output);
       m5gfx::gpio_lo(TimerCam_LED_PIN);  // system LED off
-      _batAdc = ADC1_GPIO38_CHANNEL;
+      _batAdc = (adc1_channel_t) ADC1_GPIO38_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 1.513f;
       break;
@@ -89,7 +89,7 @@ namespace m5
     case board_t::board_M5StackCoreInk:
       _pwrHoldPin = CoreInk_POWER_HOLD_PIN;
       _wakeupPin = GPIO_NUM_27; // power button;
-      _batAdc = ADC1_GPIO35_CHANNEL;
+      _batAdc = (adc1_channel_t) ADC1_GPIO35_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
       break;
@@ -98,7 +98,7 @@ namespace m5
       _pwrHoldPin = M5Paper_POWER_HOLD_PIN;
       m5gfx::pinMode(M5Paper_EXT5V_ENABLE_PIN, m5gfx::pin_mode_t::output);
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
-      _batAdc = ADC1_GPIO35_CHANNEL;
+      _batAdc = (adc1_channel_t) ADC1_GPIO35_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
