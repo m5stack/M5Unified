@@ -895,13 +895,6 @@ for (int i = 0; i < 0x50; ++i)
     if (cfg.internal_imu && In_I2C.isEnabled())
     {
       M5.Imu.begin(&M5.In_I2C, M5.getBoard());
-      // if (M5.Imu.begin(&M5.In_I2C))
-      // {
-      //   if (M5.getBoard() == m5::board_t::board_M5Atom)
-      //   { // ATOM Matrix's IMU is oriented differently, so change the setting.
-      //     M5.Imu.setRotation(2);
-      //   }
-      // }
     }
     if (!M5.Imu.isEnabled() && cfg.external_imu)
     {
