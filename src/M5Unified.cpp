@@ -296,38 +296,38 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     if (board == board_t::board_unknown)
-    { // AtomS3Lite or StampS3 ?
-      uint32_t g4backup = *((volatile uint32_t *)(IO_MUX_GPIO4_REG));
-      uint32_t g12backup = *((volatile uint32_t *)(IO_MUX_GPIO12_REG));
-      m5gfx::pinMode(GPIO_NUM_4, m5gfx::pin_mode_t::input_pullup);
-      m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input_pullup);
-      // AtomS3Lite has an IR LED connected to GPIO4, which is LOW when read even with input_pullup.
-      // Therefore, if it is HIGH, it can be determined that it is not AtomS3Lite and can be assumed to be StampS3.
-      // However, even if it goes LOW, something may be connected to GPIO4 at StampS3, so it is treated as unknown.
-      // The AtomS3Lite determination uses the fallback_board setting.
-      if (m5gfx::gpio_in(GPIO_NUM_4) == true && m5gfx::gpio_in(GPIO_NUM_12) == true)
-      {
-        board = board_t::board_M5StampS3;
-      }
-      else
-      {
-        uint32_t g41backup = *((volatile uint32_t *)(IO_MUX_GPIO41_REG));
-        // AtomS3Lite has a button on GPIO 41.
-        // If both pull-up and pull-down readings are performed and both give the same result, we assume that it is AtomS3Lite.
-        m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input_pulldown);
-        auto tmp1 = m5gfx::gpio_in(GPIO_NUM_41);
-        m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input_pullup);
-        auto tmp2 = m5gfx::gpio_in(GPIO_NUM_41);
-        if (tmp1 == tmp2)
-        {
-          board = m5gfx::gpio_in(GPIO_NUM_12)
-                ? board_t::board_M5AtomS3Lite
-                : board_t::board_M5AtomS3U;
+    { /// StampS3 or AtomS3Lite,S3U ?
+      ///   After setting GPIO38 to INPUT PULL-UP, change to INPUT and read it.
+      ///   In the case of STAMPS3: Returns 0. Charge is sucked by SGM2578.
+      ///   In the case of ATOMS3Lite/S3U : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
+      ///
+      /// AtomS3Lite or AtomS3U ?
+      ///   After setting GPIO4 to INPUT PULL-UP, read it.
+      ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
+      ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
+
+      m5gfx::gpio::pin_backup_t g4backup(GPIO_NUM_4);
+      m5gfx::gpio::pin_backup_t g38backup(GPIO_NUM_38);
+      auto result = m5gfx::gpio::command(
+        (const uint8_t[]) {
+        m5gfx::gpio::command_mode_input_pullup, GPIO_NUM_38,
+        m5gfx::gpio::command_mode_input_pullup, GPIO_NUM_4,
+        m5gfx::gpio::command_mode_input       , GPIO_NUM_38,
+        m5gfx::gpio::command_delay            , 1,
+        m5gfx::gpio::command_read             , GPIO_NUM_38,
+        m5gfx::gpio::command_read             , GPIO_NUM_4,
+        m5gfx::gpio::command_end
         }
-        *((volatile uint32_t *)(IO_MUX_GPIO41_REG)) = g41backup;
-      }
-      *((volatile uint32_t *)(IO_MUX_GPIO4_REG)) = g4backup;
-      *((volatile uint32_t *)(IO_MUX_GPIO12_REG)) = g12backup;
+      );
+      board = ((const board_t[])
+        {
+          board_t::board_M5StampS3,
+          board_t::board_M5StampS3,
+          board_t::board_M5AtomS3Lite,
+          board_t::board_M5AtomS3U,
+        })[result];
+      g4backup.restore();
+      g38backup.restore();
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
