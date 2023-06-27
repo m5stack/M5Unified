@@ -498,6 +498,17 @@ for (int i = 0; i < 0x50; ++i)
       // Countermeasure to the problem that GPIO15 affects WiFi sensitivity when M5GO bottom is connected.
       m5gfx::pinMode(GPIO_NUM_15, m5gfx::pin_mode_t::output);
       m5gfx::gpio_lo(GPIO_NUM_15);
+
+      // M5Stack Core v2.6 has a problem that SPI communication speed cannot be increased.
+      // This problem can be solved by increasing the GPIO drive current.
+      // ※  This allows SunDisk SD cards to communicate at 20 MHz. (without M5GO bottom.)
+      //     This allows communication with ModuleDisplay at 80 MHz.
+      for (auto gpio: (const gpio_num_t[]){ GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_23 })
+      {
+        *(volatile uint32_t*)(GPIO_PIN_MUX_REG[gpio]) |= FUN_DRV_M; // gpio drive current set to 40mA.
+        gpio_pulldown_dis(gpio); // disable pulldown.
+        gpio_pullup_en(gpio);    // enable pullup.
+      }
       break;
 
     case board_t::board_M5StickC:
