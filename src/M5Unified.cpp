@@ -492,6 +492,7 @@ for (int i = 0; i < 0x50; ++i)
       Display.clear();
     }
 
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (_board)
     {
     case board_t::board_M5Stack:
@@ -524,6 +525,7 @@ for (int i = 0; i < 0x50; ++i)
     default:
       break;
     }
+#endif
 
 #if defined ( ARDUINO )
 
