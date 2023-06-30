@@ -39,7 +39,7 @@ namespace m5
     std::uint8_t getClickCount(void) const { return _clickCount; }
 
     /// Returns true if the button is currently held pressed.
-    bool isHolding(void)   const { return _oldPress == 2 && _press == 2; }
+    bool isHolding(void)   const { return _press == 2; }
     bool wasChangePressed(void)  const { return ((bool)_press) != ((bool)_oldPress); }
 
     bool isPressed(void)   const { return _press; }
