@@ -403,7 +403,7 @@ namespace m5
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
     case board_t::board_M5Station:
-      Axp192.getEXTEN();
+      return Axp192.getEXTEN();
       break;
 #endif
 
