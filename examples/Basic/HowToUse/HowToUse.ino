@@ -44,12 +44,16 @@
 #include <M5Unified.h>
 
 
-#include <esp_log.h>
-
 extern const uint8_t wav_8bit_44100[46000];
 
 void setup(void)
 {
+  M5_LOGE("this is error LOG");
+  M5_LOGW("this is warning LOG");
+  M5_LOGI("this is info LOG");
+  M5_LOGD("this is debug LOG");
+  M5_LOGV("this is verbose LOG");
+
   auto cfg = M5.config();
 
 #if defined ( ARDUINO )
@@ -163,13 +167,13 @@ void setup(void)
     M5.Speaker.tone(2000, 100);
 
     /// wait done
-    while (M5.Speaker.isPlaying()) { vTaskDelay(1); }
+    while (M5.Speaker.isPlaying()) { M5.delay(1); }
 
     /// play beep sound 1000Hz 100msec (background task)
     M5.Speaker.tone(1000, 100);
 
     /// wait play beep sound 2000Hz 100msec (background task)
-    while (M5.Speaker.isPlaying()) { vTaskDelay(1); }
+    while (M5.Speaker.isPlaying()) { M5.delay(1); }
 
 
     M5.Speaker.playRaw(wav_8bit_44100, sizeof(wav_8bit_44100), 44100, false);
@@ -246,6 +250,9 @@ void setup(void)
   case m5::board_t::board_M5StickCPlus:
     name = "StickCPlus";
     break;
+  case m5::board_t::board_M5StickCPlus2:
+    name = "StickCPlus";
+    break;
   case m5::board_t::board_M5StackCoreInk:
     name = "CoreInk";
     break;
@@ -281,7 +288,7 @@ void setup(void)
   M5.Display.startWrite();
   M5.Display.print("Core:");
   M5.Display.println(name);
-  ESP_LOGI("setup", "core:%s", name);
+  M5_LOGI("core:%s", name);
 
   // run-time branch : imu model check
   switch (M5.Imu.getType())
@@ -308,25 +315,15 @@ void setup(void)
   M5.Display.print("IMU:");
   M5.Display.println(name);
   M5.Display.endWrite();
-  ESP_LOGI("setup", "imu:%s", name);
+  M5_LOGI("imu:%s", name);
 }
 
 void loop(void)
 {
-  vTaskDelay(1);
+  M5.delay(1);
   int h = M5.Display.height() / 8;
 
-  M5.update();
-
-  if (M5.BtnA.wasPressed())
-  {
-    M5.Display.sleep();
-  }
-  if (M5.BtnA.wasReleased())
-  {
-    M5.Display.wakeup();
-  }
-  
+  M5.update();  
 
 //------------------- Button test
 /*
@@ -358,7 +355,7 @@ void loop(void)
   if (state)
   {
     M5.Speaker.tone(783.991, 100);
-    ESP_LOGI("loop", "BtnPWR:%s  count:%d", names[state], M5.BtnPWR.getClickCount());
+    M5_LOGI("BtnPWR:%s  count:%d", names[state], M5.BtnPWR.getClickCount());
     if (!M5.Display.displayBusy())
     {
       M5.Display.fillRect(0, h*2, h, h-1, colors[state]);
@@ -377,7 +374,7 @@ void loop(void)
   if (state)
   {
     M5.Speaker.tone(523.251, 100);
-    ESP_LOGI("loop", "BtnA:%s  count:%d", names[state], M5.BtnA.getClickCount());
+    M5_LOGI("BtnA:%s  count:%d", names[state], M5.BtnA.getClickCount());
     if (!M5.Display.displayBusy())
     {
       M5.Display.fillRect(0, h*3, h, h-1, colors[state]);
@@ -395,7 +392,7 @@ void loop(void)
   if (state)
   {
     M5.Speaker.tone(587.330, 100);
-    ESP_LOGI("loop", "BtnB:%s  count:%d", names[state], M5.BtnB.getClickCount());
+    M5_LOGI("BtnB:%s  count:%d", names[state], M5.BtnB.getClickCount());
     if (!M5.Display.displayBusy())
     {
       M5.Display.fillRect(0, h*4, h, h-1, colors[state]);
@@ -413,7 +410,7 @@ void loop(void)
   if (state)
   {
     M5.Speaker.tone(659.255, 100);
-    ESP_LOGI("loop", "BtnC:%s  count:%d", names[state], M5.BtnC.getClickCount());
+    M5_LOGI("BtnC:%s  count:%d", names[state], M5.BtnC.getClickCount());
     if (!M5.Display.displayBusy())
     {
       M5.Display.fillRect(0, h*5, h, h-1, colors[state]);
@@ -431,7 +428,7 @@ void loop(void)
   if (state)
   {
     M5.Speaker.tone(698.456, 100);
-    ESP_LOGI("loop", "BtnEXT:%s  count:%d", names[state], M5.BtnEXT.getClickCount());
+    M5_LOGI("BtnEXT:%s  count:%d", names[state], M5.BtnEXT.getClickCount());
     if (!M5.Display.displayBusy())
     {
       M5.Display.fillRect(0, h*6, h, h-1, colors[state]);
@@ -581,7 +578,7 @@ void loop(void)
   M5.Display.display();
 }
 
-#if !defined ( ARDUINO )
+#if !defined ( ARDUINO ) && defined ( ESP_PLATFORM )
 extern "C" {
   void loopTask(void*)
   {

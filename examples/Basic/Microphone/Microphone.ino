@@ -20,9 +20,9 @@ void setup(void)
 {
   auto cfg = M5.config();
 
-//cfg.external_spk = true;    /// use external speaker (SPK HAT / ATOMIC SPK)
-//cfg.external_spk_detail.omit_atomic_spk = true; // exclude atomic spk
-//cfg.external_spk_detail.omit_spk_hat    = true; // exclude spk hat
+// cfg.external_speaker.hat_spk = true;     /// use external speaker (HAT SPK)
+// cfg.external_speaker.hat_spk2 = true;    /// use external speaker (HAT SPK2)
+// cfg.external_speaker.atomic_spk = true;  /// use external speaker (ATOMIC SPK)
 
   M5.begin(cfg);
 

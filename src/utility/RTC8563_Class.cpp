@@ -3,7 +3,6 @@
 
 #include "RTC8563_Class.hpp"
 
-#include <sys/time.h>
 #include <stdlib.h>
 
 namespace m5
@@ -244,7 +243,7 @@ namespace m5
   {
     if (!_init) { return; }
     // disable alerm (bit7:1=disabled)
-    std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
+    static constexpr const std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
     writeRegister(0x09, buf, 4);
 
     // disable timer (bit7:0=disabled)
@@ -254,8 +253,9 @@ namespace m5
     writeRegister8(0x01, 0x00);
   }
 
-  void RTC8563_Class::setSystemTimeFromRtc(timezone* tz)
+  void RTC8563_Class::setSystemTimeFromRtc(struct timezone* tz)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
     rtc_datetime_t dt;
     if (getDateTime(&dt))
     {
@@ -282,5 +282,6 @@ namespace m5
       now.tv_usec = 0;
       settimeofday(&now, tz);
     }
+#endif
   }
 }

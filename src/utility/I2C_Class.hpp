@@ -4,8 +4,15 @@
 #ifndef __M5_I2C_CLASS_H__
 #define __M5_I2C_CLASS_H__
 
+#include "m5unified_common.h"
+#if __has_include ( <driver/i2c.h> )
+
+#include <driver/i2c.h>
+
+#endif
+
 #include <cstdint>
-#include "driver/i2c.h"
+#include <cstddef>
 
 namespace m5
 {

@@ -4,10 +4,25 @@
 #ifndef __M5_Speaker_Class_H__
 #define __M5_Speaker_Class_H__
 
+#include "m5unified_common.h"
+
+#if defined ( M5UNIFIED_PC_BUILD )
+
+#include <thread>
+
+#else
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/i2s.h>
+
+#endif
+
 #include <atomic>
+
+#ifndef I2S_PIN_NO_CHANGE
+#define I2S_PIN_NO_CHANGE (-1)
+#endif
 
 namespace m5
 {
@@ -50,10 +65,10 @@ namespace m5
     size_t dma_buf_count = 8;
 
     /// background task priority
-    UBaseType_t task_priority = 2;
+    uint8_t task_priority = 2;
 
     /// background task pinned core
-    BaseType_t task_pinned_core = -1;
+    uint8_t task_pinned_core = ~0;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
@@ -74,7 +89,14 @@ namespace m5
 
     bool isRunning(void) const { return _task_running; }
 
-    bool isEnabled(void) const { return _cfg.pin_data_out >= 0; }
+    bool isEnabled(void) const
+    {
+#if defined (ESP_PLATFORM)
+      return _cfg.pin_data_out >= 0;
+#else
+      return true;
+#endif
+    }
 
     /// now in playing or not.
     /// @return false=not playing / true=playing
@@ -191,6 +213,8 @@ namespace m5
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
+
+    /// @deprecated "playRAW" function has been renamed to "playRaw"
     [[deprecated("The playRAW function has been renamed to playRaw")]]
     bool playRAW(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -258,10 +282,14 @@ namespace m5
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
-    TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
-    volatile SemaphoreHandle_t _task_semaphore = nullptr;
     std::atomic<uint16_t> _play_channel_bits = { 0 };
+#if defined (M5UNIFIED_PC_BUILD)
+    std::thread* _task_handle = nullptr;
+#else
+    TaskHandle_t _task_handle = nullptr;
+    volatile SemaphoreHandle_t _task_semaphore = nullptr;
+#endif
   };
 }
 

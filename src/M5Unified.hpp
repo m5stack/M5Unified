@@ -4,7 +4,11 @@
 #ifndef __M5UNIFIED_HPP__
 #define __M5UNIFIED_HPP__
 
+#include "utility/m5unified_common.h"
+
+#if __has_include(<sdkconfig.h>)
 #include <sdkconfig.h>
+#endif
 
 // If you want to use a set of functions to handle SD/SPIFFS/HTTP,
 //  please include <SD.h>,<SPIFFS.h>,<HTTPClient.h> before <M5GFX.h>
@@ -107,6 +111,9 @@ namespace m5
 
       /// use Unit RTC.
       bool external_rtc  = false;
+
+      /// Turn off the IRQ bit of the RTC at startup.
+      bool disable_rtc_irq = true;
 
       /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
       uint8_t led_brightness = 0;
@@ -234,6 +241,27 @@ namespace m5
       return config_t();
     }
 
+    static inline void delay(uint32_t msec)
+    {
+#if defined (ARDUINO)
+      ::delay(msec);
+#elif defined (ESP_PLATFORM)
+      vTaskDelay( msec / portTICK_PERIOD_MS );
+#else
+      SDL_Delay(msec);
+#endif
+    }
+
+    static inline uint32_t millis(void)
+    {
+      return m5gfx::millis();
+    }
+
+    static inline uint32_t micros(void)
+    {
+      return m5gfx::micros();
+    }
+
     /// get the board type of the runtime environment.
     /// @return board type
     board_t getBoard(void) const { return _board; }
@@ -309,9 +337,11 @@ namespace m5
 #if defined ( __M5GFX_M5UNITOLED__ )
         if (cfg.external_display.unit_oled)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_oled.i2c_port < 0) { cfg.unit_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitOLED dsp(cfg.unit_oled);
           if (dsp.init()) {
@@ -324,9 +354,11 @@ namespace m5
 #if defined ( __M5GFX_M5UNITGLASS__ )
         if (cfg.external_display.unit_glass)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_glass.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_glass.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_glass.i2c_port < 0) { cfg.unit_glass.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitGLASS dsp(cfg.unit_glass);
           if (dsp.init()) {
@@ -339,9 +371,11 @@ namespace m5
 #if defined ( __M5GFX_M5UNITLCD__ )
         if (cfg.external_display.unit_lcd)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_lcd.pin_sda >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_lcd.pin_scl >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_lcd.i2c_port < 0) { cfg.unit_lcd.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitLCD dsp(cfg.unit_lcd);
           int retry = 8;

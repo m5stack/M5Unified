@@ -5,12 +5,26 @@
 
 #include "M5Unified.hpp"
 
+#if !defined (M5UNIFIED_PC_BUILD)
+#include <soc/efuse_reg.h>
+#include <soc/gpio_periph.h>
+
+#if __has_include (<driver/adc.h>)
+#include <driver/adc.h>
+#endif
+
+#if __has_include (<driver/i2s.h>)
+#include <driver/i2s.h>
+#endif
+
 #if __has_include (<esp_idf_version.h>)
  #include <esp_idf_version.h>
  #if ESP_IDF_VERSION_MAJOR >= 4
   /// [[fallthrough]];
   #define NON_BREAK ;[[fallthrough]];
  #endif
+
+#endif
 #endif
 
 /// [[fallthrough]];
@@ -21,25 +35,16 @@
 /// global instance.
 m5::M5Unified M5;
 
-#include <soc/efuse_reg.h>
-#include <soc/gpio_periph.h>
-
-#if __has_include (<driver/adc.h>)
- #include <driver/adc.h>
-#endif
-
-#if __has_include (<driver/i2s.h>)
- #include <driver/i2s.h>
-#endif
-
 void __attribute((weak)) adc_power_acquire(void)
 {
+#if !defined (M5UNIFIED_PC_BUILD)
 #if defined (ESP_IDF_VERSION_VAL)
  #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(3, 3, 4)
   adc_power_on();
  #endif
 #else
  adc_power_on();
+#endif
 #endif
 }
 
@@ -68,7 +73,8 @@ namespace m5
 
     switch (self->getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Speaker.config();
@@ -112,6 +118,7 @@ namespace m5
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
+    case board_t::board_M5StickCPlus2:
     case board_t::board_M5StackCoreInk:
       /// for SPK HAT
       if (self->use_hat_spk)
@@ -140,7 +147,8 @@ namespace m5
 
     switch (self->getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Mic.config();
@@ -221,7 +229,8 @@ for (int i = 0; i < 0x50; ++i)
     return true;
   }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr gpio_num_t TFCARD_CS_PIN          = GPIO_NUM_4;
   static constexpr gpio_num_t CoreInk_BUTTON_EXT_PIN = GPIO_NUM_5;
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
@@ -229,7 +238,8 @@ for (int i = 0; i < 0x50; ++i)
 
   board_t M5Unified::_check_boardtype(board_t board)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (board == board_t::board_unknown)
     {
       switch (m5gfx::get_pkg_ver())
@@ -353,7 +363,8 @@ for (int i = 0; i < 0x50; ++i)
 
   void M5Unified::_setup_i2c(board_t board)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     { /// setup Internal I2C
       i2c_port_t in_port = I2C_NUM_1;
       gpio_num_t in_sda = GPIO_NUM_21;
@@ -492,7 +503,8 @@ for (int i = 0; i < 0x50; ++i)
       Display.clear();
     }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (_board)
     {
     case board_t::board_M5Stack:
@@ -539,7 +551,8 @@ for (int i = 0; i < 0x50; ++i)
 
     switch (_board) /// setup Hardware Buttons
     {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5StackCoreInk:
       m5gfx::pinMode(CoreInk_BUTTON_EXT_PIN, m5gfx::pin_mode_t::input); // TopButton
       m5gfx::pinMode(CoreInk_BUTTON_PWR_PIN, m5gfx::pin_mode_t::input); // PowerButton
@@ -567,6 +580,12 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5Tough:
  /// for GPIO 36,39 Chattering prevention.
       adc_power_acquire();
+      break;
+
+    case board_t::board_M5StickCPlus2:
+      m5gfx::pinMode(GPIO_NUM_35, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_39, m5gfx::pin_mode_t::input);
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -607,7 +626,8 @@ for (int i = 0; i < 0x50; ++i)
       mic_cfg.i2s_port = I2S_NUM_0;
       switch (_board)
       {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
         if (cfg.internal_mic)
         {
@@ -677,8 +697,8 @@ for (int i = 0; i < 0x50; ++i)
     }
 
     if (cfg.external_spk_detail.enabled && cfg.external_speaker_value == 0) {
-      cfg.external_speaker.atomic_spk = !cfg.external_spk_detail.omit_atomic_spk;
-      cfg.external_speaker.hat_spk = !cfg.external_spk_detail.omit_spk_hat;
+      cfg.external_speaker.atomic_spk = false==cfg.external_spk_detail.omit_atomic_spk;
+      cfg.external_speaker.hat_spk = false==cfg.external_spk_detail.omit_spk_hat;
     }
 
     if (cfg.internal_spk || cfg.external_speaker_value)
@@ -693,7 +713,8 @@ for (int i = 0; i < 0x50; ++i)
 #endif
       switch (_board)
       {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
         if (cfg.internal_spk)
         {
@@ -740,6 +761,7 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5StackCoreInk:
       case board_t::board_M5StickCPlus:
+      case board_t::board_M5StickCPlus2:
         if (cfg.internal_spk)
         {
           spk_cfg.buzzer = true;
@@ -826,7 +848,8 @@ for (int i = 0; i < 0x50; ++i)
 
       if (cfg.external_speaker_value)
       {
-#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined ( CONFIG_IDF_TARGET_ESP32S3 )
  #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3)
 #elif defined ( CONFIG_IDF_TARGET_ESP32 ) || !defined ( CONFIG_IDF_TARGET )
@@ -902,8 +925,13 @@ for (int i = 0; i < 0x50; ++i)
     {
       port_a_used = M5.Rtc.begin(&M5.Ex_I2C);
     }
-
-    M5.Rtc.setSystemTimeFromRtc();
+    if (M5.Rtc.isEnabled())
+    {
+      M5.Rtc.setSystemTimeFromRtc();
+      if (cfg.disable_rtc_irq) {
+        M5.Rtc.disableIRQ();
+      }
+    }
 
     if (cfg.internal_imu && In_I2C.isEnabled())
     {
@@ -926,9 +954,15 @@ for (int i = 0; i < 0x50; ++i)
       Touch.update(ms);
     }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+    BtnA.setRawState(ms, !m5gfx::gpio_in(39));
+    BtnB.setRawState(ms, !m5gfx::gpio_in(38));
+    BtnC.setRawState(ms, !m5gfx::gpio_in(37));
+    BtnPWR.setRawState(ms, !m5gfx::gpio_in(36));
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
-    uint_fast8_t raw_gpio37_40 = ~GPIO.in1.data >> 5;
+    uint_fast8_t raw_gpio32_39 = ~GPIO.in1.data;
+ // uint_fast8_t raw_gpio37_40 = ~GPIO.in1.data >> 5;
     uint_fast8_t btn_bits = 0;
     switch (_board)
     {
@@ -966,25 +1000,31 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5Paper:
     case board_t::board_M5Station:
-      btn_bits = raw_gpio37_40 & 0x07; // gpio37 A / gpio38 B / gpio39 C
+      btn_bits = (raw_gpio32_39 >> 5) & 0x07; // gpio37 A / gpio38 B / gpio39 C
       break;
 
     case board_t::board_M5Stack:
-      btn_bits = ( raw_gpio37_40 & 0x02)        // gpio38 B
-               + ((raw_gpio37_40 & 0x01) << 2); // gpio37 C
+      btn_bits = ((raw_gpio32_39 >> 5) & 0x02)  // gpio38 B
+               + ((raw_gpio32_39 >> 3) & 0x04); // gpio37 C
       NON_BREAK; /// don't break;
 
     case board_t::board_M5Atom:
     case board_t::board_M5AtomPsram:
     case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
-      btn_bits += (raw_gpio37_40 & 0x04) >> 2; // gpio39 A
+      btn_bits += (raw_gpio32_39 >> 7) & 0x01; // gpio39 A
       break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      btn_bits = ( raw_gpio37_40 & 0x01)        // gpio37 A
-               + ((raw_gpio37_40 & 0x04) >> 1); // gpio39 B
+      btn_bits = ((raw_gpio32_39 >> 5) & 0x01)  // gpio37 A
+               + ((raw_gpio32_39 >> 6) & 0x02); // gpio39 B
+      break;
+
+    case board_t::board_M5StickCPlus2:
+      btn_bits = ((raw_gpio32_39 >> 5) & 0x01)  // gpio37 A
+               + ((raw_gpio32_39 >> 6) & 0x02)  // gpio39 B
+               + ((raw_gpio32_39 >> 1) & 0x04); // gpio39 B
       break;
 
     default:

@@ -5,16 +5,7 @@
 
 #include "../M5Unified.hpp"
 
-#if __has_include (<esp_idf_version.h>)
- #include <esp_idf_version.h>
- #if ESP_IDF_VERSION_MAJOR >= 4
-  #define NON_BREAK ;[[fallthrough]];
- #endif
-#endif
-
-#ifndef NON_BREAK
-#define NON_BREAK ;
-#endif
+#if !defined (M5UNIFIED_PC_BUILD)
 
 #include <esp_log.h>
 #include <esp_sleep.h>
@@ -22,6 +13,19 @@
 
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>
+
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION_MAJOR >= 4
+  #define NON_BREAK ;[[fallthrough]];
+ #endif
+#endif
+
+#endif
+
+#ifndef NON_BREAK
+#define NON_BREAK ;
+#endif
 
 namespace m5
 {
@@ -41,7 +45,8 @@ namespace m5
   {
     _pmic = pmic_t::pmic_unknown;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -325,7 +330,8 @@ namespace m5
   {
     switch (M5.getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         _core_s3_output(_core_s3_bus_en, enable);
@@ -384,7 +390,8 @@ namespace m5
   {
     switch (M5.getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         static constexpr const uint32_t port0_bitmask = 0b00000010; // BUS EN
@@ -437,7 +444,7 @@ namespace m5
       {
         static constexpr const uint32_t port0_bitmask = 0b00100000; // USB OTG EN
         static constexpr const uint8_t reg = 0x02;
-        return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & port0_bitmask;
+        return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & _core_s3_usb_en;
       }
       break;
 
@@ -450,7 +457,8 @@ namespace m5
 
   void Power_Class::setLed(uint8_t brightness)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
     switch (M5.getBoard())
@@ -496,6 +504,7 @@ namespace m5
 
   void Power_Class::_powerOff(bool withTimer)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
     switch (_pmic)
     {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -522,6 +531,7 @@ namespace m5
       break;
     }
     esp_deep_sleep_start();
+#endif
   }
 
   void Power_Class::_timerSleep(void)
@@ -529,7 +539,8 @@ namespace m5
     M5.Display.sleep();
     M5.Display.waitDisplay();
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_PC_BUILD)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (M5.getBoard())
     {
     case board_t::board_M5StickC:
@@ -560,6 +571,7 @@ namespace m5
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
     M5.Display.sleep();
+#if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","deepSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 
@@ -590,10 +602,12 @@ namespace m5
     }
 #endif
     esp_deep_sleep_start();
+#endif
   }
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","lightSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 
@@ -622,6 +636,7 @@ namespace m5
     }
 #endif
     esp_light_sleep_start();
+#endif
   }
 
   void Power_Class::powerOff(void)
@@ -635,7 +650,9 @@ namespace m5
   {
     M5.Rtc.clearIRQ();
     M5.Rtc.setAlarmIRQ(seconds);
+#if !defined (M5UNIFIED_PC_BUILD)
     esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+#endif
     _timerSleep();
   }
 
@@ -652,6 +669,8 @@ namespace m5
     M5.Rtc.setAlarmIRQ(date, time);
     _timerSleep();
   }
+
+#if !defined (M5UNIFIED_PC_BUILD)
 
   static std::int32_t getBatteryAdcRaw(adc1_channel_t adc_ch)
   {
@@ -672,8 +691,13 @@ namespace m5
 #endif
   }
 
+#endif
+
   std::int32_t Power_Class::getBatteryLevel(void)
   {
+#if defined (M5UNIFIED_PC_BUILD)
+    return 100;
+#else
     float volt;
     switch (_pmic)
     {
@@ -707,6 +731,7 @@ namespace m5
     return (volt < 0) ? 0
          : (volt >= 100) ? 100
          : volt;
+#endif
   }
 
   void Power_Class::setBatteryCharge(bool enable)

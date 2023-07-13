@@ -3,11 +3,10 @@
 
 #include "AXP2101_Class.hpp"
 
-#if defined ( ARDUINO )
-#include <Arduino.h>
+#if __has_include(<esp_log.h>)
+#include <esp_log.h>
 #endif
 
-#include <esp_log.h>
 #include <algorithm>
 
 namespace m5
@@ -30,14 +29,18 @@ namespace m5
     if (_init)
     {
       _init = (val == 0x4A);
+#if defined (ESP_LOGV)
       ESP_LOGV("AXP2101", "reg03h:%02x : init:%d", val, _init);
+#endif
     }
     return _init;
   }
 
   void AXP2101_Class::setReg0x20Bit0(bool flg)
   {
-ESP_LOGE("AXP2101","setReg0x20Bit0 : %d", flg);
+#if defined (ESP_LOGE)
+    ESP_LOGE("AXP2101","setReg0x20Bit0 : %d", flg);
+#endif
     writeRegister8(AXP2101_EFUS_OP_CFG, 0x06);
     bitOn(AXP2101_EFREQ_CTRL, 0x04);
     writeRegister8(AXP2101_TWI_ADDR_EXT, 0x01);

@@ -696,8 +696,12 @@ label_continue_sample:
     {
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
+#if defined (M5UNIFIED_PC_BUILD)
+      _task_handle = new std::thread(spk_task, this);
+#else
+
 #if portNUM_PROCESSORS > 1
-      if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
+      if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
         xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
       }
@@ -706,6 +710,7 @@ label_continue_sample:
       {
         xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
       }
+#endif
     }
 
     return res;

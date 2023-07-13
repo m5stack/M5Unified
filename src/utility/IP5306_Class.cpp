@@ -3,7 +3,10 @@
 
 #include "IP5306_Class.hpp"
 
+#if __has_include(<esp_log.h>)
 #include <esp_log.h>
+#endif
+
 #include <algorithm>
 
 namespace m5
@@ -32,7 +35,9 @@ namespace m5
     _init = writeRegister(0x06, &val, 1);
     if (_init)
     {
-      ESP_LOGI("IP5306", "found");
+#if defined (ESP_LOGV)
+      ESP_LOGV("IP5306", "found");
+#endif
     }
     return _init;
   }

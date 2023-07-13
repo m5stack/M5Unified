@@ -3,12 +3,17 @@
 
 #include "Log_Class.hpp"
 
+#if defined ( M5UNIFIED_PC_BUILD )
+#include <iostream>
+static constexpr const uint8_t log_colors_serial[] = { 98, 91, 93, 92, 96, 97, };
+#else
+static constexpr const uint8_t log_colors_serial[] = { 38, 31, 33, 32, 36, 37, };
+#endif
+static constexpr const uint8_t log_colors_display[] = { 0xFF, 0xE0, 0xFC, 0x18, 0x1F, 0x92, };
+
 namespace m5
 {
   constexpr const char Log_Class::str_crlf[3];
-
-  static constexpr const uint8_t log_colors_serial[] = { 38, 31, 33, 32, 36, 37, };
-  static constexpr const uint8_t log_colors_display[] = { 0xFF, 0xE0, 0xFC, 0x18, 0x1F, 0x92, };
 
   const char* Log_Class::pathToFileName(const char* path)
   {
@@ -72,7 +77,9 @@ namespace m5
     {
       if (level != ESP_LOG_NONE && _use_color[log_target_serial])
       {
-#if defined ( ARDUINO )
+#if defined(M5UNIFIED_PC_BUILD)
+        ::printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
+#elif defined ( ARDUINO )
         log_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
 #else
         esp_rom_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
@@ -80,7 +87,9 @@ namespace m5
       }
       else
       {
-#if defined ( ARDUINO )
+#if defined(M5UNIFIED_PC_BUILD)
+        std::cout << str;
+#elif defined ( ARDUINO )
         log_printf(str);
 #else
         esp_rom_printf(str);
@@ -88,12 +97,18 @@ namespace m5
       }
       if (suffix && _suffix[log_target_serial])
       {
-#if defined ( ARDUINO )
+#if defined(M5UNIFIED_PC_BUILD)
+        std::cout << _suffix[log_target_serial];
+#elif defined ( ARDUINO )
         log_printf(_suffix[log_target_serial]);
 #else
         esp_rom_printf(_suffix[log_target_serial]);
 #endif
       }
+
+#if defined(M5UNIFIED_PC_BUILD)
+      fflush(stdout);
+#endif
     }
 
     if (_display && _log_level[log_target_display] >= level)

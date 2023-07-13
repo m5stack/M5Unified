@@ -4,13 +4,12 @@
 #include "../M5Unified.hpp"
 #include "IMU_Class.hpp"
 
-#if defined ( ESP_PLATFORM )
+#include "m5unified_common.h"
+
+#if defined(ESP_PLATFORM)
 
 #include <sdkconfig.h>
 #include <nvs.h>
-static constexpr char LIBRARY_NAME[] = "M5Unified";
-
-#endif
 
 #include "imu/MPU6886_Class.hpp"
 #include "imu/SH200Q_Class.hpp"
@@ -18,12 +17,17 @@ static constexpr char LIBRARY_NAME[] = "M5Unified";
 #include "imu/BMM150_Class.hpp"
 #include "imu/AK8963_Class.hpp"
 
+#endif
+
+static constexpr char LIBRARY_NAME[] = "M5Unified";
+
 namespace m5
 {
   static constexpr const char* nvs_key_names[9] = { "ax", "ay", "az", "gx", "gy", "gz", "mx", "my", "mz" };
 
   bool IMU_Class::begin(I2C_Class* i2c, m5::board_t board)
   {
+#if !defined(M5UNIFIED_PC_BUILD)
     if (i2c)
     {
       i2c->begin();
@@ -117,7 +121,7 @@ namespace m5
         }
       }
     }
-
+#endif
     if (_imu == imu_t::imu_none)
     {
       return false;
@@ -267,6 +271,7 @@ namespace m5
 
   bool IMU_Class::saveOffsetToNVS(void)
   { // NVSへオフセット値を保存する
+#if !defined(M5UNIFIED_PC_BUILD)
     std::uint32_t nvs_handle = 0;
     if (ESP_OK != nvs_open(LIBRARY_NAME, NVS_READWRITE, &nvs_handle))
     {
@@ -283,11 +288,13 @@ namespace m5
       }
     }
     nvs_close(nvs_handle);
+#endif
     return true;
   }
 
   bool IMU_Class::loadOffsetFromNVS(void)
   { // NVSからオフセット値を読み込む
+#if !defined(M5UNIFIED_PC_BUILD)
     std::uint32_t nvs_handle = 0;
     if (ESP_OK != nvs_open(LIBRARY_NAME, NVS_READONLY, &nvs_handle))
     {
@@ -305,6 +312,7 @@ namespace m5
       }
     }
     nvs_close(nvs_handle);
+#endif
     return true;
   }
 
@@ -451,9 +459,11 @@ namespace m5
 
   bool IMU_Class::getTemp(float *t)
   {
-    if (_imu_instance[0].get() && _imu_instance[0]->getTempAdc(&_raw_data.temp))
+    int16_t temp;
+    if (_imu_instance[0].get() && _imu_instance[0]->getTempAdc(&temp))
     {
-      *t = _raw_data.temp * _convert_param.temp_res + _convert_param.temp_offset;
+      _raw_data.temp = temp;
+      *t = temp * _convert_param.temp_res + _convert_param.temp_offset;
       return true;
     }
     return false;

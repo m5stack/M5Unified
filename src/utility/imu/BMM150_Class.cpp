@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#if defined (ESP_PLATFORM)
+
 #include "BMM150_Class.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -81,3 +83,4 @@ namespace m5
     // param->temp_res = 1.0f / 512.0f;
   }
 }
+#endif

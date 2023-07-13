@@ -4,10 +4,16 @@
 #ifndef __M5_RTC8563_CLASS_H__
 #define __M5_RTC8563_CLASS_H__
 
+#include "m5unified_common.h"
+
 #include "I2C_Class.hpp"
 
-#include <time.h>
+#if __has_include(<sys/time.h>)
 #include <sys/time.h>
+#else
+typedef void timezone;
+#endif
+#include <time.h>
 
 namespace m5
 {
@@ -102,7 +108,7 @@ namespace m5
     int setAlarmIRQ(const rtc_time_t &time);
     int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time);
 
-    void setSystemTimeFromRtc(timezone* tz = nullptr);
+    void setSystemTimeFromRtc(struct timezone* tz = nullptr);
 
     bool getIRQstatus(void);
     void clearIRQ(void);
