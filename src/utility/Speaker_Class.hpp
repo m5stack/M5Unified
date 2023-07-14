@@ -146,14 +146,14 @@ namespace m5
     /// @param stereo true=data is stereo / false=data is mono.
     bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* raw_data, size_t array_len, bool stereo = false)
     {
-      return _play_raw(raw_data, array_len, false, false, frequency * (array_len >> stereo), stereo, (duration != ~0u) ? (duration * frequency / 1000) : ~0u, channel, stop_current_sound, true);
+      return _play_raw(raw_data, array_len, false, false, frequency * (array_len >> stereo), stereo, (duration != UINT32_MAX) ? (uint32_t)(duration * frequency / 1000) : UINT32_MAX, channel, stop_current_sound, true);
     }
 
     /// play simple tone sound.
     /// @param frequency tone frequency (Hz)
     /// @param duration tone duration (msec)
     /// @param channel virtual channel number. (0~7), (default = automatically selected)
-    bool tone(float frequency, uint32_t duration = ~0u, int channel = -1, bool stop_current_sound = true) { return tone(frequency, duration, channel, stop_current_sound, _default_tone_wav, sizeof(_default_tone_wav), false); }
+    bool tone(float frequency, uint32_t duration = UINT32_MAX, int channel = -1, bool stop_current_sound = true) { return tone(frequency, duration, channel, stop_current_sound, _default_tone_wav, sizeof(_default_tone_wav), false); }
 
     /// play raw sound wave data. (for signed 8bit wav data)
     /// @param raw_data wave data.
