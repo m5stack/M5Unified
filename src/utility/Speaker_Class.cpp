@@ -696,8 +696,8 @@ label_continue_sample:
     {
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
-#if defined (M5UNIFIED_PC_BUILD)
-      _task_handle = new std::thread(spk_task, this);
+#if defined (SDL_h_)
+      _task_handle = SDL_CreateThread((SDL_ThreadFunction)spk_task, "spk_task", this);
 #else
 
 #if portNUM_PROCESSORS > 1
@@ -722,13 +722,16 @@ label_continue_sample:
     if (!_task_running) { return; }
     _task_running = false;
     stop();
-#if !defined (SDL_h_)
     if (_task_handle)
     {
+#if defined (SDL_h_)
+      SDL_WaitThread(_task_handle, nullptr);
+      _task_handle = nullptr;
+#else
       xTaskNotifyGive(_task_handle);
       do { vTaskDelay(1); } while (_task_handle);
-    }
 #endif
+    }
     _play_channel_bits.store(0);
   }
 

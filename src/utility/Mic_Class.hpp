@@ -6,11 +6,7 @@
 
 #include "m5unified_common.h"
 
-#if defined ( M5UNIFIED_PC_BUILD )
-
-#include <thread>
-
-#else
+#if defined ( ESP_PLATFORM )
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -177,8 +173,8 @@ namespace m5
 
     volatile bool _task_running = false;
     volatile bool _is_recording = false;
-#if defined (M5UNIFIED_PC_BUILD)
-    std::thread* _task_handle = nullptr;
+#if defined (SDL_h_)
+    SDL_Thread* _task_handle = nullptr;
 #else
     TaskHandle_t _task_handle = nullptr;
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
