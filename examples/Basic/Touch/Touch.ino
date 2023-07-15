@@ -1,7 +1,5 @@
 #include <M5Unified.h>
 
-#include <esp_log.h>
-
 struct box_t
 {
   int x;
@@ -71,7 +69,7 @@ void setup(void)
 
 void loop(void)
 {
-  vTaskDelay(1);
+  M5.delay(1);
 
   M5.update();
 
@@ -104,7 +102,7 @@ void loop(void)
     , "drag_end"
     , "drag_begin"
     };
-    ESP_LOGI("touch", "%s", state_name[t.state]);
+    M5_LOGI("%s", state_name[t.state]);
   }
 
   for (std::size_t i = 0; i < count; ++i)
@@ -147,7 +145,7 @@ void loop(void)
   M5.Display.display();
 }
 
-#if !defined ( ARDUINO )
+#if !defined ( ARDUINO ) && defined ( ESP_PLATFORM )
 extern "C" {
   void loopTask(void*)
   {

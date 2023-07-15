@@ -10,11 +10,13 @@ void setup(void)
 /// ESP_LOGx series outputs to USB-connected PC terminal.
 /// You can set the output level with `Core Debug Level` in ArduinoIDE.
 /// ※ If the `Core Debug Level` is set to `None`, nothing is output.
+#if defined ( ESP_PLATFORM )
   ESP_LOGE("TAG", "using ESP_LOGE error log.");    // Critical errors, software module can not recover on its own
   ESP_LOGW("TAG", "using ESP_LOGW warn log.");     // Error conditions from which recovery measures have been taken
   ESP_LOGI("TAG", "using ESP_LOGI info log.");     // Information messages which describe normal flow of events
   ESP_LOGD("TAG", "using ESP_LOGD debug log.");    // Extra information which is not necessary for normal use (values, pointers, sizes, etc).
   ESP_LOGV("TAG", "using ESP_LOGV verbose log.");  // Bigger chunks of debugging information, or frequent messages which can potentially flood the output.
+#endif
 
   M5.begin();
 
@@ -45,8 +47,8 @@ void setup(void)
   M5.Log.setEnableColor(m5::log_target_callback, true);
 
 /// You can set the text to be added to the end of the log for each output destination.
-/// ( default value : "\r\n" )
-  M5.Log.setSuffix(m5::log_target_serial, "\r\n");
+/// ( default value : "\n" )
+  M5.Log.setSuffix(m5::log_target_serial, "\n");
   M5.Log.setSuffix(m5::log_target_display, "\n");
   M5.Log.setSuffix(m5::log_target_callback, "");
 
@@ -70,7 +72,7 @@ void setup(void)
 
 void loop(void)
 {
-  vTaskDelay(1);
+  M5.delay(1);
   M5.update();
 
   if (M5.BtnPWR.wasClicked()) { M5_LOGE("BtnP %d click", M5.BtnPWR.getClickCount()); }
@@ -111,7 +113,7 @@ void user_made_log_callback(esp_log_level_t log_level, bool use_color, const cha
 }
 
 /// for ESP-IDF
-#if !defined ( ARDUINO )
+#if !defined ( ARDUINO ) && defined ( ESP_PLATFORM )
 extern "C"
 {
   void loopTask(void*)

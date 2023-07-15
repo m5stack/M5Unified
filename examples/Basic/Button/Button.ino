@@ -15,7 +15,7 @@ void setup(void)
 
 void loop(void)
 {
-  vTaskDelay(1);
+  M5.delay(1);
 
   M5.update();
 //------------------- Button test
@@ -105,7 +105,7 @@ void loop(void)
   M5.Display.endWrite();
 }
 
-#if !defined ( ARDUINO )
+#if !defined ( ARDUINO ) && defined ( ESP_PLATFORM )
 extern "C" {
   void loopTask(void*)
   {

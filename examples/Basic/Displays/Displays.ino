@@ -203,7 +203,7 @@ void setup(void)
   if (index_unit_rca >= 0) {
     M5.Displays(index_unit_rca).print("This is Unit RCA\n");
   }
-  vTaskDelay(5000);
+  M5.delay(5000);
 }
 
 
@@ -213,20 +213,20 @@ void draw_function(LovyanGFX* gfx)
   int x = rand() % gfx->width();
   int y = rand() % gfx->height();
   int r = (gfx->width() >> 4) + 2;
-  uint32_t c = rand();
+  uint16_t c = rand();
   gfx->fillRect(x-r, y-r, r*2, r*2, c);
 }
 
 
 void loop(void)
 {
-  vTaskDelay(1);
+  M5.delay(1);
 
   for (int i = 0; i < M5.getDisplayCount(); ++i) {
     int x = rand() % M5.Displays(i).width();
     int y = rand() % M5.Displays(i).height();
     int r = (M5.Displays(i).width() >> 4) + 2;
-    uint32_t c = rand();
+    uint16_t c = rand();
     M5.Displays(i).fillCircle(x, y, r, c);
   }
 
@@ -236,7 +236,7 @@ void loop(void)
 }
 
 // for ESP-IDF compat
-#if !defined ( ARDUINO )
+#if !defined ( ARDUINO ) && defined ( ESP_PLATFORM )
 extern "C" {
   void loopTask(void*)
   {
