@@ -166,8 +166,8 @@ namespace m5
 #endif
     };
 
-    M5GFX &Display = _primaryDisplay;
-    M5GFX &Lcd = _primaryDisplay;
+    M5GFX Display;  // setPrimaryされたディスプレイのインスタンス
+    M5GFX &Lcd = Display;
 
     IMU_Class Imu;
     Log_Class Log;
@@ -283,15 +283,15 @@ namespace m5
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
 
-      auto brightness = _primaryDisplay.getBrightness();
-      _primaryDisplay.setBrightness(0);
-      bool res = _primaryDisplay.init_without_reset();
-      auto board = _check_boardtype(_primaryDisplay.getBoard());
+      auto brightness = Display.getBrightness();
+      Display.setBrightness(0);
+      bool res = Display.init_without_reset();
+      auto board = _check_boardtype(Display.getBoard());
       if (board == board_t::board_unknown) { board = cfg.fallback_board; }
       _board = board;
       _setup_i2c(board);
       if (res && getDisplayCount() == 0) {
-        addDisplay(_primaryDisplay);
+        addDisplay(Display);
       }
 
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
@@ -438,9 +438,9 @@ namespace m5
 #endif
       }
 
-      if (_primaryDisplay.getBoard() != board_t::board_unknown)
+      if (Display.getBoard() != board_t::board_unknown)
       {
-        _primaryDisplay.setBrightness(brightness);
+        Display.setBrightness(brightness);
       }
 
       update();
@@ -452,7 +452,6 @@ namespace m5
     std::uint32_t _updateMsec = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
-    M5GFX _primaryDisplay;  // setPrimaryされたディスプレイのインスタンス
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
     bool use_pmic_button = false;

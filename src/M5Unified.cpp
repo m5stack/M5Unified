@@ -1105,7 +1105,7 @@ for (int i = 0; i < 0x50; ++i)
 
   M5GFX& M5Unified::getDisplay(size_t index)
   {
-    return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : _primaryDisplay;
+    return index != _primary_display_index && index < this->_displays.size() ? this->_displays[index] : Display;
   }
 
   std::size_t M5Unified::addDisplay(M5GFX& dsp)
@@ -1147,10 +1147,10 @@ for (int i = 0; i < 0x50; ++i)
 
     if (pdi < _displays.size())
     {
-      _displays[pdi] = _primaryDisplay;
+      _displays[pdi] = Display;
     }
     _primary_display_index = index;
-    _primaryDisplay = _displays[index];
+    Display = _displays[index];
     return true;
   }
 
