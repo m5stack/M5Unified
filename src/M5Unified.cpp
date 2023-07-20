@@ -1023,8 +1023,8 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5StickCPlus2:
       btn_bits = ((raw_gpio32_39 >> 5) & 0x01)  // gpio37 A
-               + ((raw_gpio32_39 >> 6) & 0x02)  // gpio39 B
-               + ((raw_gpio32_39 >> 1) & 0x04); // gpio39 B
+               + ((raw_gpio32_39 >> 6) & 0x02); // gpio39 B
+      BtnPWR.setRawState(ms, raw_gpio32_39 & 0x08); // gpio35 PWR
       break;
 
     default:

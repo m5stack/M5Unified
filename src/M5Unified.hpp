@@ -115,7 +115,7 @@ namespace m5
       /// Turn off the IRQ bit of the RTC at startup.
       bool disable_rtc_irq = true;
 
-      /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
+      /// system LED brightness (0=off / 255=max) (※ not RGBcolorLED)
       uint8_t led_brightness = 0;
 
       /// If auto-detection fails, the board will operate as the board configured here.
@@ -449,10 +449,10 @@ namespace m5
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
+    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint32_t _updateMsec = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
-    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
     bool use_pmic_button = false;
     bool use_hat_spk = false;

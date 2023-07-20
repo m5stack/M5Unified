@@ -39,6 +39,8 @@ namespace m5
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
   static constexpr int TimerCam_LED_PIN = 2;
   static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
+  static constexpr int StickCPlus2_POWER_HOLD_PIN = 4;
+  static constexpr int StickCPlus2_LED_PIN = 19;
 #endif
 
   bool Power_Class::begin(void)
@@ -121,6 +123,14 @@ namespace m5
     case board_t::board_M5StickCPlus:
       _pmic = Power_Class::pmic_t::pmic_axp192;
       Axp192.begin();
+      break;
+
+    case board_t::board_M5StickCPlus2:
+      _pwrHoldPin = StickCPlus2_POWER_HOLD_PIN;
+      m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
+      _batAdc = (adc1_channel_t) ADC1_GPIO38_CHANNEL;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 2.0f;
       break;
 
     case board_t::board_M5Stack:
@@ -470,23 +480,29 @@ namespace m5
     case board_t::board_M5StackCoreInk:
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
+    case board_t::board_M5StickCPlus2:
     case board_t::board_M5TimerCam:
       {
         if (led.get() == nullptr)
         {
           led.reset(new m5gfx::Light_PWM());
           auto cfg = led->config();
+          cfg.invert = false;
 
           /// M5StickC,CPlus /CoreInk : LED = GPIO10 / TimerCam:LED = GPIO2
-          if (M5.getBoard() == board_t::board_M5TimerCam)
-          {
-            cfg.invert = false;
+          switch (M5.getBoard()) {
+          case board_t::board_M5StickCPlus2:
+            cfg.pin_bl = StickCPlus2_LED_PIN;
+            break;
+
+          case board_t::board_M5TimerCam:
             cfg.pin_bl = TimerCam_LED_PIN;
-          }
-          else
-          {
+            break;
+
+          default:
             cfg.invert = true;
             cfg.pin_bl = GPIO_NUM_10;
+            break;
           }
           cfg.pwm_channel = 7;
           led->config(cfg);
@@ -505,16 +521,14 @@ namespace m5
   void Power_Class::_powerOff(bool withTimer)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
+    if (_pwrHoldPin < GPIO_NUM_MAX)
+    {
+      m5gfx::gpio_lo( _pwrHoldPin );
+    }
+
     switch (_pmic)
     {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-
-    case pmic_t::pmic_adc:
-      if (_pwrHoldPin >= 0)
-      {
-        m5gfx::gpio_lo( _pwrHoldPin );
-      }
-      break;
 
     case pmic_t::pmic_axp192:
       Axp192.powerOff();
@@ -584,7 +598,7 @@ namespace m5
     }
 #endif
 
-    if (touch_wakeup && _wakeupPin >= 0)
+    if (touch_wakeup && _wakeupPin < GPIO_NUM_MAX)
     {
       esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
       while (m5gfx::gpio_in(_wakeupPin) == false)
@@ -620,7 +634,7 @@ namespace m5
     }
 #endif
 
-    if (touch_wakeup && _wakeupPin >= 0)
+    if (touch_wakeup && _wakeupPin < GPIO_NUM_MAX)
     {
       esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
       esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
