@@ -251,7 +251,7 @@ void setup(void)
     name = "StickCPlus";
     break;
   case m5::board_t::board_M5StickCPlus2:
-    name = "StickCPlus";
+    name = "StickCPlus2";
     break;
   case m5::board_t::board_M5StackCoreInk:
     name = "CoreInk";

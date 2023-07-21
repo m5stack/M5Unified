@@ -9,10 +9,6 @@
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
-#if __has_include (<driver/adc.h>)
-#include <driver/adc.h>
-#endif
-
 #if __has_include (<driver/i2s.h>)
 #include <driver/i2s.h>
 #endif
@@ -663,6 +659,7 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5StickC:
       case board_t::board_M5StickCPlus:
+      case board_t::board_M5StickCPlus2:
       case board_t::board_M5Tough:
       case board_t::board_M5StackCore2:
         if (cfg.internal_mic)

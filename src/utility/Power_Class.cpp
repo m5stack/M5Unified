@@ -488,11 +488,14 @@ namespace m5
           led.reset(new m5gfx::Light_PWM());
           auto cfg = led->config();
           cfg.invert = false;
+          cfg.pwm_channel = 7;
 
           /// M5StickC,CPlus /CoreInk : LED = GPIO10 / TimerCam:LED = GPIO2
           switch (M5.getBoard()) {
           case board_t::board_M5StickCPlus2:
             cfg.pin_bl = StickCPlus2_LED_PIN;
+            cfg.pwm_channel = 6; // ch6を選択 (ch7はLCDのバックライトに使用しているため)
+            cfg.freq = 256;      // ※バックライトと同じ周波数を指定する(ch6とch7はタイマ周期が共通のため)
             break;
 
           case board_t::board_M5TimerCam:
@@ -504,7 +507,6 @@ namespace m5
             cfg.pin_bl = GPIO_NUM_10;
             break;
           }
-          cfg.pwm_channel = 7;
           led->config(cfg);
           led->init(brightness);
         }
@@ -598,10 +600,11 @@ namespace m5
     }
 #endif
 
-    if (touch_wakeup && _wakeupPin < GPIO_NUM_MAX)
+    uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-      esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
-      while (m5gfx::gpio_in(_wakeupPin) == false)
+      esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
+      while (m5gfx::gpio_in(wpin) == false)
       {
         m5gfx::delay(10);
       }
@@ -634,11 +637,12 @@ namespace m5
     }
 #endif
 
-    if (touch_wakeup && _wakeupPin < GPIO_NUM_MAX)
+    uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-      esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
+      esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
       esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
-      while (m5gfx::gpio_in(_wakeupPin) == false)
+      while (m5gfx::gpio_in(wpin) == false)
       {
         m5gfx::delay(10);
       }
