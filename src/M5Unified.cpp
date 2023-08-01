@@ -452,6 +452,13 @@ for (int i = 0; i < 0x50; ++i)
       ex_scl = GPIO_NUM_15;
       break;
 
+    case board_t::board_M5Dial:
+      in_sda = GPIO_NUM_11;
+      in_scl = GPIO_NUM_12;
+      ex_sda = GPIO_NUM_13;
+      ex_scl = GPIO_NUM_15;
+      break;
+
     default:
       break;
     }

@@ -73,16 +73,18 @@ namespace m5
       {
         struct
         {
-          uint8_t module_display : 1;
-          uint8_t atom_display : 1;
-          uint8_t unit_oled : 1;
-          uint8_t unit_lcd : 1;
-          uint8_t unit_glass : 1;
-          uint8_t unit_rca : 1;
-          uint8_t module_rca : 1;
-          uint8_t reserve : 1;
+          uint16_t module_display : 1;
+          uint16_t atom_display : 1;
+          uint16_t unit_oled : 1;
+          uint16_t unit_mini_oled : 1;
+          uint16_t unit_lcd : 1;
+          uint16_t unit_glass : 1;
+          uint16_t unit_glass2 : 1;
+          uint16_t unit_rca : 1;
+          uint16_t module_rca : 1;
+          uint16_t reserve : 7;
         } external_display;
-        uint8_t external_display_value = 0xFF;
+        uint16_t external_display_value = 0xFFFF;
       };
 
       /// Clear the screen when startup.
@@ -155,8 +157,14 @@ namespace m5
 #if defined ( __M5GFX_M5UNITGLASS__ )
       M5UnitGLASS::config_t unit_glass;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS2__ )
+      M5UnitGLASS2::config_t unit_glass2;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ )
       M5UnitOLED::config_t unit_oled;
+#endif
+#if defined ( __M5GFX_M5UNITMINIOLED__ )
+      M5UnitMiniOLED::config_t unit_mini_oled;
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
@@ -244,7 +252,7 @@ namespace m5
     static inline void delay(uint32_t msec)
     {
 #if defined (ARDUINO)
-      ::delay(msec);
+      m5gfx::delay(msec);
 #elif defined (ESP_PLATFORM)
       vTaskDelay( msec / portTICK_PERIOD_MS );
 #else
@@ -351,6 +359,23 @@ namespace m5
         }
 #endif
 
+#if defined ( __M5GFX_M5UNITMINIOLED__ )
+        if (cfg.external_display.unit_mini_oled)
+        {
+#if defined (ESP_PLATFORM)
+          if (cfg.unit_mini_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_mini_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_mini_oled.i2c_port < 0) { cfg.unit_mini_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
+
+          M5UnitMiniOLED dsp(cfg.unit_mini_oled);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
 #if defined ( __M5GFX_M5UNITGLASS__ )
         if (cfg.external_display.unit_glass)
         {
@@ -361,6 +386,23 @@ namespace m5
 #endif
 
           M5UnitGLASS dsp(cfg.unit_glass);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
+#if defined ( __M5GFX_M5UNITGLASS2__ )
+        if (cfg.external_display.unit_glass2)
+        {
+#if defined (ESP_PLATFORM)
+          if (cfg.unit_glass2.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_glass2.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_glass2.i2c_port < 0) { cfg.unit_glass2.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
+
+          M5UnitGLASS2 dsp(cfg.unit_glass2);
           if (dsp.init()) {
             addDisplay(dsp);
             port_a_used = true;
