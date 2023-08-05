@@ -296,6 +296,11 @@ namespace m5
     }
 #endif
 
+    if (_pwrHoldPin < GPIO_NUM_MAX)
+    {
+      gpio_hold_en( (gpio_num_t)_pwrHoldPin );
+    }
+
     return (_pmic != pmic_t::pmic_unknown);
   }
 
