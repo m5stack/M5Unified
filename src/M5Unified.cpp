@@ -612,6 +612,10 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5Dial:
+      m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
+      break;
+
 #endif
 
     default:
@@ -1066,6 +1070,10 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5StampS3:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_0));
+      break;
+
+    case board_t::board_M5Dial:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_42));
       break;
 
     default:
