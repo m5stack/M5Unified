@@ -557,6 +557,10 @@ namespace m5
 
   void Power_Class::_timerSleep(void)
   {
+    if (_pwrHoldPin < GPIO_NUM_MAX)
+    {
+      gpio_hold_dis( (gpio_num_t)_pwrHoldPin );
+    }
     M5.Display.sleep();
     M5.Display.waitDisplay();
 
