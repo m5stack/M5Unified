@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#if defined (ESP_PLATFORM)
+
 #include "BMI270_Class.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -46,6 +48,7 @@ namespace m5
     writeRegister8(CMD_REG_ADDR, SOFT_RESET_CMD); // software reset.
     {
       int retry = 16;
+      do { vTaskDelay(1); }
       while (0 == readRegister8(PWR_CONF_ADDR) && --retry);
     }
 
@@ -53,6 +56,7 @@ namespace m5
     vTaskDelay(1);
     bool res = _upload_file(bmi270_config_file, 0, sizeof(bmi270_config_file));
     writeRegister8(INIT_CTRL_ADDR, 0x01);
+    writeRegister8(INT_MAP_DATA_ADDR, 0xFF);
 
     _init = res;
     if (!res)
@@ -75,22 +79,19 @@ namespace m5
     {
       auxWriteRegister8(0x4C, 0x38); // normal mode / ODR 30Hz
       spec = (imu_spec_t)(imu_spec_accel | imu_spec_gyro | imu_spec_mag);
+      writeRegister8(AUX_IF_CONF_ADDR, 0x4F); // FCU_WRITE_EN + Manual BurstLength 8 + BurstLength 8
+      writeRegister8(AUX_RD_ADDR     , 0x42);  // 0x42 = BMM150 I2C Data X LSB reg
+      writeRegister8(PWR_CTRL_ADDR, 0x0F); // temp en | ACC en | GYR en | AUX en
     }
-    writeRegister8(AUX_IF_CONF_ADDR, 0x4F); // FCU_WRITE_EN + Manual BurstLength 8 + BurstLength 8
-    writeRegister8(AUX_RD_ADDR     , 0x42);  // 0x42 = BMM150 I2C Data X LSB reg
-// AUX BMM150設定ここまで
-
-    writeRegister8(INT_MAP_DATA_ADDR, 0xFF);
-    writeRegister8(PWR_CTRL_ADDR, 0x0F); // temp en | ACC en | GYR en | AUX en
     return spec;
   }
 
   bool BMI270_Class::auxSetupMode(std::uint8_t i2c_addr)
   {
-    writeRegister8(IF_CONF_ADDR, 0x20); // AUX enable.
-    writeRegister8(AUX_IF_CONF_ADDR, 0x80);
+    writeRegister8(IF_CONF_ADDR, 0x20);  // AUX I2C enable.
     writeRegister8(PWR_CONF_ADDR, 0x00); // Power save disabled.
-    writeRegister8(PWR_CTRL_ADDR, 0);
+    writeRegister8(PWR_CTRL_ADDR, 0x0E); // AUX sensor disable.
+    writeRegister8(AUX_IF_CONF_ADDR, 0x80);
     return writeRegister8(AUX_DEV_ID_ADDR , i2c_addr << 1);
   }
 
@@ -219,3 +220,5 @@ namespace m5
   }
 //*/
 }
+
+#endif

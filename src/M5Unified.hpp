@@ -4,7 +4,11 @@
 #ifndef __M5UNIFIED_HPP__
 #define __M5UNIFIED_HPP__
 
+#include "utility/m5unified_common.h"
+
+#if __has_include(<sdkconfig.h>)
 #include <sdkconfig.h>
+#endif
 
 // If you want to use a set of functions to handle SD/SPIFFS/HTTP,
 //  please include <SD.h>,<SPIFFS.h>,<HTTPClient.h> before <M5GFX.h>
@@ -69,16 +73,18 @@ namespace m5
       {
         struct
         {
-          uint8_t module_display : 1;
-          uint8_t atom_display : 1;
-          uint8_t unit_oled : 1;
-          uint8_t unit_lcd : 1;
-          uint8_t unit_glass : 1;
-          uint8_t unit_rca : 1;
-          uint8_t module_rca : 1;
-          uint8_t reserve : 1;
+          uint16_t module_display : 1;
+          uint16_t atom_display : 1;
+          uint16_t unit_oled : 1;
+          uint16_t unit_mini_oled : 1;
+          uint16_t unit_lcd : 1;
+          uint16_t unit_glass : 1;
+          uint16_t unit_glass2 : 1;
+          uint16_t unit_rca : 1;
+          uint16_t module_rca : 1;
+          uint16_t reserve : 7;
         } external_display;
-        uint8_t external_display_value = 0xFF;
+        uint16_t external_display_value = 0xFFFF;
       };
 
       /// Clear the screen when startup.
@@ -108,7 +114,10 @@ namespace m5
       /// use Unit RTC.
       bool external_rtc  = false;
 
-      /// system LED brightness (0=off / 255=max) (※ not NeoPixel)
+      /// Turn off the IRQ bit of the RTC at startup.
+      bool disable_rtc_irq = true;
+
+      /// system LED brightness (0=off / 255=max) (※ not RGBcolorLED)
       uint8_t led_brightness = 0;
 
       /// If auto-detection fails, the board will operate as the board configured here.
@@ -148,8 +157,14 @@ namespace m5
 #if defined ( __M5GFX_M5UNITGLASS__ )
       M5UnitGLASS::config_t unit_glass;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS2__ )
+      M5UnitGLASS2::config_t unit_glass2;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ )
       M5UnitOLED::config_t unit_oled;
+#endif
+#if defined ( __M5GFX_M5UNITMINIOLED__ )
+      M5UnitMiniOLED::config_t unit_mini_oled;
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
@@ -159,8 +174,8 @@ namespace m5
 #endif
     };
 
-    M5GFX &Display = _primaryDisplay;
-    M5GFX &Lcd = _primaryDisplay;
+    M5GFX Display;  // setPrimaryされたディスプレイのインスタンス
+    M5GFX &Lcd = Display;
 
     IMU_Class Imu;
     Log_Class Log;
@@ -234,6 +249,27 @@ namespace m5
       return config_t();
     }
 
+    static inline void delay(uint32_t msec)
+    {
+#if defined (ARDUINO)
+      m5gfx::delay(msec);
+#elif defined (ESP_PLATFORM)
+      vTaskDelay( msec / portTICK_PERIOD_MS );
+#else
+      SDL_Delay(msec);
+#endif
+    }
+
+    static inline uint32_t millis(void)
+    {
+      return m5gfx::millis();
+    }
+
+    static inline uint32_t micros(void)
+    {
+      return m5gfx::micros();
+    }
+
     /// get the board type of the runtime environment.
     /// @return board type
     board_t getBoard(void) const { return _board; }
@@ -255,15 +291,15 @@ namespace m5
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
 
-      auto brightness = _primaryDisplay.getBrightness();
-      _primaryDisplay.setBrightness(0);
-      bool res = _primaryDisplay.init_without_reset();
-      auto board = _check_boardtype(_primaryDisplay.getBoard());
+      auto brightness = Display.getBrightness();
+      Display.setBrightness(0);
+      bool res = Display.init_without_reset();
+      auto board = _check_boardtype(Display.getBoard());
       if (board == board_t::board_unknown) { board = cfg.fallback_board; }
       _board = board;
       _setup_i2c(board);
       if (res && getDisplayCount() == 0) {
-        addDisplay(_primaryDisplay);
+        addDisplay(Display);
       }
 
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
@@ -309,11 +345,30 @@ namespace m5
 #if defined ( __M5GFX_M5UNITOLED__ )
         if (cfg.external_display.unit_oled)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_oled.i2c_port < 0) { cfg.unit_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitOLED dsp(cfg.unit_oled);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
+#if defined ( __M5GFX_M5UNITMINIOLED__ )
+        if (cfg.external_display.unit_mini_oled)
+        {
+#if defined (ESP_PLATFORM)
+          if (cfg.unit_mini_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_mini_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_mini_oled.i2c_port < 0) { cfg.unit_mini_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
+
+          M5UnitMiniOLED dsp(cfg.unit_mini_oled);
           if (dsp.init()) {
             addDisplay(dsp);
             port_a_used = true;
@@ -324,11 +379,30 @@ namespace m5
 #if defined ( __M5GFX_M5UNITGLASS__ )
         if (cfg.external_display.unit_glass)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_glass.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_glass.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_glass.i2c_port < 0) { cfg.unit_glass.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitGLASS dsp(cfg.unit_glass);
+          if (dsp.init()) {
+            addDisplay(dsp);
+            port_a_used = true;
+          }
+        }
+#endif
+
+#if defined ( __M5GFX_M5UNITGLASS2__ )
+        if (cfg.external_display.unit_glass2)
+        {
+#if defined (ESP_PLATFORM)
+          if (cfg.unit_glass2.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
+          if (cfg.unit_glass2.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
+          if (cfg.unit_glass2.i2c_port < 0) { cfg.unit_glass2.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
+
+          M5UnitGLASS2 dsp(cfg.unit_glass2);
           if (dsp.init()) {
             addDisplay(dsp);
             port_a_used = true;
@@ -339,9 +413,11 @@ namespace m5
 #if defined ( __M5GFX_M5UNITLCD__ )
         if (cfg.external_display.unit_lcd)
         {
+#if defined (ESP_PLATFORM)
           if (cfg.unit_lcd.pin_sda >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
           if (cfg.unit_lcd.pin_scl >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
           if (cfg.unit_lcd.i2c_port < 0) { cfg.unit_lcd.i2c_port = (int8_t)Ex_I2C.getPort(); }
+#endif
 
           M5UnitLCD dsp(cfg.unit_lcd);
           int retry = 8;
@@ -404,9 +480,9 @@ namespace m5
 #endif
       }
 
-      if (_primaryDisplay.getBoard() != board_t::board_unknown)
+      if (Display.getBoard() != board_t::board_unknown)
       {
-        _primaryDisplay.setBrightness(brightness);
+        Display.setBrightness(brightness);
       }
 
       update();
@@ -415,11 +491,10 @@ namespace m5
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
+    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint32_t _updateMsec = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
-    M5GFX _primaryDisplay;  // setPrimaryされたディスプレイのインスタンス
-    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint8_t _primary_display_index = -1;
     bool use_pmic_button = false;
     bool use_hat_spk = false;

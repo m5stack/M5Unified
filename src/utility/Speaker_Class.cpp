@@ -5,6 +5,8 @@
 
 #include "../M5Unified.hpp"
 
+#if !defined (SDL_h_)
+
 #if __has_include (<esp_idf_version.h>)
  #include <esp_idf_version.h>
  #if ESP_IDF_VERSION_MAJOR >= 4
@@ -18,6 +20,9 @@
 
 #include <sdkconfig.h>
 #include <esp_log.h>
+
+#endif
+
 #include <math.h>
 
 namespace m5
@@ -49,6 +54,12 @@ namespace m5
 
   const uint8_t Speaker_Class::_default_tone_wav[16] = { 177, 219, 246, 255, 246, 219, 177, 128, 79, 37, 10, 1, 10, 37, 79, 128 }; // sin wave data
 
+#if defined (SDL_h_)
+  esp_err_t Speaker_Class::_setup_i2s(void)
+  {
+    return ESP_OK;
+  }
+#else
   esp_err_t Speaker_Class::_setup_i2s(void)
   {
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
@@ -116,6 +127,7 @@ namespace m5
 
     return err;
   }
+#endif
 
   static void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
   {
@@ -178,7 +190,25 @@ namespace m5
     auto self = (Speaker_Class*)args;
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
+    const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
 
+#if defined (SDL_h_)
+
+    SDL_Init(SDL_INIT_AUDIO);
+    SDL_AudioSpec fmt;
+    fmt.freq = self->_cfg.sample_rate;
+    fmt.format = AUDIO_S16LSB;
+    fmt.channels = self->_cfg.stereo ? 2 : 1;
+    fmt.samples = dma_buf_len;
+    fmt.callback = nullptr;
+    auto res = SDL_OpenAudio(&fmt, nullptr);
+    if (res == 0)
+    {
+      SDL_PauseAudio(0);
+    }
+    const int32_t spk_sample_rate_x256 = self->_cfg.sample_rate * SAMPLERATE_MUL;
+
+#else
     i2s_stop(i2s_port);
 
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 80 MHz
@@ -249,11 +279,10 @@ namespace m5
 
 #endif
     i2s_zero_dma_buffer(i2s_port);
-
+#endif
     // ステレオ出力の場合は倍率を2倍する
     const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
 
-    const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
     int32_t dac_offset = std::min(INT16_MAX-255, self->_cfg.dac_zero_level << 8);
 
     bool flg_nodata = false;
@@ -278,6 +307,13 @@ namespace m5
 
     while (self->_task_running)
     {
+#if defined (SDL_h_)
+      if (flg_nodata)
+      {
+        SDL_Delay(1);
+        if (0 == (self->_play_channel_bits.load())) { continue; }
+      }
+#else
       if (flg_nodata)
       {
         if (self->_cfg.use_dac && dac_offset)
@@ -323,8 +359,14 @@ namespace m5
       }
       ulTaskNotifyTake( pdTRUE, 0 );
 
-      flg_nodata = true;
+#endif
 
+    flg_nodata = true;
+
+#if defined (SDL_h_)
+      auto border = std::max<int>(2048, self->_cfg.sample_rate >> 3);
+      while (SDL_GetQueuedAudioSize(1) > border) { SDL_Delay(1); }
+#else
       if (flg_i2s_started != spk_i2s_run)
       {
         if (flg_i2s_started == spk_i2s_stop)
@@ -358,6 +400,7 @@ namespace m5
         }
         flg_i2s_started = spk_i2s_run;
       }
+#endif
       memset(sound_buf32, 0, dma_buf_len * sizeof(int32_t));
 
       float volume = magnification * (self->_master_volume * self->_master_volume);
@@ -384,7 +427,9 @@ label_next_wav:
                         || (next_wav->data != current_wav->data));
           current_wav->clear();
           ch_info->flip = !ch_info->flip;
+#if !defined (SDL_h_)
           xSemaphoreGive(self->_task_semaphore);
+#endif
           std::swap(current_wav, next_wav);
 
           if (clear_idx)
@@ -609,10 +654,18 @@ label_continue_sample:
           } while (++idx < dma_buf_len);
         }
 
+#if defined (SDL_h_)
+        SDL_QueueAudio(1, sound_buf32, dma_buf_len * sizeof(int16_t));
+#else
         size_t write_bytes;
         i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int16_t) << self->_cfg.buzzer, &write_bytes, portMAX_DELAY);
+#endif
       }
     }
+#if defined ( SDL_h_ )
+    SDL_CloseAudioDevice(1);
+    SDL_CloseAudio();
+#else
     i2s_stop(i2s_port);
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (self->_cfg.use_dac)
@@ -624,13 +677,16 @@ label_continue_sample:
 #endif
     self->_task_handle = nullptr;
     vTaskDelete(nullptr);
+#endif
   }
 
   bool Speaker_Class::begin(void)
   {
     if (_task_running) { return true; }
 
+#if !defined (SDL_h_)
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
+#endif
 
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
@@ -640,8 +696,12 @@ label_continue_sample:
     {
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
+#if defined (SDL_h_)
+      _task_handle = SDL_CreateThread((SDL_ThreadFunction)spk_task, "spk_task", this);
+#else
+
 #if portNUM_PROCESSORS > 1
-      if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
+      if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
         xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
       }
@@ -650,6 +710,7 @@ label_continue_sample:
       {
         xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
       }
+#endif
     }
 
     return res;
@@ -663,8 +724,13 @@ label_continue_sample:
     stop();
     if (_task_handle)
     {
+#if defined (SDL_h_)
+      SDL_WaitThread(_task_handle, nullptr);
+      _task_handle = nullptr;
+#else
       xTaskNotifyGive(_task_handle);
       do { vTaskDelay(1); } while (_task_handle);
+#endif
     }
     _play_channel_bits.store(0);
   }
@@ -713,13 +779,19 @@ label_continue_sample:
       while ((_play_channel_bits.load() & chmask) && (chinfo->wavinfo[chinfo->flip].repeat))
       {
         if (chinfo->wavinfo[!chinfo->flip].repeat == ~0u) { return false; }
+#if !defined (SDL_h_)
         xSemaphoreTake(_task_semaphore, 1);
+#else
+        SDL_Delay(1);
+#endif
       }
     }
     chinfo->wavinfo[chinfo->flip] = wav;
     _play_channel_bits.fetch_or(chmask);
 
+#if !defined (SDL_h_)
     xTaskNotifyGive(_task_handle);
+#endif
     return true;
   }
 

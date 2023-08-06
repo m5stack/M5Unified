@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#if defined (ESP_PLATFORM)
+
 #include "AK8963_Class.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -72,3 +74,5 @@ namespace m5
     param->mag_res = 10.0f * 4912.0f / 32760.0f;
   }
 }
+
+#endif

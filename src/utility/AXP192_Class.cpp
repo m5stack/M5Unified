@@ -3,7 +3,10 @@
 
 #include "AXP192_Class.hpp"
 
+#if __has_include(<esp_log.h>)
 #include <esp_log.h>
+#endif
+
 #include <algorithm>
 
 namespace m5
@@ -25,7 +28,9 @@ namespace m5
     if (_init)
     {
       _init = (val == 0x03);
+#if defined (ESP_LOGV)
       ESP_LOGV("AXP192", "reg03h:%02x : init:%d", val, _init);
+#endif
     }
     return _init;
   }

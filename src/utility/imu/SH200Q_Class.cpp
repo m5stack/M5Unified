@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#if defined (ESP_PLATFORM)
+
 #include "SH200Q_Class.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -214,3 +216,4 @@ printf("idx:%d len:%d ax:%d ay:%d az:%d gx:%d gy:%d gz:%d\n", idx, len, buf[0], 
     return res;
   }
 }
+#endif

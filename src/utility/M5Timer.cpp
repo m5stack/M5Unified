@@ -2,11 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "M5Timer.h"
-#include <esp_timer.h>
-
-static inline uint32_t _get_msec(void) {
-    return (uint32_t) (esp_timer_get_time() / 1000ULL);
-}
+#include <M5GFX.h>
 
 M5Timer::M5Timer(void) {
     _enable_count = 0;
@@ -27,7 +23,7 @@ void M5Timer::timer_info_t::set(uint32_t interval_msec, timer_callback cb, uint3
     _interval  = interval_msec;
     _remain    = times;
     _enabled   = true;
-    _prev_msec = _get_msec();
+    _prev_msec = m5gfx::millis();
 }
 
 bool M5Timer::timer_info_t::run(uint32_t current_msec) {
@@ -46,7 +42,7 @@ bool M5Timer::timer_info_t::run(uint32_t current_msec) {
 }
 
 void M5Timer::run(void) {
-    auto msec = _get_msec();
+    auto msec = m5gfx::millis();
 
     for (auto &t : _timer_info) {
         if (!t.getCallback()) { continue; }
@@ -79,6 +75,6 @@ void M5Timer::deleteTimer(int_fast8_t id) {
 
 void M5Timer::restartTimer(int_fast8_t id) {
     if ((uint_fast8_t)id < MAX_TIMERS) {
-        _timer_info[id].setPreviousMsec(_get_msec());
+        _timer_info[id].setPreviousMsec(m5gfx::millis());
     }
 }

@@ -6,6 +6,8 @@
 
 #include <M5GFX.h>
 
+#include <cstdint>
+
 namespace m5
 {
   enum touch_state_t

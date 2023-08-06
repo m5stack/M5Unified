@@ -4,6 +4,10 @@
 #ifndef __M5_Mic_Class_H__
 #define __M5_Mic_Class_H__
 
+#include "m5unified_common.h"
+
+#if defined ( ESP_PLATFORM )
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -14,6 +18,10 @@
 #else
  #include <driver/i2s.h>
 #endif
+
+#endif
+
+#include <stdint.h>
 
 #ifndef I2S_PIN_NO_CHANGE
 #define I2S_PIN_NO_CHANGE (-1)
@@ -65,10 +73,10 @@ namespace m5
     size_t dma_buf_count = 3;
 
     /// background task priority
-    UBaseType_t task_priority = 2;
+    uint8_t task_priority = 2;
 
     /// background task pinned core
-    BaseType_t task_pinned_core = -1;
+    uint8_t task_pinned_core = -1;
 
     /// I2S port
     i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
@@ -163,10 +171,14 @@ namespace m5
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
-    TaskHandle_t _task_handle = nullptr;
     volatile bool _task_running = false;
     volatile bool _is_recording = false;
+#if defined (SDL_h_)
+    SDL_Thread* _task_handle = nullptr;
+#else
+    TaskHandle_t _task_handle = nullptr;
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
+#endif
   };
 }
 

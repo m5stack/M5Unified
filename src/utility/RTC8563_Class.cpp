@@ -3,11 +3,30 @@
 
 #include "RTC8563_Class.hpp"
 
-#include <sys/time.h>
 #include <stdlib.h>
 
 namespace m5
 {
+  tm rtc_datetime_t::get_tm(void) const
+  {
+    tm t_st = {
+      time.seconds,
+      time.minutes,
+      time.hours,
+      date.date,
+      date.month - 1,
+      date.year - 1900,
+      date.weekDay,
+    };
+    return t_st;
+  }
+
+  void rtc_datetime_t::set_tm(tm& datetime)
+  {
+    date = rtc_date_t { datetime };
+    time = rtc_time_t { datetime };
+  }
+
   static std::uint8_t bcd2ToByte(std::uint8_t value)
   {
     return ((value >> 4) * 10) + (value & 0x0F);
@@ -219,11 +238,11 @@ namespace m5
 
     if (irq_enable)
     {
-      bitOn(0x01, 1 << 1);
+      bitOn(0x01, 0x02);
     }
     else
     {
-      bitOff(0x01, 1 << 1);
+      bitOff(0x01, 0x02);
     }
 
     return irq_enable;
@@ -244,7 +263,7 @@ namespace m5
   {
     if (!_init) { return; }
     // disable alerm (bit7:1=disabled)
-    std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
+    static constexpr const std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
     writeRegister(0x09, buf, 4);
 
     // disable timer (bit7:0=disabled)
@@ -254,8 +273,9 @@ namespace m5
     writeRegister8(0x01, 0x00);
   }
 
-  void RTC8563_Class::setSystemTimeFromRtc(timezone* tz)
+  void RTC8563_Class::setSystemTimeFromRtc(struct timezone* tz)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
     rtc_datetime_t dt;
     if (getDateTime(&dt))
     {
@@ -282,5 +302,6 @@ namespace m5
       now.tv_usec = 0;
       settimeofday(&now, tz);
     }
+#endif
   }
 }

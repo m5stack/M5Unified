@@ -4,7 +4,12 @@
 #ifndef __M5_Log_Class_H__
 #define __M5_Log_Class_H__
 
+#include "m5unified_common.h"
+
+#if !defined ( M5UNIFIED_PC_BUILD )
 #include <esp_log.h>
+#endif
+
 #include <stdarg.h>
 #include <functional>
 
@@ -12,7 +17,7 @@
 
 /// Output log with source info.
 #ifndef M5UNIFIED_LOG_FORMAT
-#define M5UNIFIED_LOG_FORMAT(letter, format) "[%6u][" #letter "][%s:%u] %s(): " format, (unsigned long) (esp_timer_get_time() / 1000ULL), m5::Log_Class::pathToFileName(__FILE__), __LINE__, __FUNCTION__
+#define M5UNIFIED_LOG_FORMAT(letter, format) "[%6u][" #letter "][%s:%u] %s(): " format, m5gfx::millis(), m5::Log_Class::pathToFileName(__FILE__), __LINE__, __FUNCTION__
 #endif
 
 /// Output Error log with source info.
@@ -96,6 +101,7 @@ namespace m5
     M5GFX* _display = nullptr;
 
     static constexpr const char str_crlf[3] = "\r\n";
+    static constexpr const char *str_lf = &str_crlf[1];
 
     void output(esp_log_level_t level, bool suffix, const char* __restrict format, va_list arg);
     void update_level(void);
@@ -104,12 +110,14 @@ namespace m5
 
 #if defined ( CORE_DEBUG_LEVEL )
     esp_log_level_t _level_maximum  = (esp_log_level_t)CORE_DEBUG_LEVEL;
-#else
+#elif defined ( CONFIG_LOG_DEFAULT_LEVEL )
     esp_log_level_t _level_maximum  = (esp_log_level_t)CONFIG_LOG_DEFAULT_LEVEL;
+#else
+    esp_log_level_t _level_maximum = esp_log_level_t::ESP_LOG_VERBOSE;
 #endif
     esp_log_level_t _log_level[log_target_max]   = { _level_maximum, _level_maximum, _level_maximum };
 
-    const char* _suffix[log_target_max] = { str_crlf, str_crlf, str_crlf };
+    const char* _suffix[log_target_max] = { str_lf, str_lf, str_crlf };
 
     bool _use_color[log_target_max] = { true, true, true };
   };

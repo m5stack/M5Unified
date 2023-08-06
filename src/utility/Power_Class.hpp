@@ -4,13 +4,17 @@
 #ifndef __M5_Power_Class_H__
 #define __M5_Power_Class_H__
 
+#include "m5unified_common.h"
+
 #include "I2C_Class.hpp"
 #include "AXP192_Class.hpp"
 #include "AXP2101_Class.hpp"
 #include "IP5306_Class.hpp"
 #include "RTC8563_Class.hpp"
 
+#if __has_include (<driver/adc.h>)
 #include <driver/adc.h>
+#endif
 
 namespace m5
 {
@@ -147,11 +151,14 @@ namespace m5
     void _powerOff(bool withTimer);
     void _timerSleep(void);
 
-    std::int8_t _wakeupPin = -1;
-    std::int8_t _pwrHoldPin = -1;
-    pmic_t _pmic = pmic_t::pmic_unknown;
-    adc1_channel_t _batAdc;
     float _adc_ratio = 0;
+    std::uint8_t _pwrHoldPin = -1;
+    std::uint8_t _wakeupPin = -1;
+    std::uint8_t _rtcIntPin = -1;
+    pmic_t _pmic = pmic_t::pmic_unknown;
+#if !defined (M5UNIFIED_PC_BUILD)
+    adc1_channel_t _batAdc;
+#endif
   };
 }
 

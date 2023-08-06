@@ -139,13 +139,22 @@ void updateCalibration(uint32_t c, bool clear = false)
       M5.Imu.setCalibration(calib_value, calib_value, calib_value);
     // ※ The actual calibration operation is performed each time during M5.Imu.update.
     // 
-    // There are three arguments, which can be specified in the order of acceleration, gyro, and geomagnetism.
+    // There are three arguments, which can be specified in the order of Accelerometer, gyro, and geomagnetic.
+    // If you want to calibrate only the Accelerometer, do the following.
+    // M5.Imu.setCalibration(100, 0, 0);
+    //
     // If you want to calibrate only the gyro, do the following.
     // M5.Imu.setCalibration(0, 100, 0);
+    //
+    // If you want to calibrate only the geomagnetism, do the following.
+    // M5.Imu.setCalibration(0, 0, 100);
     }
     else
-    { // Stop calibration.
-      M5.Imu.setCalibration(0, 0, 0);
+    { // Stop calibration. (Continue calibration only for the geomagnetic sensor)
+      M5.Imu.setCalibration(0, 0, calib_value);
+
+      // If you want to stop all calibration, write this.
+      // M5.Imu.setCalibration(0, 0, 0);
 
       // save calibration values.
       M5.Imu.saveOffsetToNVS();
@@ -178,7 +187,8 @@ void setup(void)
   M5.begin(cfg);
 
   const char* name;
-  switch (M5.Imu.getType())
+  auto imu_type = M5.Imu.getType();
+  switch (imu_type)
   {
   case m5::imu_none:        name = "not found";   break;
   case m5::imu_sh200q:      name = "sh200q";      break;
@@ -189,6 +199,12 @@ void setup(void)
   default:                  name = "unknown";     break;
   };
   M5_LOGI("imu:%s", name);
+  M5.Display.printf("imu:%s", name);
+
+  if (imu_type == m5::imu_none)
+  {
+    for (;;) { delay(1); }
+  }
 
   int32_t w = dsp.width();
   int32_t h = dsp.height();
@@ -227,7 +243,7 @@ void loop(void)
     // Obtain data on the current value of the IMU.
     auto data = M5.Imu.getImuData();
     drawGraph(rect_graph_area, data);
-
+/*
     // The data obtained by getImuData can be used as follows.
     data.accel.x;      // accel x-axis value.
     data.accel.y;      // accel y-axis value.
@@ -246,10 +262,10 @@ void loop(void)
 
     data.value;       // all sensor 9values array [0~2]=accel / [3~5]=gyro / [6~8]=mag
 
-    // M5_LOGV("ax:%f  ay:%f  az:%f", data.accel.x, data.accel.y, data.accel.z);
-    // M5_LOGV("gx:%f  gy:%f  gz:%f", data.gyro.x , data.gyro.y , data.gyro.z );
-    // M5_LOGV("mx:%f  my:%f  mz:%f", data.mag.x  , data.mag.y  , data.mag.z  );
-
+    M5_LOGV("ax:%f  ay:%f  az:%f", data.accel.x, data.accel.y, data.accel.z);
+    M5_LOGV("gx:%f  gy:%f  gz:%f", data.gyro.x , data.gyro.y , data.gyro.z );
+    M5_LOGV("mx:%f  my:%f  mz:%f", data.mag.x  , data.mag.y  , data.mag.z  );
+//*/
     ++frame_count;
   }
   else

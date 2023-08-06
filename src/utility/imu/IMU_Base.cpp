@@ -2,9 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "IMU_Base.hpp"
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <math.h>
 
 namespace m5
 {

@@ -1,6 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+#if defined (ESP_PLATFORM)
+
 #include "MPU6886_Class.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -40,8 +42,6 @@ namespace m5
     , REG_ACCEL_CONFIG2 , 0x00  // ACCEL_CONFIG 2(0x1D)
     , REG_USER_CTRL     , 0x00  // USER_CTRL(0x6A)
     , REG_FIFO_EN       , 0x00  // FIFO_EN(0x23)
-    , REG_INT_PIN_CFG   , 0x22  // INT_PIN_CFG(0x37)
-    , REG_INT_ENABLE    , 0x01  // INT_ENABLE(0x38)
     , 0xFF, 0xFF  // EOF
     };
 
@@ -277,3 +277,4 @@ namespace m5
     return res;
   }
 }
+#endif

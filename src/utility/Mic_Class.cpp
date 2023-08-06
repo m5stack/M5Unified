@@ -16,6 +16,7 @@
 #define NON_BREAK ;
 #endif
 
+#if __has_include(<sdkconfig.h>)
 #include <sdkconfig.h>
 #include <esp_log.h>
 #include <math.h>
@@ -365,7 +366,7 @@ namespace m5
       size_t stack_size = 1024 + (_cfg.dma_buf_len * sizeof(int16_t));
       _task_running = true;
 #if portNUM_PROCESSORS > 1
-      if (((size_t)_cfg.task_pinned_core) < portNUM_PROCESSORS)
+      if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
         xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
       }
@@ -415,3 +416,4 @@ namespace m5
   }
 #endif
 }
+#endif
