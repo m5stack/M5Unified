@@ -7,6 +7,26 @@
 
 namespace m5
 {
+  tm rtc_datetime_t::get_tm(void) const
+  {
+    tm t_st = {
+      time.seconds,
+      time.minutes,
+      time.hours,
+      date.date,
+      date.month - 1,
+      date.year - 1900,
+      date.weekDay,
+    };
+    return t_st;
+  }
+
+  void rtc_datetime_t::set_tm(tm& datetime)
+  {
+    date = rtc_date_t { datetime };
+    time = rtc_time_t { datetime };
+  }
+
   static std::uint8_t bcd2ToByte(std::uint8_t value)
   {
     return ((value >> 4) * 10) + (value & 0x0F);
@@ -218,11 +238,11 @@ namespace m5
 
     if (irq_enable)
     {
-      bitOn(0x01, 1 << 1);
+      bitOn(0x01, 0x02);
     }
     else
     {
-      bitOff(0x01, 1 << 1);
+      bitOff(0x01, 0x02);
     }
 
     return irq_enable;

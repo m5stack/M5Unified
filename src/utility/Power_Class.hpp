@@ -152,8 +152,9 @@ namespace m5
     void _timerSleep(void);
 
     float _adc_ratio = 0;
-    std::uint8_t _wakeupPin = -1;
     std::uint8_t _pwrHoldPin = -1;
+    std::uint8_t _wakeupPin = -1;
+    std::uint8_t _rtcIntPin = -1;
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
     adc1_channel_t _batAdc;

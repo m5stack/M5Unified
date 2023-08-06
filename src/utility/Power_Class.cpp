@@ -47,8 +47,8 @@ namespace m5
   {
     _pmic = pmic_t::pmic_unknown;
 
-#if defined (M5UNIFIED_PC_BUILD)
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -96,6 +96,7 @@ namespace m5
     case board_t::board_M5StackCoreInk:
       _pwrHoldPin = CoreInk_POWER_HOLD_PIN;
       _wakeupPin = GPIO_NUM_27; // power button;
+      _rtcIntPin = GPIO_NUM_19;
       _batAdc = (adc1_channel_t) ADC1_GPIO35_CHANNEL;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
@@ -122,6 +123,7 @@ namespace m5
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
       _pmic = Power_Class::pmic_t::pmic_axp192;
+      _rtcIntPin = GPIO_NUM_35;
       Axp192.begin();
       break;
 
@@ -300,7 +302,7 @@ namespace m5
     {
       gpio_hold_en( (gpio_num_t)_pwrHoldPin );
     }
-
+#endif
     return (_pmic != pmic_t::pmic_unknown);
   }
 
@@ -528,35 +530,54 @@ namespace m5
   void Power_Class::_powerOff(bool withTimer)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
+    bool use_deepsleep = true;
+    if (_rtcIntPin < GPIO_NUM_MAX)
+    {
+      gpio_num_t pin = (gpio_num_t)_rtcIntPin;
+      if (ESP_OK != esp_sleep_enable_ext0_wakeup( pin, false))
+      {
+        gpio_wakeup_enable( pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
+        esp_sleep_enable_gpio_wakeup();
+        use_deepsleep = false;
+      }
+    }
+    else
+    {
+      switch (_pmic)
+      {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
+      case pmic_t::pmic_axp192:
+        Axp192.powerOff();
+        break;
+
+      case pmic_t::pmic_ip5306:
+        Ip5306.setPowerBoostKeepOn(withTimer);
+        break;
+
+#endif
+
+      case pmic_t::pmic_unknown:
+      default:
+        break;
+      }
+    }
+
     if (_pwrHoldPin < GPIO_NUM_MAX)
     {
       m5gfx::gpio_lo( _pwrHoldPin );
     }
 
-    switch (_pmic)
-    {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-
-    case pmic_t::pmic_axp192:
-      Axp192.powerOff();
-      break;
-
-    case pmic_t::pmic_ip5306:
-      Ip5306.setPowerBoostKeepOn(withTimer);
-      break;
-
-#endif
-
-    case pmic_t::pmic_unknown:
-    default:
-      break;
-    }
-    esp_deep_sleep_start();
+    if (use_deepsleep) { esp_deep_sleep_start(); }
+    esp_light_sleep_start();
+    esp_restart();
 #endif
   }
 
   void Power_Class::_timerSleep(void)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
+
     if (_pwrHoldPin < GPIO_NUM_MAX)
     {
       gpio_hold_dis( (gpio_num_t)_pwrHoldPin );
@@ -564,8 +585,7 @@ namespace m5
     M5.Display.sleep();
     M5.Display.waitDisplay();
 
-#if defined (M5UNIFIED_PC_BUILD)
-#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     switch (M5.getBoard())
     {
     case board_t::board_M5StickC:
@@ -573,11 +593,16 @@ namespace m5
       /// RTCタイマーは指定時間になるとGPIO35をLOWにすることで通知を行うが、;
       /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。;
       /// そのため、同じくGPIO35に接続されているMPU6886のINTピンを利用してプルアップを実施する。;
-      /// IMUの種類がMPU6886でない個体は対応できない (SH200Qではできない);
-      M5.Imu.setINTPinActiveLogic(true);
+      /// IMUの種類がSH200Qの個体では対応できない (MPU6886が必要);
+      m5gfx::pinMode(GPIO_NUM_35, m5gfx::pin_mode_t::input);
+      for (int i = 1; i >= 0; --i) {
+        M5.Imu.setINTPinActiveLogic(i);
+        if (m5gfx::gpio_in(GPIO_NUM_35)) { break; }
+      }
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
       esp_deep_sleep_start();
       return;
+      break;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
@@ -589,7 +614,7 @@ namespace m5
       break;
     }
 #endif
-
+#endif
     _powerOff(true);
   }
 
@@ -675,7 +700,7 @@ namespace m5
 
   void Power_Class::timerSleep( int seconds )
   {
-    M5.Rtc.clearIRQ();
+    M5.Rtc.disableIRQ();
     M5.Rtc.setAlarmIRQ(seconds);
 #if !defined (M5UNIFIED_PC_BUILD)
     esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
@@ -685,14 +710,14 @@ namespace m5
 
   void Power_Class::timerSleep( const rtc_time_t& time)
   {
-    M5.Rtc.clearIRQ();
+    M5.Rtc.disableIRQ();
     M5.Rtc.setAlarmIRQ(time);
     _timerSleep();
   }
 
   void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
   {
-    M5.Rtc.clearIRQ();
+    M5.Rtc.disableIRQ();
     M5.Rtc.setAlarmIRQ(date, time);
     _timerSleep();
   }

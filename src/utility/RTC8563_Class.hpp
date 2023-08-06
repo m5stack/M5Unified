@@ -28,6 +28,12 @@ namespace m5
     , minutes { minutes_ }
     , seconds { seconds_ }
     {}
+
+    rtc_time_t(const tm& t)
+    : hours   { (int8_t)t.tm_hour }
+    , minutes { (int8_t)t.tm_min  }
+    , seconds { (int8_t)t.tm_sec  }
+    {}
   };
 
   struct __attribute__((packed)) rtc_date_t
@@ -50,12 +56,25 @@ namespace m5
     , date    { date_    }
     , weekDay { weekDay_ }
     {}
+
+    rtc_date_t(const tm& t)
+    : year    { (int16_t)(t.tm_year + 1900) }
+    , month   { (int8_t )(t.tm_mon  + 1   ) }
+    , date    { (int8_t ) t.tm_mday         }
+    , weekDay { (int8_t ) t.tm_wday         }
+    {}
   };
 
   struct __attribute__((packed)) rtc_datetime_t
   {
     rtc_date_t date;
     rtc_time_t time;
+    rtc_datetime_t() = default;
+    rtc_datetime_t(const rtc_date_t& d, const rtc_time_t& t) : date { d }, time { t } {};
+    rtc_datetime_t(const tm& t) : date { t }, time { t } {}
+    tm get_tm(void) const;
+    void set_tm(tm& time);
+    void set_tm(tm* t) { if (t) set_tm(*t); }
   };
 
   class RTC8563_Class : public I2C_Device
@@ -87,15 +106,8 @@ namespace m5
     {
       if (datetime)
       {
-        setDate( { (int16_t)(datetime->tm_year + 1900)
-                 , (int8_t)(datetime->tm_mon + 1)
-                 , (int8_t)(datetime->tm_mday)
-                 , (int8_t)(datetime->tm_wday)
-                 } );
-        setTime( { (int8_t)(datetime->tm_hour)
-                 , (int8_t)(datetime->tm_min)
-                 , (int8_t)(datetime->tm_sec)
-                 } );
+        rtc_datetime_t dt { *datetime };
+        setDateTime(dt);
       }
     }
 
