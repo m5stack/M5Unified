@@ -27,13 +27,19 @@
 // If you use Unit GLASS, write this.
 #include <M5UnitGLASS.h>
 
+// If you use Unit GLASS2, write this.
+#include <M5UnitGLASS2.h>
+
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use Unit Mini OLED, write this.
+#include <M5UnitMiniOLED.h>
 
 // If you use Unit LCD, write this.
 #include <M5UnitLCD.h>
 
-// If you use Unit RCA (for Video output), write this.
+// If you use UnitRCA (for Video output), write this.
 #include <M5UnitRCA.h>
 
 // * The display header must be included before the M5Unified library.
@@ -51,21 +57,27 @@ void setup(void)
   // external display setting. (Pre-include required)
   cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
   cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
-  cfg.external_display.unit_glass     = true;  // default=true. use UnitGLASS
-  cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
-  cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
-  cfg.external_display.unit_rca       = true;  // default=true. use UnitRCA VideoOutput
-  cfg.external_display.module_rca     = true;  // default=true. use ModuleRCA VideoOutput
+  cfg.external_display.unit_glass     = false; // default=true. use UnitGLASS
+  cfg.external_display.unit_glass2    = false; // default=true. use UnitGLASS2
+  cfg.external_display.unit_oled      = false; // default=true. use UnitOLED
+  cfg.external_display.unit_mini_oled = false; // default=true. use UnitMiniOLED
+  cfg.external_display.unit_lcd       = false; // default=true. use UnitLCD
+  cfg.external_display.unit_rca       = false; // default=true. use UnitRCA VideoOutput
+  cfg.external_display.module_rca     = false; // default=true. use ModuleRCA VideoOutput
 
 /*
- Display with auto-detection
+※ Unit OLED, Unit Mini OLED, Unit GLASS2 cannot be distinguished at runtime and may be misidentified as each other.
+
+※ Display with auto-detection
  - module_display
  - atom_display
  - unit_glass
+ - unit_glass2
  - unit_oled
+ - unit_mini_oled
  - unit_lcd
 
- Displays that cannot be auto-detected
+※ Displays that cannot be auto-detected
  - module_rca
  - unit_rca
 
@@ -124,12 +136,26 @@ void setup(void)
 // cfg.unit_glass.i2c_freq = 400000;
 // cfg.unit_glass.i2c_port = I2C_NUM_0;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS2__ ) // setting for Unit GLASS2.
+// cfg.unit_glass2.pin_sda  = GPIO_NUM_21;
+// cfg.unit_glass2.pin_scl  = GPIO_NUM_22;
+// cfg.unit_glass2.i2c_addr = 0x3C;
+// cfg.unit_glass2.i2c_freq = 400000;
+// cfg.unit_glass2.i2c_port = I2C_NUM_0;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ ) // setting for Unit OLED.
 // cfg.unit_oled.pin_sda  = GPIO_NUM_21;
 // cfg.unit_oled.pin_scl  = GPIO_NUM_22;
 // cfg.unit_oled.i2c_addr = 0x3C;
 // cfg.unit_oled.i2c_freq = 400000;
 // cfg.unit_oled.i2c_port = I2C_NUM_0;
+#endif
+#if defined ( __M5GFX_M5UNITMINIOLED__ ) // setting for Unit Mini OLED.
+// cfg.unit_mini_oled.pin_sda  = GPIO_NUM_21;
+// cfg.unit_mini_oled.pin_scl  = GPIO_NUM_22;
+// cfg.unit_mini_oled.i2c_addr = 0x3C;
+// cfg.unit_mini_oled.i2c_freq = 400000;
+// cfg.unit_mini_oled.i2c_port = I2C_NUM_0;
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ ) // setting for Unit LCD.
 // cfg.unit_lcd.pin_sda  = GPIO_NUM_21;
@@ -163,6 +189,8 @@ void setup(void)
       m5::board_t::board_M5AtomDisplay,
 //    m5::board_t::board_M5ModuleRCA,
 //    m5::board_t::board_M5UnitGLASS,
+//    m5::board_t::board_M5UnitGLASS2,
+//    m5::board_t::board_M5UnitMiniOLED,
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
@@ -178,7 +206,9 @@ void setup(void)
   int index_atom_display = M5.getDisplayIndex(m5::board_t::board_M5AtomDisplay);
   int index_module_rca = M5.getDisplayIndex(m5::board_t::board_M5ModuleRCA);
   int index_unit_glass = M5.getDisplayIndex(m5::board_t::board_M5UnitGLASS);
+  int index_unit_glass2 = M5.getDisplayIndex(m5::board_t::board_M5UnitGLASS2);
   int index_unit_oled = M5.getDisplayIndex(m5::board_t::board_M5UnitOLED);
+  int index_unit_mini_oled = M5.getDisplayIndex(m5::board_t::board_M5UnitMiniOLED);
   int index_unit_lcd = M5.getDisplayIndex(m5::board_t::board_M5UnitLCD);
   int index_unit_rca = M5.getDisplayIndex(m5::board_t::board_M5UnitRCA);
 
@@ -194,8 +224,14 @@ void setup(void)
   if (index_unit_glass >= 0) {
     M5.Displays(index_unit_glass).print("This is Unit GLASS\n");
   }
+  if (index_unit_glass2 >= 0) {
+    M5.Displays(index_unit_glass2).print("This is Unit GLASS2\n");
+  }
   if (index_unit_oled >= 0) {
     M5.Displays(index_unit_oled).print("This is Unit OLED\n");
+  }
+  if (index_unit_mini_oled >= 0) {
+    M5.Displays(index_unit_mini_oled ).print("This is Unit Mini OLED\n");
   }
   if (index_unit_lcd >= 0) {
     M5.Displays(index_unit_lcd).print("This is Unit LCD\n");

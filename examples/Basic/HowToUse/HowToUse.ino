@@ -15,20 +15,26 @@
 
 //----------------------------------------------------------------
 
-// If you use ATOMDisplay, write this.
+// If you use ATOM Display, write this.
 #include <M5AtomDisplay.h>
 
-// If you use ModuleDisplay, write this.
+// If you use Module Display, write this.
 #include <M5ModuleDisplay.h>
 
-// If you use ModuleRCA, write this.
+// If you use Module RCA, write this.
 #include <M5ModuleRCA.h>
 
 // If you use Unit GLASS, write this.
 #include <M5UnitGLASS.h>
 
+// If you use Unit GLASS2, write this.
+#include <M5UnitGLASS2.h>
+
 // If you use Unit OLED, write this.
 #include <M5UnitOLED.h>
+
+// If you use Unit Mini OLED, write this.
+#include <M5UnitMiniOLED.h>
 
 // If you use Unit LCD, write this.
 #include <M5UnitLCD.h>
@@ -48,6 +54,7 @@ extern const uint8_t wav_8bit_44100[46000];
 
 void setup(void)
 {
+  /// You may output logs to standard output.
   M5_LOGE("this is error LOG");
   M5_LOGW("this is warning LOG");
   M5_LOGI("this is info LOG");
@@ -79,22 +86,32 @@ void setup(void)
   // external display setting. (Pre-include required)
   cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
   cfg.external_display.atom_display   = true;  // default=true. use AtomDisplay
-  cfg.external_display.unit_glass     = true;  // default=true. use UnitGLASS
-  cfg.external_display.unit_oled      = true;  // default=true. use UnitOLED
-  cfg.external_display.unit_lcd       = true;  // default=true. use UnitLCD
-  cfg.external_display.unit_rca       = true;  // default=true. use UnitRCA VideoOutput
-  cfg.external_display.module_rca     = true;  // default=true. use ModuleRCA VideoOutput
+  cfg.external_display.unit_glass     = false; // default=true. use UnitGLASS
+  cfg.external_display.unit_glass2    = false; // default=true. use UnitGLASS2
+  cfg.external_display.unit_oled      = false; // default=true. use UnitOLED
+  cfg.external_display.unit_mini_oled = false; // default=true. use UnitMiniOLED
+  cfg.external_display.unit_lcd       = false; // default=true. use UnitLCD
+  cfg.external_display.unit_rca       = false; // default=true. use UnitRCA VideoOutput
+  cfg.external_display.module_rca     = false; // default=true. use ModuleRCA VideoOutput
 /*
+※ Unit OLED, Unit Mini OLED, Unit GLASS2 cannot be distinguished at runtime and may be misidentified as each other.
+
 ※ Display with auto-detection
  - module_display
  - atom_display
  - unit_glass
+ - unit_glass2
  - unit_oled
+ - unit_mini_oled
  - unit_lcd
 
 ※ Displays that cannot be auto-detected
  - module_rca
  - unit_rca
+
+※ Note that if you enable a display that cannot be auto-detected, 
+   it will operate as if it were connected, even if it is not actually connected.
+   When RCA is enabled, it consumes a lot of memory to allocate the frame buffer.
 //*/
 
 // Set individual parameters for external displays.
@@ -128,12 +145,26 @@ void setup(void)
 // cfg.unit_glass.i2c_freq = 400000;
 // cfg.unit_glass.i2c_port = I2C_NUM_0;
 #endif
+#if defined ( __M5GFX_M5UNITGLASS2__ ) // setting for Unit GLASS2.
+// cfg.unit_glass2.pin_sda  = GPIO_NUM_21;
+// cfg.unit_glass2.pin_scl  = GPIO_NUM_22;
+// cfg.unit_glass2.i2c_addr = 0x3C;
+// cfg.unit_glass2.i2c_freq = 400000;
+// cfg.unit_glass2.i2c_port = I2C_NUM_0;
+#endif
 #if defined ( __M5GFX_M5UNITOLED__ ) // setting for Unit OLED.
 // cfg.unit_oled.pin_sda  = GPIO_NUM_21;
 // cfg.unit_oled.pin_scl  = GPIO_NUM_22;
 // cfg.unit_oled.i2c_addr = 0x3C;
 // cfg.unit_oled.i2c_freq = 400000;
 // cfg.unit_oled.i2c_port = I2C_NUM_0;
+#endif
+#if defined ( __M5GFX_M5UNITMINIOLED__ ) // setting for Unit Mini OLED.
+// cfg.unit_mini_oled.pin_sda  = GPIO_NUM_21;
+// cfg.unit_mini_oled.pin_scl  = GPIO_NUM_22;
+// cfg.unit_mini_oled.i2c_addr = 0x3C;
+// cfg.unit_mini_oled.i2c_freq = 400000;
+// cfg.unit_mini_oled.i2c_port = I2C_NUM_0;
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ ) // setting for Unit LCD.
 // cfg.unit_lcd.pin_sda  = GPIO_NUM_21;
@@ -153,6 +184,8 @@ void setup(void)
       m5::board_t::board_M5AtomDisplay,
 //    m5::board_t::board_M5ModuleRCA,
 //    m5::board_t::board_M5UnitGLASS,
+//    m5::board_t::board_M5UnitGLASS2,
+//    m5::board_t::board_M5UnitMiniOLED,
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
@@ -203,7 +236,16 @@ void setup(void)
   // multi display.
   size_t display_count = M5.getDisplayCount();
   for (int i = 0; i < display_count; ++i) {
-    M5.Displays(i).printf("Display %d\r\n", i);
+    M5.Displays(i).startWrite();
+    for (int y = 0; y < 128; ++y)
+    {
+      for (int x = 0; x < 128; ++x)
+      {
+        M5.Displays(i).writePixel(x, y, M5.Display.color888(x*2,x+y,y*2));
+      }
+    }
+    M5.Displays(i).printf("Display %d\n", i);
+    M5.Displays(i).endWrite();
   }
 
   int textsize = M5.Display.height() / 160;
@@ -230,6 +272,9 @@ void setup(void)
   case m5::board_t::board_M5AtomS3:
     name = "ATOMS3";
     break;
+  case m5::board_t::board_M5Dial:
+    name = "Dial";
+    break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:
     name = "StampC3";
@@ -251,7 +296,7 @@ void setup(void)
     name = "StickCPlus";
     break;
   case m5::board_t::board_M5StickCPlus2:
-    name = "StickCPlus2";
+    name = "StickCPlus";
     break;
   case m5::board_t::board_M5StackCoreInk:
     name = "CoreInk";

@@ -18,12 +18,15 @@
  - M5STAMP PICO
  - M5STAMPC3 / C3U
  - M5STAMPS3
+ - M5Dial
 
 ## Supported device (external display)
  - Unit LCD
  - Unit OLED
+ - Unit Mini OLED
  - Unit RCA
  - Unit GLASS
+ - Unit GLASS2
  - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
  - Module RCA (with M5Stack / Core2 / Tough)
