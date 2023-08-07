@@ -316,22 +316,26 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::gpio::pin_backup_t g38backup(GPIO_NUM_38);
       auto result = m5gfx::gpio::command(
         (const uint8_t[]) {
-        m5gfx::gpio::command_mode_input_pullup, GPIO_NUM_38,
-        m5gfx::gpio::command_mode_input_pullup, GPIO_NUM_4,
-        m5gfx::gpio::command_mode_input       , GPIO_NUM_38,
-        m5gfx::gpio::command_delay            , 1,
-        m5gfx::gpio::command_read             , GPIO_NUM_38,
-        m5gfx::gpio::command_read             , GPIO_NUM_4,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
+        m5gfx::gpio::command_read               , GPIO_NUM_12,
+        m5gfx::gpio::command_read               , GPIO_NUM_4,
+        m5gfx::gpio::command_read               , GPIO_NUM_38,
+        m5gfx::gpio::command_mode_input         , GPIO_NUM_38,
+        m5gfx::gpio::command_delay              , 1,
+        m5gfx::gpio::command_read               , GPIO_NUM_38,
         m5gfx::gpio::command_end
         }
       );
+          // (board_t)0, //board_t::board_M5StampS3,
       board = ((const board_t[])
         {
-          board_t::board_M5StampS3,
-          board_t::board_M5StampS3,
-          board_t::board_M5AtomS3Lite,
-          board_t::board_M5AtomS3U,
-        })[result];
+          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,
+          board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,
+          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown,   board_t::board_M5AtomS3Lite,
+          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,
+        })[result&15];
       g4backup.restore();
       g38backup.restore();
     }
