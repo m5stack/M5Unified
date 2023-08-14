@@ -114,17 +114,18 @@ namespace m5
     case board_t::board_M5Tough:
     case board_t::board_M5StackCore2:
       _wakeupPin = GPIO_NUM_39; // touch panel INT;
-      NON_BREAK;
+      _pmic = Power_Class::pmic_t::pmic_axp192;
+      break;
 
     case board_t::board_M5Station:
       m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::output);
-      NON_BREAK;
+      _pmic = Power_Class::pmic_t::pmic_axp192;
+      break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      _pmic = Power_Class::pmic_t::pmic_axp192;
       _rtcIntPin = GPIO_NUM_35;
-      Axp192.begin();
+      _pmic = Power_Class::pmic_t::pmic_axp192;
       break;
 
     case board_t::board_M5StickCPlus2:
@@ -199,6 +200,14 @@ namespace m5
         Ip5306.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       }
       break;
+    }
+
+    if (_pmic == Power_Class::pmic_t::pmic_axp192) {
+      if (!Axp192.begin()) {
+        if (Axp2101.begin()) {
+          _pmic = Power_Class::pmic_t::pmic_axp2101;
+        }
+      }
     }
 
     if (_pmic == Power_Class::pmic_t::pmic_axp192)
@@ -296,6 +305,19 @@ namespace m5
         break;
       }
     }
+    else if (_pmic == Power_Class::pmic_t::pmic_axp2101)
+    {
+      // for Core2 v1.1
+      static constexpr std::uint8_t reg_data_array[] =
+      { 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
+      , 0x10, 0x30 // PMU common config (internal off-discharge enable)
+      , 0x12, 0x00 // BATFET disable
+      , 0x69, 0x13 // CHGLED setting
+      // , 0x18, 0x0E
+      };
+      Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+    }
+
 #endif
 
     if (_pwrHoldPin < GPIO_NUM_MAX)
@@ -531,7 +553,7 @@ namespace m5
   {
 #if !defined (M5UNIFIED_PC_BUILD)
     bool use_deepsleep = true;
-    if (_rtcIntPin < GPIO_NUM_MAX)
+    if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
       gpio_num_t pin = (gpio_num_t)_rtcIntPin;
       if (ESP_OK != esp_sleep_enable_ext0_wakeup( pin, false))
@@ -889,4 +911,53 @@ namespace m5
       return is_charging_t::charge_unknown;
     }
   }
+
+  uint8_t Power_Class::getKeyState(void)
+  {
+    switch (_pmic)
+    {
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_axp2101:
+      return Axp2101.getPekPress();
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+
+#else
+
+    case pmic_t::pmic_axp2101:
+      return Axp2101.getPekPress();
+    case pmic_t::pmic_axp192:
+      return Axp192.getPekPress();
+
+#endif
+
+    default:
+      return 0;
+    }
+  }
+
+  void Power_Class::setVibration(uint8_t level)
+  {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    if (M5.getBoard() == board_t::board_M5StackCore2)
+    {
+      switch (_pmic)
+      {
+        case pmic_t::pmic_axp192:
+          Axp192.setLDO3(level * 13);
+          break;
+
+        case pmic_t::pmic_axp2101:
+          Axp2101.setDLDO1(level * 13);
+          break;
+
+        default:
+          break;
+      }
+    }
+#endif
+  }
+
 }

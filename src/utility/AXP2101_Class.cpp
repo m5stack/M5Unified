@@ -36,6 +36,49 @@ namespace m5
     return _init;
   }
 
+  // 0=ALDO1 ~ 3=ALDO4 / 4=BLDO1 / 5=BLDO2
+  void AXP2101_Class::_set_LDO(std::uint8_t num, int voltage)
+  {
+    if (num > 5) return;
+    std::uint8_t reg_volt = num + 0x92;
+    voltage -= 500;
+    /// convert voltage to value
+    std::uint_fast8_t val = (voltage < 0) ? 0 : std::min(voltage / 100, 0x1E);
+    writeRegister8(reg_volt, val);
+
+    std::uint_fast8_t reg90bit = 1 << num;
+    if (voltage < 0)
+    {
+      bitOff(0x90, reg90bit);
+    }
+    else
+    {
+      bitOn(0x90, reg90bit);
+    }
+  }
+
+  void AXP2101_Class::_set_DLDO(std::uint8_t num, int voltage)
+  {
+    if (num > 1) return;
+
+    std::uint8_t reg_volt = num + 0x99;
+    voltage -= 500;
+    /// convert voltage to value
+    std::uint_fast8_t val = (voltage < 0) ? 0 : std::min(voltage / (num ? 50 : 100), num ? 0x13 : 0x1C);
+    writeRegister8(reg_volt, val);
+
+    uint8_t reg = 0x90 + num;
+    uint8_t bit = num ? 0x01 : 0x80;
+    if (voltage < 0)
+    {
+      bitOff(reg, bit);
+    }
+    else
+    {
+      bitOn(reg, bit);
+    }
+  }
+
   void AXP2101_Class::setReg0x20Bit0(bool flg)
   {
 #if defined (ESP_LOGE)

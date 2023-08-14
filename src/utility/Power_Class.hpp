@@ -132,6 +132,14 @@ namespace m5
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     is_charging_t isCharging(void);
 
+    /// Get Power Key Press condition.
+    /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
+    /// @attention Only for models with AXP192 or AXP2101
+    /// @attention Once this function is called, the value is reset to 0, and the next time it is pressed on, the value changes.
+    uint8_t getKeyState(void);
+
+    void setVibration(uint8_t level);
+
     pmic_t getType(void) const { return _pmic; }
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -142,6 +150,7 @@ namespace m5
 
 #else
 
+    AXP2101_Class Axp2101;
     AXP192_Class Axp192;
     IP5306_Class Ip5306;
 
@@ -152,9 +161,9 @@ namespace m5
     void _timerSleep(void);
 
     float _adc_ratio = 0;
-    std::uint8_t _pwrHoldPin = -1;
-    std::uint8_t _wakeupPin = -1;
-    std::uint8_t _rtcIntPin = -1;
+    std::uint8_t _pwrHoldPin = 255;
+    std::uint8_t _wakeupPin = 255;
+    std::uint8_t _rtcIntPin = 255;
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
     adc1_channel_t _batAdc;

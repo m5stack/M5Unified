@@ -107,7 +107,14 @@ namespace m5
          && spk_cfg.pin_ws       == GPIO_NUM_0
          && spk_cfg.pin_data_out == GPIO_NUM_2
         ) {
-          self->Power.Axp192.setGPIO2(enabled);
+          switch (self->Power.getType()) {
+          case m5::Power_Class::pmic_axp192:
+            self->Power.Axp192.setGPIO2(enabled);
+            break;
+          case m5::Power_Class::pmic_axp2101:
+            self->Power.Axp2101.setALDO3(enabled * 3300);
+            break;
+          }
         }
       }
       break;
@@ -312,15 +319,22 @@ for (int i = 0; i < 0x50; ++i)
       ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
       ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
 
-      m5gfx::gpio::pin_backup_t g4backup(GPIO_NUM_4);
-      m5gfx::gpio::pin_backup_t g38backup(GPIO_NUM_38);
+      m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
       auto result = m5gfx::gpio::command(
         (const uint8_t[]) {
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
+        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_8,
+        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_10,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_46,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_2,
         m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
-        m5gfx::gpio::command_read               , GPIO_NUM_12,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
+        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
+        m5gfx::gpio::command_read               , GPIO_NUM_8,
+        m5gfx::gpio::command_read               , GPIO_NUM_10,
+        m5gfx::gpio::command_read               , GPIO_NUM_46,
+        m5gfx::gpio::command_read               , GPIO_NUM_2,
         m5gfx::gpio::command_read               , GPIO_NUM_4,
+        m5gfx::gpio::command_read               , GPIO_NUM_12,
         m5gfx::gpio::command_read               , GPIO_NUM_38,
         m5gfx::gpio::command_mode_input         , GPIO_NUM_38,
         m5gfx::gpio::command_delay              , 1,
@@ -328,16 +342,20 @@ for (int i = 0; i < 0x50; ++i)
         m5gfx::gpio::command_end
         }
       );
-          // (board_t)0, //board_t::board_M5StampS3,
+      /// result には、command_read で得たGPIOの状態が1bitずつ4回分入っている。
       board = ((const board_t[])
-        {
-          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,
-          board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,
-          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown,   board_t::board_M5AtomS3Lite,
-          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,
+        { //                                                      ↓StampS3 pattern↓
+          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
+          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_M5StampS3, board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
+          board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
+          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
         })[result&15];
-      g4backup.restore();
-      g38backup.restore();
+      if (board == board_t::board_M5StampS3) {
+        if ((result >> 3) == 0b11000) { board = board_t::board_M5Capsule; }
+      }
+      for (auto &backup : pin_backup) {
+        backup.restore();
+      }
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -1049,10 +1067,10 @@ for (int i = 0; i < 0x50; ++i)
     if (use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
-      bool read_axp192 = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
-      if (read_axp192 || BtnPWR.getState())
+      bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
+      if (read_axp || BtnPWR.getState())
       {
-        switch (Power.Axp192.getPekPress())
+        switch (Power.getKeyState())
         {
         case 0: break;
         case 2:   state = Button_Class::button_state_t::state_clicked; break;
@@ -1088,7 +1106,7 @@ for (int i = 0; i < 0x50; ++i)
         bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;
         if (read_axp || BtnPWR.getState())
         {
-          switch (Power.Axp2101.getPekPress())
+          switch (Power.getKeyState())
           {
           case 0: break;
           case 2:   state = Button_Class::button_state_t::state_clicked; break;
