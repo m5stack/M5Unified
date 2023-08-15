@@ -319,20 +319,19 @@ for (int i = 0; i < 0x50; ++i)
       ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
       ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
 
-      m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
+      m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
       auto result = m5gfx::gpio::command(
         (const uint8_t[]) {
+        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_4,
+        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_12,
+        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_38,
         m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_8,
         m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_10,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_46,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_2,
         m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
         m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
         m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
         m5gfx::gpio::command_read               , GPIO_NUM_8,
         m5gfx::gpio::command_read               , GPIO_NUM_10,
-        m5gfx::gpio::command_read               , GPIO_NUM_46,
-        m5gfx::gpio::command_read               , GPIO_NUM_2,
         m5gfx::gpio::command_read               , GPIO_NUM_4,
         m5gfx::gpio::command_read               , GPIO_NUM_12,
         m5gfx::gpio::command_read               , GPIO_NUM_38,
@@ -351,7 +350,7 @@ for (int i = 0; i < 0x50; ++i)
           board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
         })[result&15];
       if (board == board_t::board_M5StampS3) {
-        if ((result >> 3) == 0b11000) { board = board_t::board_M5Capsule; }
+        if ((result >> 3) == 0b110) { board = board_t::board_M5Capsule; }
       }
       for (auto &backup : pin_backup) {
         backup.restore();
