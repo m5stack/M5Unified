@@ -474,7 +474,15 @@ for (int i = 0; i < 0x50; ++i)
       ex_scl = GPIO_NUM_15;
       break;
 
+    case board_t::board_M5Capsule:
+      in_sda = GPIO_NUM_8;
+      in_scl = GPIO_NUM_10;
+      ex_sda = GPIO_NUM_13;
+      ex_scl = GPIO_NUM_15;
+      break;
+
     case board_t::board_M5Dial:
+    case board_t::board_M5DinMeter:
       in_sda = GPIO_NUM_11;
       in_scl = GPIO_NUM_12;
       ex_sda = GPIO_NUM_13;
@@ -634,7 +642,9 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5Capsule:
     case board_t::board_M5Dial:
+    case board_t::board_M5DinMeter:
       m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
       break;
 
@@ -773,6 +783,25 @@ for (int i = 0; i < 0x50; ++i)
             spk_cfg.pin_data_out = GPIO_NUM_38;
             spk_cfg.magnification = 16;
           }
+        }
+        break;
+
+      case board_t::board_M5Capsule:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_2;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
+        }
+        break;
+
+      case board_t::board_M5Dial:
+      case board_t::board_M5DinMeter:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_3;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
         }
         break;
 
@@ -1094,7 +1123,9 @@ for (int i = 0; i < 0x50; ++i)
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_0));
       break;
 
+    case board_t::board_M5Capsule:
     case board_t::board_M5Dial:
+    case board_t::board_M5DinMeter:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_42));
       break;
 
