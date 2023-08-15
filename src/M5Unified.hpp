@@ -291,6 +291,12 @@ namespace m5
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
 
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+      // Power Hold pin for Capsule/Dial/DinMeter
+      m5gfx::gpio_hi(GPIO_NUM_46);
+      m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
+#endif
+
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
       bool res = Display.init_without_reset();

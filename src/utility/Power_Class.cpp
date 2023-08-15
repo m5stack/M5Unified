@@ -72,6 +72,12 @@ namespace m5
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
+
+    case board_t::board_M5Capsule:
+    case board_t::board_M5Dial:
+    case board_t::board_M5DinMeter:
+      _pwrHoldPin = GPIO_NUM_46;
+      break;
     }
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
