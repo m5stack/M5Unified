@@ -79,6 +79,16 @@ namespace m5
     }
   }
 
+  bool AXP2101_Class::_get_LDOEn(std::uint8_t num)
+  {
+    bool res = false;
+    if (num <= 5) {
+      std::uint_fast8_t reg90bit = 1 << num;
+      res = readRegister8(0x90) & reg90bit;
+    }
+    return res;
+  }
+
   void AXP2101_Class::setReg0x20Bit0(bool flg)
   {
 #if defined (ESP_LOGE)
@@ -161,6 +171,7 @@ namespace m5
 
   void AXP2101_Class::powerOff(void)
   {
+    bitOn(0x10, 0x01);
   }
 
   void AXP2101_Class::setAdcState(bool enable)
@@ -169,27 +180,6 @@ namespace m5
 
   void AXP2101_Class::setAdcRate( std::uint8_t rate )
   {
-  }
-
-  void AXP2101_Class::setEXTEN(bool enable)
-  {
-/*
-    static constexpr std::uint8_t add = 0x12;
-    static constexpr std::uint8_t bit = 1 << 6;
-    if (enable)
-    {
-      bitOn(add, bit);
-    }
-    else
-    {
-      bitOff(add, bit);
-    }
-//*/
-  }
-
-  bool AXP2101_Class::getEXTEN(void)
-  {
-return 0;
   }
 
   void AXP2101_Class::setBACKUP(bool enable)

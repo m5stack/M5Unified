@@ -10,6 +10,7 @@
 #include "AXP192_Class.hpp"
 #include "AXP2101_Class.hpp"
 #include "IP5306_Class.hpp"
+#include "INA3221_Class.hpp"
 #include "RTC8563_Class.hpp"
 
 #if __has_include (<driver/adc.h>)
@@ -132,12 +133,18 @@ namespace m5
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     is_charging_t isCharging(void);
 
+    /// Get battery voltage
+    /// @return battery voltage [mV]
+    int16_t getBatteryVoltage(void);
+
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
     /// @attention Only for models with AXP192 or AXP2101
     /// @attention Once this function is called, the value is reset to 0, and the next time it is pressed on, the value changes.
     uint8_t getKeyState(void);
 
+    /// Operate the vibration motor
+    /// @param level Vibration strength of the motor. (0=stop)
     void setVibration(uint8_t level);
 
     pmic_t getType(void) const { return _pmic; }
@@ -153,6 +160,7 @@ namespace m5
     AXP2101_Class Axp2101;
     AXP192_Class Axp192;
     IP5306_Class Ip5306;
+    INA3221_Class Ina3221;
 
 #endif
 

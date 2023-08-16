@@ -281,52 +281,52 @@ namespace m5
 
   float AXP192_Class::getACINVoltage(void)
   {
-    return 1.7f * readRegister12(0x56) / 1000.0f;
+    return readRegister12(0x56) * (1.7f / 1000.0f);
   }
 
   float AXP192_Class::getACINCurrent(void)
   {
-    return 0.625f * readRegister12(0x58);
+    return readRegister12(0x58) * 0.625f;
   }
 
   float AXP192_Class::getVBUSVoltage(void)
   {
-    return 1.7f * readRegister12(0x5a) / 1000.0f;
+    return readRegister12(0x5a) * (1.7f / 1000.0f);
   }
 
   float AXP192_Class::getVBUSCurrent(void)
   {
-    return 0.375f * readRegister12(0x5c);
+    return readRegister12(0x5c) * 0.375f;
   }
 
   float AXP192_Class::getInternalTemperature(void)
   {
-    return -144.7 + 0.1f * readRegister12(0x5e);
+    return readRegister12(0x5e) * 0.1f -144.7f;
   }
 
   float AXP192_Class::getBatteryPower(void)
   {
-    return  1.1f * 0.5f * readRegister24(0x70) / 1000.0f;
+    return  readRegister24(0x70) * (1.1f * 0.5f / 1000.0f);
   }
 
   float AXP192_Class::getBatteryVoltage(void)
   {
-    return 1.1f * readRegister12(0x78) / 1000.0f;
+    return readRegister12(0x78) * (1.1f / 1000.0f);
   }
 
   float AXP192_Class::getBatteryChargeCurrent(void)
   {
-    return 0.5f * readRegister13(0x7a);
+    return readRegister13(0x7a) * 0.5f;
   }
 
   float AXP192_Class::getBatteryDischargeCurrent(void)
   {
-    return 0.5f * readRegister13(0x7c);
+    return readRegister13(0x7c) * 0.5f;
   }
 
   float AXP192_Class::getAPSVoltage(void)
   {
-    return 1.4f * readRegister12(0x7e) / 1000.0f;
+    return readRegister12(0x7e) * (1.4f / 1000.0f);
   }
 
 

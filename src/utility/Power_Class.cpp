@@ -318,11 +318,18 @@ namespace m5
       { 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
       , 0x10, 0x30 // PMU common config (internal off-discharge enable)
       , 0x12, 0x00 // BATFET disable
+      , 0x68, 0x01 // Battery detection enabled.
       , 0x69, 0x13 // CHGLED setting
+      , 0x99, 0x00 // DLDO1 set 0.5v (vibration motor)
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+
+      // for Core2 v1.1 (AXP2101+INA3221)
+      if (Ina3221.begin())
+      {}
     }
+
 
 #endif
 
@@ -391,17 +398,28 @@ namespace m5
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
-      if (enable && !Axp192.isACIN() && (0.0f < Axp192.getVBUSCurrent()) && (8 >= Axp192.getBatteryLevel()))
       {
-        // If ACIN is false and VBUS current is detected and the battery is low, power supply from Core to the outside is inhibited.
-        // This is because supplying power externally consumes battery power when there is no power supply from ACIN and power is supplied from VBUS.
-        // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
-        ESP_LOGW("Power","setExtPower(true) is canceled.");
-        break;
-      }
-      else
-      {
-        Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+        bool cancel = false;
+        if (_pmic == pmic_axp2101) {
+          cancel = (enable && (Ina3221.getShuntVoltage(0) < 0.0f || Ina3221.getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
+          if (!cancel) {
+            Axp2101.setBLDO2(enable * 3300);
+            break;
+          }
+        } else {
+          // If ACIN is false and VBUS current is detected and the battery is low, power supply from Core to the outside is inhibited.
+          // This is because supplying power externally consumes battery power when there is no power supply from ACIN and power is supplied from VBUS.
+          // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
+          cancel = (enable && !Axp192.isACIN() && (0.0f < Axp192.getVBUSCurrent()) && (8 >= Axp192.getBatteryLevel()));
+          if (!cancel) {
+            Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+          }
+        }
+        if (cancel)
+        {
+          ESP_LOGW("Power","setExtPower(true) is canceled.");
+          break;
+        }
       }
       NON_BREAK;
 
@@ -451,6 +469,10 @@ namespace m5
       break;
 
     case board_t::board_M5StackCore2:
+      if (_pmic == pmic_axp2101) {
+        return Axp2101.getBLDO2Enabled();
+      }
+
     case board_t::board_M5Tough:
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
@@ -573,6 +595,8 @@ namespace m5
     {
       switch (_pmic)
       {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
       case pmic_t::pmic_axp192:
@@ -581,6 +605,12 @@ namespace m5
 
       case pmic_t::pmic_ip5306:
         Ip5306.setPowerBoostKeepOn(withTimer);
+        break;
+
+#endif
+
+      case pmic_t::pmic_axp2101:
+        Axp2101.powerOff();
         break;
 
 #endif
@@ -773,24 +803,60 @@ namespace m5
 
 #endif
 
+  int16_t Power_Class::getBatteryVoltage(void)
+  {
+#if defined (M5UNIFIED_PC_BUILD)
+    return 0;
+#else
+
+    switch (_pmic)
+    {
+
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case pmic_t::pmic_ip5306:
+      break;
+
+    case pmic_t::pmic_axp192:
+      return Axp192.getBatteryVoltage() * 1000;
+
+#endif
+
+    case pmic_t::pmic_axp2101:
+      return Axp2101.getBatteryVoltage() * 1000;
+
+#endif
+
+    case pmic_t::pmic_adc:
+      return getBatteryAdcRaw(_batAdc) * _adc_ratio;
+
+    default:
+      return 0;
+    }
+#endif
+  }
+
   std::int32_t Power_Class::getBatteryLevel(void)
   {
 #if defined (M5UNIFIED_PC_BUILD)
     return 100;
 #else
-    float volt;
+    float mv = 0.0f;
     switch (_pmic)
     {
 
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       return Ip5306.getBatteryLevel();
 
     case pmic_t::pmic_axp192:
-      volt = Axp192.getBatteryVoltage() * 1000;
+      mv = Axp192.getBatteryVoltage() * 1000;
       break;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#endif
 
     case pmic_t::pmic_axp2101:
       return Axp2101.getBatteryLevel();
@@ -799,18 +865,18 @@ namespace m5
 #endif
 
     case pmic_t::pmic_adc:
-      volt = getBatteryAdcRaw(_batAdc) * _adc_ratio;
+      mv = getBatteryAdcRaw(_batAdc) * _adc_ratio;
       break;
 
     default:
       return -2;
     }
 
-    volt = (volt - 3300) * 100 / (float)(4150 - 3350);
+    int level = (mv - 3300) * 100 / (float)(4150 - 3350);
 
-    return (volt < 0) ? 0
-         : (volt >= 100) ? 100
-         : volt;
+    return (level < 0) ? 0
+         : (level >= 100) ? 100
+         : level;
 #endif
   }
 
@@ -818,6 +884,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       Ip5306.setBatteryCharge(enable);
@@ -827,7 +895,7 @@ namespace m5
       Axp192.setBatteryCharge(enable);
       return;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#endif
 
     case pmic_t::pmic_axp2101:
       Axp2101.setBatteryCharge(enable);
@@ -844,6 +912,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
       Ip5306.setChargeCurrent(max_mA);
@@ -853,7 +923,7 @@ namespace m5
       Axp192.setChargeCurrent(max_mA);
       return;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#endif
 
     case pmic_t::pmic_axp2101:
       Axp2101.setChargeCurrent(max_mA);
@@ -870,6 +940,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     case pmic_t::pmic_ip5306:
@@ -880,7 +952,7 @@ namespace m5
       Axp192.setChargeVoltage(max_mV);
       return;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#endif
 
     case pmic_t::pmic_axp2101:
       Axp2101.setChargeVoltage(max_mV);
@@ -897,6 +969,8 @@ namespace m5
   {
     switch (_pmic)
     {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     case pmic_t::pmic_ip5306:
@@ -905,7 +979,7 @@ namespace m5
     case pmic_t::pmic_axp192:
       return Axp192.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#endif
 
     case pmic_t::pmic_axp2101:
       return Axp2101.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
@@ -923,19 +997,17 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-
-    case pmic_t::pmic_axp2101:
-      return Axp2101.getPekPress();
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
 #else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
-    case pmic_t::pmic_axp2101:
-      return Axp2101.getPekPress();
     case pmic_t::pmic_axp192:
       return Axp192.getPekPress();
+
+#endif
+
+    case pmic_t::pmic_axp2101:
+      return Axp2101.getPekPress();
 
 #endif
 
@@ -949,14 +1021,15 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (M5.getBoard() == board_t::board_M5StackCore2)
     {
+      uint32_t mv = level ? 480 + level * 12 : 0;
       switch (_pmic)
       {
         case pmic_t::pmic_axp192:
-          Axp192.setLDO3(level * 13);
+          Axp192.setLDO3(mv);
           break;
 
         case pmic_t::pmic_axp2101:
-          Axp2101.setDLDO1(level * 13);
+          Axp2101.setDLDO1(mv);
           break;
 
         default:
