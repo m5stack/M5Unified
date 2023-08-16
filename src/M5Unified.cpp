@@ -114,6 +114,8 @@ namespace m5
           case m5::Power_Class::pmic_axp2101:
             self->Power.Axp2101.setALDO3(enabled * 3300);
             break;
+          default:
+            break;
           }
         }
       }
@@ -827,6 +829,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.magnification = 48;
         }
         NON_BREAK;
+
       case board_t::board_M5StickC:
         if (cfg.external_speaker.hat_spk2 && (_board != board_t::board_M5StackCoreInk))
         { /// for HAT SPK2 (for StickC/StickCPlus.  CoreInk does not support.)

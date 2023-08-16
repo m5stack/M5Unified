@@ -472,6 +472,7 @@ namespace m5
       if (_pmic == pmic_axp2101) {
         return Axp2101.getBLDO2Enabled();
       }
+      NON_BREAK;
 
     case board_t::board_M5Tough:
     case board_t::board_M5StickC:
@@ -805,10 +806,7 @@ namespace m5
 
   int16_t Power_Class::getBatteryVoltage(void)
   {
-#if defined (M5UNIFIED_PC_BUILD)
-    return 0;
-#else
-
+#if !defined (M5UNIFIED_PC_BUILD)
     switch (_pmic)
     {
 
@@ -835,6 +833,7 @@ namespace m5
       return 0;
     }
 #endif
+    return 0;
   }
 
   std::int32_t Power_Class::getBatteryLevel(void)

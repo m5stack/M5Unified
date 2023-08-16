@@ -251,9 +251,7 @@ namespace m5
 
     static inline void delay(uint32_t msec)
     {
-#if defined (ARDUINO)
-      m5gfx::delay(msec);
-#elif defined (ESP_PLATFORM)
+#if defined (ESP_PLATFORM)
       vTaskDelay( msec / portTICK_PERIOD_MS );
 #else
       SDL_Delay(msec);
