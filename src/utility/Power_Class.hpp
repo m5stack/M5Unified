@@ -137,6 +137,10 @@ namespace m5
     /// @return battery voltage [mV]
     int16_t getBatteryVoltage(void);
 
+    /// get battery current
+    /// @return battery current [mA] ( +=charge / -=discharge )
+    int32_t getBatteryCurrent(void);
+
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
     /// @attention Only for models with AXP192 or AXP2101

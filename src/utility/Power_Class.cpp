@@ -935,6 +935,43 @@ namespace m5
     }
   }
 
+  int32_t Power_Class::getBatteryCurrent(void)
+  {
+    switch (_pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case pmic_t::pmic_axp192:
+      {
+        int32_t res = Axp192.getBatteryChargeCurrent();
+        int32_t dsc = Axp192.getBatteryDischargeCurrent();
+        if (res < dsc) res = -dsc;
+        return res;
+      }
+#endif
+
+    case pmic_t::pmic_axp2101:
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      // for CoreS3
+      return 0;
+
+#else
+
+      // for Core2 v1.1
+      return 1000.0f * Ina3221.getCurrent(0); // 0=CH1. CH1=BAT Current.
+
+#endif
+
+#endif
+
+    default:
+      return 0;
+    }
+  }
+
   void Power_Class::setChargeVoltage(std::uint16_t max_mV)
   {
     switch (_pmic)
