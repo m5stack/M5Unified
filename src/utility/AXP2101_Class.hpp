@@ -45,18 +45,33 @@ namespace m5
     /// Get whether the battery is currently charging or not.
     bool isCharging(void);
 
+
+    inline void setALDO1(int voltage) { _set_LDO(0, voltage); }
+    inline void setALDO2(int voltage) { _set_LDO(1, voltage); }
+    inline void setALDO3(int voltage) { _set_LDO(2, voltage); }
+    inline void setALDO4(int voltage) { _set_LDO(3, voltage); }
+    inline void setBLDO1(int voltage) { _set_LDO(4, voltage); }
+    inline void setBLDO2(int voltage) { _set_LDO(5, voltage); }
+    inline void setDLDO1(int voltage) { _set_DLDO(0, voltage); }
+    inline void setDLDO2(int voltage) { _set_DLDO(1, voltage); }
+
+    inline bool getALDO1Enabled(void) { return _get_LDOEn(0); }
+    inline bool getALDO2Enabled(void) { return _get_LDOEn(1); }
+    inline bool getALDO3Enabled(void) { return _get_LDOEn(2); }
+    inline bool getALDO4Enabled(void) { return _get_LDOEn(3); }
+    inline bool getBLDO1Enabled(void) { return _get_LDOEn(4); }
+    inline bool getBLDO2Enabled(void) { return _get_LDOEn(5); }
+
     void powerOff(void);
 
     void setAdcState(bool enable);
     void setAdcRate( std::uint8_t rate );
 
-    void setEXTEN(bool enable);
     void setBACKUP(bool enable);
 
     bool isACIN(void);
     bool isVBUS(void);
     bool getBatState(void);
-    bool getEXTEN(void);
 
     float getBatteryVoltage(void);
     float getBatteryDischargeCurrent(void);
@@ -78,6 +93,10 @@ namespace m5
     std::size_t readRegister12(std::uint8_t addr);
     std::size_t readRegister14(std::uint8_t addr);
     std::size_t readRegister16(std::uint8_t addr);
+
+    void _set_LDO(std::uint8_t num, int voltage);
+    void _set_DLDO(std::uint8_t num, int voltage);
+    bool _get_LDOEn(std::uint8_t num);
   };
 }
 

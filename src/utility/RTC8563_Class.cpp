@@ -17,6 +17,8 @@ namespace m5
       date.month - 1,
       date.year - 1900,
       date.weekDay,
+      0,
+      0,
     };
     return t_st;
   }

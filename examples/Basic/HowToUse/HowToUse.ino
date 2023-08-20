@@ -275,6 +275,12 @@ void setup(void)
   case m5::board_t::board_M5Dial:
     name = "Dial";
     break;
+  case m5::board_t::board_M5DinMeter:
+    name = "DinMeter";
+    break;
+  case m5::board_t::board_M5Capsule:
+    name = "Capsule";
+    break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:
     name = "StampC3";

@@ -251,9 +251,7 @@ namespace m5
 
     static inline void delay(uint32_t msec)
     {
-#if defined (ARDUINO)
-      m5gfx::delay(msec);
-#elif defined (ESP_PLATFORM)
+#if defined (ESP_PLATFORM)
       vTaskDelay( msec / portTICK_PERIOD_MS );
 #else
       SDL_Delay(msec);
@@ -290,6 +288,12 @@ namespace m5
     {
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
+
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+      // Power Hold pin for Capsule/Dial/DinMeter
+      m5gfx::gpio_hi(GPIO_NUM_46);
+      m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
+#endif
 
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
