@@ -585,7 +585,9 @@ namespace m5
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
       gpio_num_t pin = (gpio_num_t)_rtcIntPin;
+#if SOC_PM_SUPPORT_EXT_WAKEUP
       if (ESP_OK != esp_sleep_enable_ext0_wakeup( pin, false))
+#endif
       {
         gpio_wakeup_enable( pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
         esp_sleep_enable_gpio_wakeup();
