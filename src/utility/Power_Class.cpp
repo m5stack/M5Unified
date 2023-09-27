@@ -73,10 +73,24 @@ namespace m5
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
 
-    case board_t::board_M5Capsule:
     case board_t::board_M5Dial:
+      _pwrHoldPin = GPIO_NUM_46;
+      break;
+
+    case board_t::board_M5Capsule:
+      _pwrHoldPin = GPIO_NUM_46;
+      _batAdc = (adc1_channel_t) ADC1_GPIO6_CHANNEL;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 2.0f;
+      break;
+
     case board_t::board_M5DinMeter:
       _pwrHoldPin = GPIO_NUM_46;
+      NON_BREAK;
+    case board_t::board_M5Cardputer:
+      _batAdc = (adc1_channel_t) ADC1_GPIO10_CHANNEL;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 2.0f;
       break;
     }
 
@@ -787,7 +801,7 @@ namespace m5
 
   static std::int32_t getBatteryAdcRaw(adc1_channel_t adc_ch)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
     static constexpr int BASE_VOLATAGE = 3600;
 
     static esp_adc_cal_characteristics_t* adc_chars = nullptr;

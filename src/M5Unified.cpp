@@ -46,6 +46,75 @@ void __attribute((weak)) adc_power_acquire(void)
 
 namespace m5
 {
+
+// ピン番号テーブル。 unknownをテーブルの最後に配置する。該当が無い場合はunknownの値が使用される。
+static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
+                          //EX CL,DA, In CL,DA
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5StackCoreS3, 11,12 ,  1, 2 },
+{ board_t::board_M5StampS3    ,255,255, 15,13 },
+{ board_t::board_M5Capsule    , 10, 8 , 15,13 },
+{ board_t::board_M5Dial       , 12,11 , 15,13 },
+{ board_t::board_M5DinMeter   , 12,11 , 15,13 },
+{ board_t::board_M5Cardputer  ,255,255,  1, 2 },
+{ board_t::board_unknown      , 39,38 ,  1, 2 }, // AtomS3,AtomS3Lite,AtomS3U
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+{ board_t::board_unknown     , 255,255,  0, 1 },
+#else
+{ board_t::board_M5Stack      , 22,21, 22,21 },
+{ board_t::board_M5Paper      , 22,21, 32,25 },
+{ board_t::board_M5TimerCam   , 14,12, 13, 4 },
+{ board_t::board_M5Atom       , 21,25, 32,26 },
+{ board_t::board_M5AtomU      , 21,25, 32,26 },
+{ board_t::board_M5AtomPsram  , 21,25, 32,26 },
+{ board_t::board_unknown      , 22,21, 33,32 },
+#endif
+};
+
+static constexpr const uint8_t _pin_table_port_bc[][5] = {
+                          //pB p1,p2, pC p1,p2
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5StackCoreS3,  8, 9, 18,17 },
+{ board_t::board_M5Dial       ,  1, 2, 255,255 },
+{ board_t::board_M5DinMeter   ,  1, 2, 255,255 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
+{ board_t::board_M5Stack      , 36,26, 16,17 },
+{ board_t::board_M5StackCore2 , 36,26, 13,14 },
+{ board_t::board_M5Paper      , 33,26, 19,18 },
+{ board_t::board_M5Station    , 35,25, 13,14 },
+#endif
+{ board_t::board_unknown      , 255,255, 255,255 },
+};
+
+static constexpr const uint8_t _pin_table_port_de[][5] = {
+                          //pD p1,p2, pE p1,p2
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5StackCoreS3, 14,10, 18,17 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
+{ board_t::board_M5Stack      , 34,35,  5,13 },
+{ board_t::board_M5StackCore2 , 34,35, 27,19 },
+{ board_t::board_M5Station    , 36,26, 16,17 }, // B2 / C2
+#endif
+{ board_t::board_unknown      , 255,255, 255,255 },
+};
+
+static constexpr const uint8_t _pin_table_spi_sd[][5] = {
+                            // clk,mosi,miso,cs
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5StackCoreS3, 36, 37, 35,  4 },
+{ board_t::board_M5Capsule    , 14, 12, 39, 11 },
+{ board_t::board_M5Cardputer  , 40, 14, 39, 12 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#else
+{ board_t::board_M5Stack      , 18, 23, 19,  4 },
+{ board_t::board_M5StackCore2 , 18, 23, 38,  4 },
+{ board_t::board_M5Paper      , 14, 12, 13,  4 },
+#endif
+{ board_t::board_unknown      , 255,255, 255,255 },
+};
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t es7210_i2c_addr = 0x40;
@@ -490,6 +559,13 @@ for (int i = 0; i < 0x50; ++i)
       ex_scl = GPIO_NUM_15;
       break;
 
+    case board_t::board_M5Cardputer:
+      in_sda = GPIO_NUM_NC;
+      in_scl = GPIO_NUM_NC;
+      ex_sda = GPIO_NUM_2;
+      ex_scl = GPIO_NUM_1;
+      break;
+
     default:
       break;
     }
@@ -640,6 +716,7 @@ for (int i = 0; i < 0x50; ++i)
       break;
 
     case board_t::board_M5StampS3:
+    case board_t::board_M5Cardputer:
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       break;
 
@@ -687,6 +764,14 @@ for (int i = 0; i < 0x50; ++i)
         {
           mic_cfg.pin_data_in = GPIO_NUM_38;
           mic_cfg.pin_ws = GPIO_NUM_39;
+        }
+        break;
+
+      case board_t::board_M5Cardputer:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_data_in = GPIO_NUM_46;
+          mic_cfg.pin_ws = GPIO_NUM_43;
         }
         break;
 
@@ -803,6 +888,17 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_data_out = GPIO_NUM_3;
           spk_cfg.buzzer = true;
           spk_cfg.magnification = 48;
+        }
+        break;
+
+      case board_t::board_M5Cardputer:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_bck = GPIO_NUM_41;
+          spk_cfg.pin_ws = GPIO_NUM_43;
+          spk_cfg.pin_data_out = GPIO_NUM_42;
+          spk_cfg.magnification = 16;
+          spk_cfg.i2s_port = I2S_NUM_1;
         }
         break;
 
@@ -1122,6 +1218,7 @@ for (int i = 0; i < 0x50; ++i)
       break;
 
     case board_t::board_M5StampS3:
+    case board_t::board_M5Cardputer:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_0));
       break;
 
@@ -1168,6 +1265,30 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #endif
+  }
+
+  int32_t M5Unified::getPin(pin_name_t name) const
+  {
+    const uint8_t* tbl = nullptr;
+    const uint8_t* result = nullptr;
+    size_t count = 5;
+    int name_index = 0;
+    if (name <= port_a_pin2) {
+      tbl = (uint8_t*)_pin_table_i2c_ex_in;
+      name_index = name;
+    } else if (name <= port_c_pin2) {
+      tbl = (uint8_t*)_pin_table_port_bc;
+      name_index = name - port_b_pin1;
+    } else if (name <= port_e_pin2) {
+      tbl = (uint8_t*)_pin_table_port_de;
+      name_index = name - port_d_pin1;
+    } else if (name <= sd_spi_cs) {
+      tbl = (uint8_t*)_pin_table_spi_sd;
+      name_index = name - sd_spi_sclk;
+    } else { return -1; }
+    auto board = getBoard();
+    while (tbl[0] != board && tbl[0] != board_t::board_unknown) { tbl += count; }
+    return (int8_t)tbl[name_index + 1];
   }
 
   M5GFX& M5Unified::getDisplay(size_t index)

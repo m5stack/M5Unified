@@ -22,6 +22,7 @@
  - M5Dial
  - M5DinMeter
  - M5Capsule
+ - M5Cardputer
 
 ## Supported device (ESP32C3)
  - M5STAMPC3 / C3U
@@ -49,7 +50,7 @@
 # H/W infomation
 
 ### ESP32 GPIO list
-|                    |M5Stack<BR>BASIC<BR>GRAY           |M5Stack<BR>GO/FIRE                 |M5Stack<BR>Core2<BR>Tough              |M5Stick<BR>C/CPlus            |M5Stick<BR>CPlus2          |M5Stack<BR>CoreInk      |M5Paper                |M5Station              |M5ATOM<BR>Lite/Matrix<BR>ECHO/U<BR>PSRAM |M5STAMP<BR>PICO     |                    |
+|                    |M5Stack<BR>BASIC<BR>GRAY           |M5Stack<BR>GO/FIRE                 |M5Stack<BR>Core2(AWS)<BR>Tough         |M5Stick<BR>C/CPlus            |M5Stick<BR>CPlus2          |M5Stack<BR>CoreInk      |M5Paper                |M5Station              |M5ATOM<BR>Lite/Matrix<BR>ECHO/U<BR>PSRAM |M5STAMP<BR>PICO     |                    |
 |:------------------:|:---------------------------------:|:---------------------------------:|:-------------------------------------:|:----------------------------:|:-------------------------:|:----------------------:|:---------------------:|:---------------------:|:---------------------------------------:|:------------------:|:------------------:|
 |GPIO 0<BR>`ADC2_CH1`|`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>IIS_MK                  |`M-Bus`<BR>**SPK_LRCK<BR>PDM_C**(Core2)|`HAT`<BR>`PAD`<BR>**PDM_C**   |`HAT`<BR>**PDM_C**         |**EPD_RST**             | ---                   | ---                   | ---                                     |                    |GPIO 0<BR>`ADC2_CH1`|
 |GPIO 1<BR>`USB_TX`  |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**              |`M-Bus`<BR>**Serial**                  |**Serial**                    |**Serial**                 |**Serial**              |**Serial**             |**Serial**             |**Serial**                               |**Serial**          |GPIO 1<BR>`USB_TX`  |
@@ -70,7 +71,7 @@
 |GPIO21              |`M-Bus`<BR>`PORT.A`<BR>**I2C0_SDA**|`M-Bus`<BR>`PORT.A`<BR>**I2C0_SDA**|**I2C1_SDA**                           |**I2C1_SDA**                  |**I2C1_SDA**               |`MI-Bus`<BR>**I2C1_SDA**|**I2C1_SDA**           |**I2C1_SDA**           |`Bus`<BR>**I2C1_SCL**                    |                    |GPIO21              |
 |GPIO22              |`M-Bus`<BR>`PORT.A`<BR>**I2C0_SCL**|`M-Bus`<BR>`PORT.A`<BR>**I2C0_SCL**|**I2C1_SCL**                           |**I2C1_SCL**                  |**I2C1_SCL**               |`MI-Bus`<BR>**I2C1_SCL**|**I2C1_SCL**           |**I2C1_SCL**           |`Bus`<BR>**SPK_D**(ECHO)                 |                    |GPIO22              |
 |GPIO23              |`M-Bus`<BR>**SPI_MOSI**            |`M-Bus`<BR>**SPI_MOSI**            |**SPI_MOSI**                           |**LCD_D/C**                   | ---                       |`MI-Bus`<BR>**SPI_MOSI**|**EPD_RST**            |**SPI_MOSI**           |`Bus`<BR>**PDM_D**(ECHO)                 | ---                |GPIO23              |
-|GPIO25<BR>`DAC1`    |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`                                |`HAT`(CPlus)<BR>`PAD`         |`HAT`                      |`MI-Bus`<BR>`HAT`       |`PORT.A`<BR>I2C0_SDA   |`PORT.B1`              |`Bus`<BR>**I2C1_SDA**                    |                    |GPIO25<BR>`DAC1`    |
+|GPIO25<BR>`DAC1`    |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`<BR>**SPK_DAC**             |`M-Bus`<BR>**RGB LED**(AWS)            |`HAT`(CPlus)<BR>`PAD`         |`HAT`                      |`MI-Bus`<BR>`HAT`       |`PORT.A`<BR>I2C0_SDA   |`PORT.B1`              |`Bus`<BR>**I2C1_SDA**                    |                    |GPIO25<BR>`DAC1`    |
 |GPIO26<BR>`DAC2`    |`M-Bus`                            |`M-Bus`<BR>`PORT.B`                |`M-Bus`                                |`HAT`<BR>`PAD`                |`HAT`                      |`MI-Bus`<BR>`HAT`       |`PORT.B`               |`PORT.B2`              |`PORT.A`<BR>**I2C0_SDA**                 |                    |GPIO26<BR>`DAC2`    |
 |GPIO27<BR>`ADC2_CH7`|**LCD_D/C**                        |**LCD_D/C**                        |`M-Bus`                                |**AXP192 VBUSEN**             |**LCD_BL**                 |**BTN_PWR**             |**EPD_BUSY**           |**IMU_INT**            |**RGB LED**                              |**RGB LED**         |GPIO27<BR>`ADC2_CH7`|
 |GPIO32<BR>`ADC1_CH4`|**LCD_BL**                         |**LCD_BL**                         |`M-Bus`<BR>`PORT.A`<BR>I2C0_SDA        |`PORT.A`<BR>I2C0_SDA          |`PORT.A`<BR>I2C0_SDA       |`PORT.A`<BR>I2C0_SDA    |`PORT.A`<BR>I2C0_SCL   |`PORT.A`<BR>I2C0_SDA   |`PORT.A`<BR>**I2C0_SCL**                 |`PORT.A`<BR>I2C0_SDA|GPIO32<BR>`ADC1_CH4`|
@@ -81,7 +82,7 @@
 |GPIO37<BR>`ADC1_CH1`|**BTN_C**                          |**BTN_C**                          | ---                                   |**BTN_A**                     |**BTN_A**                  |**SW_Up**               |**SW_Up**              |**BTN_A**              | ---                                     | ---                |GPIO37<BR>`ADC1_CH1`|
 |GPIO38<BR>`ADC1_CH2`|**BTN_B**                          |**BTN_B**                          |`M-Bus`<BR>**SPI_MISO**                |`PAD`                         |**BAT_V**                  |**SW_Press**            |**SW_Press**           |**BTN_B**              | ---                                     | ---                |GPIO38<BR>`ADC1_CH2`|
 |GPIO39<BR>`ADC1_CH3`|**BTN_A**                          |**BTN_A**                          |**TP_INT**                             |**BTN_B**                     |**BTN_B**                  |**SW_Down**             |**SW_Down**            |**BTN_C**              |**BTN**                                  |**BTN**             |GPIO39<BR>`ADC1_CH3`|
-|                    |M5Stack<BR>BASIC<BR>GRAY           |M5Stack<BR>GO/FIRE                 |M5Stack<BR>Core2<BR>Tough              |M5Stick<BR>C/CPlus            |M5Stick<BR>CPlus2          |M5Stack<BR>CoreInk      |M5Paper                |M5Station              |M5ATOM<BR>Lite/Matrix<BR>ECHO/U<BR>PSRAM |M5STAMP<BR>PICO     |                    |
+|                    |M5Stack<BR>BASIC<BR>GRAY           |M5Stack<BR>GO/FIRE                 |M5Stack<BR>Core2(AWS)<BR>Tough         |M5Stick<BR>C/CPlus            |M5Stick<BR>CPlus2          |M5Stack<BR>CoreInk      |M5Paper                |M5Station              |M5ATOM<BR>Lite/Matrix<BR>ECHO/U<BR>PSRAM |M5STAMP<BR>PICO     |                    |
 
 
 ### ESP32C3 GPIO list

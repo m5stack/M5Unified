@@ -22,6 +22,27 @@ namespace m5
 {
   using board_t = m5gfx::board_t;
   using touch_point_t = m5gfx::touch_point_t;
+
+  enum pin_name_t
+  {
+    in_i2c_scl,
+    in_i2c_sda,
+    port_a_pin1,   port_a_scl = port_a_pin1,
+    port_a_pin2,   port_a_sda = port_a_pin2,
+    port_b_pin1,   port_b_in  = port_b_pin1,
+    port_b_pin2,   port_b_out = port_b_pin2,
+    port_c_pin1,   port_c_rxd = port_c_pin1,
+    port_c_pin2,   port_c_txd = port_c_pin2,
+    port_d_pin1,   port_d_rxd = port_d_pin1,
+    port_d_pin2,   port_d_txd = port_d_pin2,
+    port_e_pin1,   port_e_rxd = port_e_pin1,
+    port_e_pin2,   port_e_txd = port_e_pin2,
+    sd_spi_sclk,
+    sd_spi_copi,   sd_spi_mosi = sd_spi_copi,
+    sd_spi_cipo,   sd_spi_miso = sd_spi_cipo,
+    sd_spi_cs,     sd_spi_ss  = sd_spi_cs,
+    pin_name_max,
+  };
 };
 
 #include "gitTagVersion.h"
@@ -209,6 +230,8 @@ namespace m5
     Speaker_Class Speaker;
 
     Mic_Class Mic;
+
+    int32_t getPin(pin_name_t) const;
 
     M5GFX& getDisplay(size_t index);
 
