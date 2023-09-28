@@ -580,7 +580,7 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
     /// StampC3 does not have internal i2c.
-    In_I2C.setPort(-1, -1, -1);
+    In_I2C.setPort(I2C_NUM_MAX, -1, -1);
 
     { /// setup External I2C
       i2c_port_t ex_port = I2C_NUM_0;
