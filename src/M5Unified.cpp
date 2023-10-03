@@ -580,6 +580,16 @@ for (int i = 0; i < 0x50; ++i)
       delay(16);
       Serial.begin(cfg.serial_baudrate);
     }
+    if (cfg.serial1_baudrate)
+    {
+      delay(16);
+      Serial1.begin(cfg.serial1_baudrate);
+    }
+    if (cfg.serial2_baudrate)
+    {
+      delay(16);
+      Serial2.begin(cfg.serial2_baudrate);
+    }
 
 #endif
 

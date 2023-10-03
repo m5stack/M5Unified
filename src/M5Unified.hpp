@@ -52,6 +52,8 @@ namespace m5
 
       /// use "Serial" begin. (0=disabled)
       uint32_t serial_baudrate = 115200;
+      uint32_t serial1_baudrate = 0;
+      uint32_t serial2_baudrate = 0;
 
 #endif
 
