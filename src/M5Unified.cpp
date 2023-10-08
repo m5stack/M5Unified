@@ -775,6 +775,14 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
+      case board_t::board_M5Capsule:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_data_in = GPIO_NUM_41;
+          mic_cfg.pin_ws = GPIO_NUM_40;
+        }
+        break;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
       case board_t::board_M5Stack:
         if (cfg.internal_mic)
