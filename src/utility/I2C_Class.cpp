@@ -99,7 +99,8 @@ namespace m5
 
   void I2C_Class::scanID(bool* __restrict__ result) const
   {
-    for (int i = 0; i < 0x78; i++)
+    // ESP32S3ではアドレス0~7をスキャン対象に含めると動作が停止する
+    for (int i = 8; i < 0x78; i++)
     {
       result[i] = start(i, false, 400000) && stop();
     }
