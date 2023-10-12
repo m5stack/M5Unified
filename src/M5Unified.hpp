@@ -22,6 +22,28 @@ namespace m5
 {
   using board_t = m5gfx::board_t;
   using touch_point_t = m5gfx::touch_point_t;
+
+  enum pin_name_t
+  {
+    in_i2c_scl,
+    in_i2c_sda,
+    port_a_pin1,   port_a_scl = port_a_pin1,  ex_i2c_scl = port_a_pin1,
+    port_a_pin2,   port_a_sda = port_a_pin2,  ex_i2c_sda = port_a_pin2,
+    port_b_pin1,   port_b_in  = port_b_pin1,
+    port_b_pin2,   port_b_out = port_b_pin2,
+    port_c_pin1,   port_c_rxd = port_c_pin1,
+    port_c_pin2,   port_c_txd = port_c_pin2,
+    port_d_pin1,   port_d_rxd = port_d_pin1,  port_b2_pin1 = port_d_pin1, // b2,c2 for M5Station
+    port_d_pin2,   port_d_txd = port_d_pin2,  port_b2_pin2 = port_d_pin2,
+    port_e_pin1,   port_e_rxd = port_e_pin1,  port_c2_pin1 = port_e_pin1,
+    port_e_pin2,   port_e_txd = port_e_pin2,  port_c2_pin2 = port_e_pin2,
+    sd_spi_sclk,
+    sd_spi_copi,   sd_spi_mosi = sd_spi_copi,
+    sd_spi_cipo,   sd_spi_miso = sd_spi_cipo,
+    sd_spi_cs,     sd_spi_ss  = sd_spi_cs,
+    rgb_led,
+    pin_name_max,
+  };
 };
 
 #include "gitTagVersion.h"
@@ -210,6 +232,8 @@ namespace m5
 
     Mic_Class Mic;
 
+    static int8_t getPin(pin_name_t name) { return _get_pin_table[name]; }
+
     M5GFX& getDisplay(size_t index);
 
     M5GFX& Displays(size_t index) { return getDisplay(index); }
@@ -301,6 +325,7 @@ namespace m5
       auto board = _check_boardtype(Display.getBoard());
       if (board == board_t::board_unknown) { board = cfg.fallback_board; }
       _board = board;
+      _setup_pinmap(board);
       _setup_i2c(board);
       if (res && getDisplayCount() == 0) {
         addDisplay(Display);
@@ -510,8 +535,10 @@ namespace m5
     board_t _check_boardtype(board_t);
     void _setup_i2c(board_t);
 
+    static void _setup_pinmap(board_t);
     static bool _speaker_enabled_cb(void* args, bool enabled);
     static bool _microphone_enabled_cb(void* args, bool enabled);
+    static int8_t _get_pin_table[pin_name_max];
   };
 }
 
