@@ -46,10 +46,10 @@ void __attribute((weak)) adc_power_acquire(void)
 
 namespace m5
 {
-
+int8_t M5Unified::_get_pin_table[pin_name_max];
 // ピン番号テーブル。 unknownをテーブルの最後に配置する。該当が無い場合はunknownの値が使用される。
 static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
-                          //EX CL,DA, In CL,DA
+                            // In CL,DA, EX CL,DA
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 { board_t::board_M5StackCoreS3, 11,12 ,  1, 2 },
 { board_t::board_M5StampS3    ,255,255, 15,13 },
@@ -59,7 +59,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Cardputer  ,255,255,  1, 2 },
 { board_t::board_unknown      , 39,38 ,  1, 2 }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
-{ board_t::board_unknown     , 255,255,  0, 1 },
+{ board_t::board_unknown      ,255,255,  0, 1 },
 #else
 { board_t::board_M5Stack      , 22,21, 22,21 },
 { board_t::board_M5Paper      , 22,21, 32,25 },
@@ -67,7 +67,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Atom       , 21,25, 32,26 },
 { board_t::board_M5AtomU      , 21,25, 32,26 },
 { board_t::board_M5AtomPsram  , 21,25, 32,26 },
-{ board_t::board_unknown      , 22,21, 33,32 },
+{ board_t::board_unknown      , 22,21, 33,32 }, // Core2,Tough
 #endif
 };
 
@@ -114,6 +114,49 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 #endif
 { board_t::board_unknown      , 255,255, 255,255 },
 };
+
+static constexpr const uint8_t _pin_table_other[][2] = {
+                             //RGBLED
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5AtomS3U    , 35 },
+{ board_t::board_M5AtomS3Lite , 35 },
+{ board_t::board_M5StampS3    , 21 },
+{ board_t::board_M5Capsule    , 21 },
+{ board_t::board_M5Cardputer  , 21 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+{ board_t::board_M5StampC3    ,  2 },
+{ board_t::board_M5StampC3U   ,  2 },
+#else
+{ board_t::board_M5Stack      , 15 },
+{ board_t::board_M5StackCore2 , 25 },
+{ board_t::board_M5Station    ,  4 },
+{ board_t::board_M5Atom       , 27 },
+{ board_t::board_M5AtomU      , 27 },
+{ board_t::board_M5AtomPsram  , 27 },
+{ board_t::board_M5StampPico  , 27 },
+#endif
+{ board_t::board_unknown      , 255 },
+};
+
+  void M5Unified::_setup_pinmap(board_t id)
+  {
+    constexpr const std::pair<const void*, size_t> tbl[] = {
+      { _pin_table_i2c_ex_in, sizeof(_pin_table_i2c_ex_in[0]) },
+      { _pin_table_port_bc, sizeof(_pin_table_port_bc[0]) },
+      { _pin_table_port_de, sizeof(_pin_table_port_de[0]) },
+      { _pin_table_spi_sd, sizeof(_pin_table_spi_sd[0]) },
+      { _pin_table_other, sizeof(_pin_table_other[0]) },
+    };
+
+    int8_t* dst = _get_pin_table;
+    for (auto &p : tbl) {
+      const uint8_t* tbl = (uint8_t*)p.first;
+      size_t len = p.second;
+      while (tbl[0] != id && tbl[0] != board_t::board_unknown) { tbl += len; }
+      memcpy(dst, &tbl[1], len - 1);
+      dst += len - 1;
+    }
+  }
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
@@ -451,144 +494,37 @@ for (int i = 0; i < 0x50; ++i)
 
   void M5Unified::_setup_i2c(board_t board)
   {
-#if defined (M5UNIFIED_PC_BUILD)
-#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    { /// setup Internal I2C
-      i2c_port_t in_port = I2C_NUM_1;
-      gpio_num_t in_sda = GPIO_NUM_21;
-      gpio_num_t in_scl = GPIO_NUM_22;
-      switch (board)
-      {
-      case board_t::board_M5Atom:  // ATOM
-      case board_t::board_M5AtomU:
-      case board_t::board_M5AtomPsram:
-        in_sda = GPIO_NUM_25;
-        in_scl = GPIO_NUM_21;
-        break;
+    gpio_num_t in_scl = (gpio_num_t)getPin(pin_name_t::in_i2c_scl);
+    gpio_num_t in_sda = (gpio_num_t)getPin(pin_name_t::in_i2c_sda);
+    gpio_num_t ex_scl = (gpio_num_t)getPin(pin_name_t::ex_i2c_scl);
+    gpio_num_t ex_sda = (gpio_num_t)getPin(pin_name_t::ex_i2c_sda);
 
-      case board_t::board_M5TimerCam:
-        in_sda = GPIO_NUM_12;
-        in_scl = GPIO_NUM_14;
-        break;
-
-      case board_t::board_M5Stack:
-        // M5Stack Basic/Fire/GO の内部I2CはPortAと共通のため、I2C_NUM_0を用いる。;
-        in_port = I2C_NUM_0;
-        break;
-
-      default:
-        break;
-      }
-      In_I2C.begin(in_port, in_sda, in_scl);
-    }
-
-    { /// setup External I2C
-      i2c_port_t ex_port = I2C_NUM_0;
-      gpio_num_t ex_sda = GPIO_NUM_32;
-      gpio_num_t ex_scl = GPIO_NUM_33;
-      switch (board)
-      {
-      case board_t::board_M5Stack:
-        ex_sda = GPIO_NUM_21;
-        ex_scl = GPIO_NUM_22;
-        break;
-
-      case board_t::board_M5Paper:
-        ex_sda = GPIO_NUM_25;
-        ex_scl = GPIO_NUM_32;
-        break;
-
-      case board_t::board_M5Atom:
-      case board_t::board_M5AtomU:
-      case board_t::board_M5AtomPsram:
-        ex_sda = GPIO_NUM_26;
-        ex_scl = GPIO_NUM_32;
-        break;
-
-      case board_t::board_M5TimerCam:
-        ex_sda = GPIO_NUM_4;
-        ex_scl = GPIO_NUM_13;
-        break;
-
-      default:
-        break;
-      }
-      Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
-    }
-
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    i2c_port_t in_port = I2C_NUM_1;
-    gpio_num_t in_sda = GPIO_NUM_38;
-    gpio_num_t in_scl = GPIO_NUM_39;
+#if !defined (M5UNIFIED_PC_BUILD)
 
     i2c_port_t ex_port = I2C_NUM_0;
-    gpio_num_t ex_sda = GPIO_NUM_2;
-    gpio_num_t ex_scl = GPIO_NUM_1;
-    switch (board)
-    {
-
-    case board_t::board_M5StackCoreS3:
-      in_sda = GPIO_NUM_12;
-      in_scl = GPIO_NUM_11;
-      break;
-
-    case board_t::board_M5AtomS3:
-    case board_t::board_M5AtomS3Lite:
-    case board_t::board_M5AtomS3U:
-      break;
-
-    case board_t::board_M5StampS3:
-      in_sda = GPIO_NUM_NC;
-      in_scl = GPIO_NUM_NC;
-      ex_sda = GPIO_NUM_13;
-      ex_scl = GPIO_NUM_15;
-      break;
-
-    case board_t::board_M5Capsule:
-      in_sda = GPIO_NUM_8;
-      in_scl = GPIO_NUM_10;
-      ex_sda = GPIO_NUM_13;
-      ex_scl = GPIO_NUM_15;
-      break;
-
-    case board_t::board_M5Dial:
-    case board_t::board_M5DinMeter:
-      in_sda = GPIO_NUM_11;
-      in_scl = GPIO_NUM_12;
-      ex_sda = GPIO_NUM_13;
-      ex_scl = GPIO_NUM_15;
-      break;
-
-    case board_t::board_M5Cardputer:
-      in_sda = GPIO_NUM_NC;
-      in_scl = GPIO_NUM_NC;
-      ex_sda = GPIO_NUM_2;
-      ex_scl = GPIO_NUM_1;
-      break;
-
-    default:
-      break;
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+    i2c_port_t in_port = I2C_NUM_0;
+#else
+    i2c_port_t in_port = I2C_NUM_1;
+    if (in_scl == ex_scl && in_sda == ex_sda) {
+      in_port = ex_port;
     }
-    if ((int)in_sda >= 0)
+#endif
+    if ((int)in_scl >= 0)
     {
       In_I2C.begin(in_port, in_sda, in_scl);
     }
-    if ((int)ex_sda >= 0)
+    else
     {
-      Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
+      In_I2C.setPort(I2C_NUM_MAX, in_sda, in_scl);
     }
 
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-    /// StampC3 does not have internal i2c.
-    In_I2C.setPort(I2C_NUM_MAX, -1, -1);
-
-    { /// setup External I2C
-      i2c_port_t ex_port = I2C_NUM_0;
-      gpio_num_t ex_sda = GPIO_NUM_1;
-      gpio_num_t ex_scl = GPIO_NUM_0;
+    if ((int)ex_scl >= 0)
+    {
       Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
     }
 #endif
+
   }
 
   void M5Unified::_begin(const config_t& cfg)
@@ -870,6 +806,10 @@ for (int i = 0; i < 0x50; ++i)
             && m5gfx::gpio_in(GPIO_NUM_7))
           {
             ESP_LOGD("M5Unified", "ATOMIC SPK");
+            // atomic_spkのSDカード用ピンを割当
+            _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
+            _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
+            _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
             cfg.internal_imu = false; /// avoid conflict with i2c
             cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_5;
@@ -994,6 +934,10 @@ for (int i = 0; i < 0x50; ++i)
             && m5gfx::gpio_in(pin        ))
           {
             ESP_LOGD("M5Unified", "ATOMIC SPK");
+            // atomic_spkのSDカード用ピンを割当
+            _get_pin_table[sd_spi_sclk] = pin;
+            _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
+            _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
             cfg.internal_imu = false; /// avoid conflict with i2c
             cfg.internal_rtc = false; /// avoid conflict with i2c
             spk_cfg.pin_bck = GPIO_NUM_22;
@@ -1273,30 +1217,6 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #endif
-  }
-
-  int32_t M5Unified::getPin(pin_name_t name) const
-  {
-    const uint8_t* tbl = nullptr;
-    const uint8_t* result = nullptr;
-    size_t count = 5;
-    int name_index = 0;
-    if (name <= port_a_pin2) {
-      tbl = (uint8_t*)_pin_table_i2c_ex_in;
-      name_index = name;
-    } else if (name <= port_c_pin2) {
-      tbl = (uint8_t*)_pin_table_port_bc;
-      name_index = name - port_b_pin1;
-    } else if (name <= port_e_pin2) {
-      tbl = (uint8_t*)_pin_table_port_de;
-      name_index = name - port_d_pin1;
-    } else if (name <= sd_spi_cs) {
-      tbl = (uint8_t*)_pin_table_spi_sd;
-      name_index = name - sd_spi_sclk;
-    } else { return -1; }
-    auto board = getBoard();
-    while (tbl[0] != board && tbl[0] != board_t::board_unknown) { tbl += count; }
-    return (int8_t)tbl[name_index + 1];
   }
 
   M5GFX& M5Unified::getDisplay(size_t index)
