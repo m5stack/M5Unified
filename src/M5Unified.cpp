@@ -494,12 +494,11 @@ for (int i = 0; i < 0x50; ++i)
 
   void M5Unified::_setup_i2c(board_t board)
   {
+#if !defined (M5UNIFIED_PC_BUILD)
     gpio_num_t in_scl = (gpio_num_t)getPin(pin_name_t::in_i2c_scl);
     gpio_num_t in_sda = (gpio_num_t)getPin(pin_name_t::in_i2c_sda);
     gpio_num_t ex_scl = (gpio_num_t)getPin(pin_name_t::ex_i2c_scl);
     gpio_num_t ex_sda = (gpio_num_t)getPin(pin_name_t::ex_i2c_sda);
-
-#if !defined (M5UNIFIED_PC_BUILD)
 
     i2c_port_t ex_port = I2C_NUM_0;
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
