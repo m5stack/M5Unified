@@ -55,10 +55,10 @@ void setup(void)
 
 
 /// setup RTC ( NTP auto setting )
-
+  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+#ifdef WiFi_h
   M5.Log.print("WiFi:");
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
-  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
 
   for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)
   {
@@ -92,7 +92,7 @@ void setup(void)
   {
     M5.Log.println("\r\nWiFi none...");
   }
-
+#endif
 
   M5.Display.clear();
 }

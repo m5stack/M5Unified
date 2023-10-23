@@ -67,7 +67,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Atom       , 21,25, 32,26 },
 { board_t::board_M5AtomU      , 21,25, 32,26 },
 { board_t::board_M5AtomPsram  , 21,25, 32,26 },
-{ board_t::board_unknown      , 22,21, 33,32 }, // Core2,Tough
+{ board_t::board_unknown      , 22,21, 33,32 }, // Core2,Tough,StickC,CoreInk,Station,StampPico
 #endif
 };
 
@@ -150,10 +150,10 @@ static constexpr const uint8_t _pin_table_other[][2] = {
 
     int8_t* dst = _get_pin_table;
     for (auto &p : tbl) {
-      const uint8_t* tbl = (uint8_t*)p.first;
+      const uint8_t* t = (uint8_t*)p.first;
       size_t len = p.second;
-      while (tbl[0] != id && tbl[0] != board_t::board_unknown) { tbl += len; }
-      memcpy(dst, &tbl[1], len - 1);
+      while (t[0] != id && t[0] != board_t::board_unknown) { t += len; }
+      memcpy(dst, &t[1], len - 1);
       dst += len - 1;
     }
   }
@@ -495,6 +495,7 @@ for (int i = 0; i < 0x50; ++i)
   void M5Unified::_setup_i2c(board_t board)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
+
     gpio_num_t in_scl = (gpio_num_t)getPin(pin_name_t::in_i2c_scl);
     gpio_num_t in_sda = (gpio_num_t)getPin(pin_name_t::in_i2c_sda);
     gpio_num_t ex_scl = (gpio_num_t)getPin(pin_name_t::ex_i2c_scl);
