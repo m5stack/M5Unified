@@ -524,7 +524,6 @@ namespace m5
     {
     case board_t::board_M5StackCoreS3:
       {
-        static constexpr const uint32_t port0_bitmask = 0b00100000; // USB OTG EN
         static constexpr const uint8_t reg = 0x02;
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & _core_s3_usb_en;
       }
