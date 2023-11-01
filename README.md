@@ -1,6 +1,11 @@
 # M5Unified
 ### M5Stack Series unified library .
 
+
+#### How To Use
+[Please see examples/Basic/HowToUse](examples/Basic/HowToUse/HowToUse.ino)
+
+
 ## Supported framework
  - ESP-IDF
  - Arduino for ESP32
@@ -45,6 +50,10 @@
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3 / S3Lite)
  - Module Display (with M5Stack / Core2 / Tough)
  - Module RCA (with M5Stack / Core2 / Tough)
+
+## Supported device (external unit)
+ - Unit RTC
+ - Unit IMU
 
 
 # H/W infomation
