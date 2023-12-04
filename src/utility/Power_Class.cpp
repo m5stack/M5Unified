@@ -79,7 +79,16 @@ namespace m5
 
     case board_t::board_M5Capsule:
       _pwrHoldPin = GPIO_NUM_46;
-      _batAdc = (adc1_channel_t) ADC1_GPIO6_CHANNEL;
+      _batAdcCh = ADC1_GPIO6_CHANNEL;
+      _batAdcUnit = 1;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 2.0f;
+      break;
+
+    case board_t::board_M5AirQ:
+      _pwrHoldPin = GPIO_NUM_46;
+      _batAdcCh = ADC2_GPIO14_CHANNEL;
+      _batAdcUnit = 2;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -88,7 +97,8 @@ namespace m5
       _pwrHoldPin = GPIO_NUM_46;
       NON_BREAK;
     case board_t::board_M5Cardputer:
-      _batAdc = (adc1_channel_t) ADC1_GPIO10_CHANNEL;
+      _batAdcCh = ADC1_GPIO10_CHANNEL;
+      _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -108,7 +118,8 @@ namespace m5
       m5gfx::gpio_hi(TimerCam_POWER_HOLD_PIN);
       m5gfx::pinMode(TimerCam_LED_PIN, m5gfx::pin_mode_t::output);
       m5gfx::gpio_lo(TimerCam_LED_PIN);  // system LED off
-      _batAdc = (adc1_channel_t) ADC1_GPIO38_CHANNEL;
+      _batAdcCh = ADC1_GPIO38_CHANNEL;
+      _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 1.513f;
       break;
@@ -117,7 +128,8 @@ namespace m5
       _pwrHoldPin = CoreInk_POWER_HOLD_PIN;
       _wakeupPin = GPIO_NUM_27; // power button;
       _rtcIntPin = GPIO_NUM_19;
-      _batAdc = (adc1_channel_t) ADC1_GPIO35_CHANNEL;
+      _batAdcCh = ADC1_GPIO35_CHANNEL;
+      _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
       break;
@@ -126,7 +138,8 @@ namespace m5
       _pwrHoldPin = M5Paper_POWER_HOLD_PIN;
       m5gfx::pinMode(M5Paper_EXT5V_ENABLE_PIN, m5gfx::pin_mode_t::output);
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
-      _batAdc = (adc1_channel_t) ADC1_GPIO35_CHANNEL;
+      _batAdcCh = ADC1_GPIO35_CHANNEL;
+      _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -151,7 +164,8 @@ namespace m5
     case board_t::board_M5StickCPlus2:
       _pwrHoldPin = StickCPlus2_POWER_HOLD_PIN;
       m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
-      _batAdc = (adc1_channel_t) ADC1_GPIO38_CHANNEL;
+      _batAdcCh = ADC1_GPIO38_CHANNEL;
+      _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -798,7 +812,7 @@ namespace m5
 
 #if !defined (M5UNIFIED_PC_BUILD)
 
-  static std::int32_t getBatteryAdcRaw(adc1_channel_t adc_ch)
+  static std::int32_t getBatteryAdcRaw(uint8_t adc_ch, uint8_t adc_unit)
   {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
     static constexpr int BASE_VOLATAGE = 3600;
@@ -806,12 +820,22 @@ namespace m5
     static esp_adc_cal_characteristics_t* adc_chars = nullptr;
     if (adc_chars == nullptr)
     {
-      adc1_config_width(ADC_WIDTH_BIT_12);
-      adc1_config_channel_atten(adc_ch, ADC_ATTEN_DB_11);
+      if (adc_unit == 2) {
+        adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_DB_11);
+      } else {
+        adc1_config_width(ADC_WIDTH_BIT_12);
+        adc1_config_channel_atten((adc1_channel_t)adc_ch, ADC_ATTEN_DB_11);
+      }
       adc_chars = (esp_adc_cal_characteristics_t*)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-      esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
+      esp_adc_cal_characterize((adc_unit_t)adc_unit, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
     }
-    return esp_adc_cal_raw_to_voltage(adc1_get_raw(adc_ch), adc_chars);
+    int raw;
+    if (adc_unit == 2) {
+      adc2_get_raw((adc2_channel_t)adc_ch, adc_bits_width_t::ADC_WIDTH_BIT_12, &raw);
+    } else {
+      raw = adc1_get_raw((adc1_channel_t)adc_ch);
+    }
+    return esp_adc_cal_raw_to_voltage(raw, adc_chars);
 #else
     return 0;
 #endif
@@ -842,7 +866,7 @@ namespace m5
 #endif
 
     case pmic_t::pmic_adc:
-      return getBatteryAdcRaw(_batAdc) * _adc_ratio;
+      return getBatteryAdcRaw(_batAdcCh, _batAdcUnit) * _adc_ratio;
 
     default:
       return 0;
@@ -879,7 +903,7 @@ namespace m5
 #endif
 
     case pmic_t::pmic_adc:
-      mv = getBatteryAdcRaw(_batAdc) * _adc_ratio;
+      mv = getBatteryAdcRaw(_batAdcCh, _batAdcUnit) * _adc_ratio;
       break;
 
     default:

@@ -178,7 +178,8 @@ namespace m5
     std::uint8_t _rtcIntPin = 255;
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
-    adc1_channel_t _batAdc;
+    uint8_t _batAdcCh;
+    uint8_t _batAdcUnit;
 #endif
   };
 }

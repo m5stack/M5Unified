@@ -56,6 +56,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Capsule    , 10, 8 , 15,13 },
 { board_t::board_M5Dial       , 12,11 , 15,13 },
 { board_t::board_M5DinMeter   , 12,11 , 15,13 },
+{ board_t::board_M5AirQ       , 12,11 , 15,13 },
 { board_t::board_M5Cardputer  ,255,255,  1, 2 },
 { board_t::board_unknown      , 39,38 ,  1, 2 }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -651,6 +652,11 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5AirQ:
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input);
+      break;
+
     case board_t::board_M5StampS3:
     case board_t::board_M5Cardputer:
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
@@ -834,6 +840,15 @@ for (int i = 0; i < 0x50; ++i)
         if (cfg.internal_spk)
         {
           spk_cfg.pin_data_out = GPIO_NUM_3;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
+        }
+        break;
+
+      case board_t::board_M5AirQ:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_9;
           spk_cfg.buzzer = true;
           spk_cfg.magnification = 48;
         }
@@ -1071,7 +1086,6 @@ for (int i = 0; i < 0x50; ++i)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     uint_fast8_t raw_gpio32_39 = ~GPIO.in1.data;
- // uint_fast8_t raw_gpio37_40 = ~GPIO.in1.data >> 5;
     uint_fast8_t btn_bits = 0;
     switch (_board)
     {
@@ -1167,6 +1181,11 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5AtomS3Lite:
     case board_t::board_M5AtomS3U:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_41));
+      break;
+
+    case board_t::board_M5AirQ:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_0));
+      BtnB.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_8));
       break;
 
     case board_t::board_M5StampS3:
