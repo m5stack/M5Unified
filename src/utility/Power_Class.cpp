@@ -31,7 +31,7 @@ namespace m5
 {
   static constexpr const uint32_t i2c_freq = 100000;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-  static constexpr int aw9523_i2c_addr = 0x58;
+  static constexpr uint8_t aw9523_i2c_addr = 0x58;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr int CoreInk_POWER_HOLD_PIN = 12;
@@ -162,6 +162,7 @@ namespace m5
       break;
 
     case board_t::board_M5StickCPlus2:
+      _wakeupPin = GPIO_NUM_35; // power button;
       _pwrHoldPin = StickCPlus2_POWER_HOLD_PIN;
       m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
       _batAdcCh = ADC1_GPIO38_CHANNEL;
@@ -709,6 +710,7 @@ namespace m5
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
     M5.Display.sleep();
+    M5.Display.waitDisplay();
 #if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","deepSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -728,6 +730,8 @@ namespace m5
       esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
       while (m5gfx::gpio_in(wpin) == false)
       {
+        // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
+        M5.update();
         m5gfx::delay(10);
       }
     }
