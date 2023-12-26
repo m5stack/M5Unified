@@ -590,6 +590,11 @@ label_continue_sample:
 
       if (!flg_nodata)
       {
+        if (++buf_cnt >= self->_cfg.dma_buf_count)
+        {
+          buf_cnt = self->_cfg.dma_buf_count;
+        }
+
         if (self->_cfg.use_dac)
         {
   /// DAC出力は cfg.dac_zero_levelが0に設定されている場合、振幅のオフセットを動的に変更する。;
@@ -679,11 +684,6 @@ label_continue_sample:
           auto sb8 = (uint8_t*)sound_buf32;
           i2s_write(i2s_port, &sb8[write_bytes], data_bytes - write_bytes, &write_bytes, portMAX_DELAY);
           buf_cnt = self->_cfg.dma_buf_count;
-        } else {
-          if (++buf_cnt >= self->_cfg.dma_buf_count)
-          {
-            buf_cnt = self->_cfg.dma_buf_count;
-          }
         }
 #endif
       }
@@ -745,20 +745,28 @@ label_continue_sample:
   void Speaker_Class::end(void)
   {
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
-    if (!_task_running) { return; }
-    _task_running = false;
-    stop();
-    if (_task_handle)
+    if (_task_running)
     {
+      _task_running = false;
+      stop();
+      if (_task_handle)
+      {
 #if defined (SDL_h_)
-      SDL_WaitThread(_task_handle, nullptr);
-      _task_handle = nullptr;
+        SDL_WaitThread(_task_handle, nullptr);
+        _task_handle = nullptr;
 #else
-      xTaskNotifyGive(_task_handle);
-      do { vTaskDelay(1); } while (_task_handle);
+        xTaskNotifyGive(_task_handle);
+        do { vTaskDelay(1); } while (_task_handle);
 #endif
+      }
     }
     _play_channel_bits.store(0);
+    for (size_t ch = 0; ch < sound_channel_max; ++ch)
+    {
+      auto chinfo = &_ch_info[ch];
+      chinfo->wavinfo[0].clear();
+      chinfo->wavinfo[1].clear();
+    }
   }
 
   void Speaker_Class::stop(void)

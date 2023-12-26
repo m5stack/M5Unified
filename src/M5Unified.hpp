@@ -42,6 +42,7 @@ namespace m5
     sd_spi_cipo,   sd_spi_miso = sd_spi_cipo,
     sd_spi_cs,     sd_spi_ss  = sd_spi_cs,
     rgb_led,
+    power_hold,
     pin_name_max,
   };
 };
@@ -302,7 +303,6 @@ namespace m5
     /// Perform initialization process at startup.
     void begin(void)
     {
-      if (_board != m5gfx::board_t::board_unknown) { return; }
       config_t cfg;
       begin(cfg);
     }
