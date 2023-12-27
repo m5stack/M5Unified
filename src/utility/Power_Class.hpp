@@ -173,7 +173,6 @@ namespace m5
     void _timerSleep(void);
 
     float _adc_ratio = 0;
-    std::uint8_t _pwrHoldPin = 255;
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
     pmic_t _pmic = pmic_t::pmic_unknown;

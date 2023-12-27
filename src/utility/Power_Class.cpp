@@ -34,12 +34,9 @@ namespace m5
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-  static constexpr int CoreInk_POWER_HOLD_PIN = 12;
-  static constexpr int M5Paper_POWER_HOLD_PIN =  2;
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
   static constexpr int TimerCam_LED_PIN = 2;
   static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
-  static constexpr int StickCPlus2_POWER_HOLD_PIN = 4;
   static constexpr int StickCPlus2_LED_PIN = 19;
 #endif
 
@@ -73,12 +70,7 @@ namespace m5
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
 
-    case board_t::board_M5Dial:
-      _pwrHoldPin = GPIO_NUM_46;
-      break;
-
     case board_t::board_M5Capsule:
-      _pwrHoldPin = GPIO_NUM_46;
       _batAdcCh = ADC1_GPIO6_CHANNEL;
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
@@ -86,7 +78,6 @@ namespace m5
       break;
 
     case board_t::board_M5AirQ:
-      _pwrHoldPin = GPIO_NUM_46;
       _batAdcCh = ADC2_GPIO14_CHANNEL;
       _batAdcUnit = 2;
       _pmic = pmic_t::pmic_adc;
@@ -94,8 +85,6 @@ namespace m5
       break;
 
     case board_t::board_M5DinMeter:
-      _pwrHoldPin = GPIO_NUM_46;
-      NON_BREAK;
     case board_t::board_M5Cardputer:
       _batAdcCh = ADC1_GPIO10_CHANNEL;
       _batAdcUnit = 1;
@@ -113,7 +102,6 @@ namespace m5
       break;
 
     case board_t::board_M5TimerCam:
-      _pwrHoldPin = TimerCam_POWER_HOLD_PIN;
       m5gfx::pinMode(TimerCam_POWER_HOLD_PIN, m5gfx::pin_mode_t::output);
       m5gfx::gpio_hi(TimerCam_POWER_HOLD_PIN);
       m5gfx::pinMode(TimerCam_LED_PIN, m5gfx::pin_mode_t::output);
@@ -125,7 +113,6 @@ namespace m5
       break;
 
     case board_t::board_M5StackCoreInk:
-      _pwrHoldPin = CoreInk_POWER_HOLD_PIN;
       _wakeupPin = GPIO_NUM_27; // power button;
       _rtcIntPin = GPIO_NUM_19;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
@@ -135,7 +122,6 @@ namespace m5
       break;
 
     case board_t::board_M5Paper:
-      _pwrHoldPin = M5Paper_POWER_HOLD_PIN;
       m5gfx::pinMode(M5Paper_EXT5V_ENABLE_PIN, m5gfx::pin_mode_t::output);
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
@@ -163,7 +149,6 @@ namespace m5
 
     case board_t::board_M5StickCPlus2:
       _wakeupPin = GPIO_NUM_35; // power button;
-      _pwrHoldPin = StickCPlus2_POWER_HOLD_PIN;
       m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
       _batAdcCh = ADC1_GPIO38_CHANNEL;
       _batAdcUnit = 1;
@@ -362,10 +347,6 @@ namespace m5
 
 #endif
 
-    if (_pwrHoldPin < GPIO_NUM_MAX)
-    {
-      gpio_hold_en( (gpio_num_t)_pwrHoldPin );
-    }
 #endif
     return (_pmic != pmic_t::pmic_unknown);
   }
@@ -652,9 +633,10 @@ namespace m5
       }
     }
 
-    if (_pwrHoldPin < GPIO_NUM_MAX)
+    uint8_t pwrHoldPin = M5.getPin(pin_name_t::power_hold);
+    if (pwrHoldPin < GPIO_NUM_MAX)
     {
-      m5gfx::gpio_lo( _pwrHoldPin );
+      m5gfx::gpio_lo( pwrHoldPin );
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }
@@ -667,10 +649,6 @@ namespace m5
   {
 #if !defined (M5UNIFIED_PC_BUILD)
 
-    if (_pwrHoldPin < GPIO_NUM_MAX)
-    {
-      gpio_hold_dis( (gpio_num_t)_pwrHoldPin );
-    }
     M5.Display.sleep();
     M5.Display.waitDisplay();
 
