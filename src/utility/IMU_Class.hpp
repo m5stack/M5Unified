@@ -231,7 +231,7 @@ namespace m5
 
     sensor_mask_t _has_sensor_mask;
 
-    imu_t _imu = imu_t::imu_unknown;
+    imu_t _imu = imu_t::imu_none;
 
     // 機種別設定とユーザー設定の両方を反映した後のデータ取得順の値
     uint32_t _axis_order_3bit_x9;
