@@ -76,7 +76,8 @@ namespace m5
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = _cfg.stereo || _cfg.buzzer
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
-                                    : I2S_CHANNEL_FMT_ONLY_RIGHT;
+                                    : I2S_CHANNEL_FMT_ONLY_LEFT;
+                                   // ONLY RIGHTを選ぶとESP-IDF5でCoreS3内蔵スピーカの音が出ない
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.tx_desc_auto_clear   = true;
 #if I2S_DRIVER_VERSION > 1
@@ -129,7 +130,7 @@ namespace m5
   }
 #endif
 
-  static void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
+  void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
   {
     if (baseClock <= targetFreq << 1)
     { /// Nは最小2のため、基準クロックが目標クロックの2倍より小さい場合は値を確定する;
