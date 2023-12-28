@@ -76,8 +76,7 @@ namespace m5
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = _cfg.stereo || _cfg.buzzer
                                     ? I2S_CHANNEL_FMT_RIGHT_LEFT
-                                    : I2S_CHANNEL_FMT_ONLY_LEFT;
-                                   // ONLY RIGHTを選ぶとESP-IDF5でCoreS3内蔵スピーカの音が出ない
+                                    : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.tx_desc_auto_clear   = true;
 #if I2S_DRIVER_VERSION > 1
@@ -231,6 +230,13 @@ namespace m5
 #endif
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+    // モノラル設定時、同じデータを左右両方に送信する設定
+    if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
+    {
+      dev->tx_conf.tx_mono = 1;
+      dev->tx_conf.tx_chan_equal = 1;
+    }
+
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
 
