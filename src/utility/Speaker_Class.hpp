@@ -36,7 +36,7 @@ namespace m5
     int pin_ws = I2S_PIN_NO_CHANGE;
 
     /// output sampling rate (Hz)
-    uint32_t sample_rate = 64000;
+    uint32_t sample_rate = 48000;
 
     /// use stereo output
     bool stereo = false;

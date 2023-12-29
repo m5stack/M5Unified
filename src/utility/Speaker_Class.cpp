@@ -129,7 +129,7 @@ namespace m5
   }
 #endif
 
-  static void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
+  void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq)
   {
     if (baseClock <= targetFreq << 1)
     { /// Nは最小2のため、基準クロックが目標クロックの2倍より小さい場合は値を確定する;
@@ -230,6 +230,13 @@ namespace m5
 #endif
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+    // モノラル設定時、同じデータを左右両方に送信する設定
+    if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
+    {
+      dev->tx_conf.tx_mono = 1;
+      dev->tx_conf.tx_chan_equal = 1;
+    }
+
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
 
@@ -285,6 +292,7 @@ namespace m5
 
     int32_t dac_offset = std::min(INT16_MAX-255, self->_cfg.dac_zero_level << 8);
 
+    uint8_t buf_cnt = 0;
     bool flg_nodata = false;
 
     enum spk_i2s_state
@@ -307,59 +315,69 @@ namespace m5
 
     while (self->_task_running)
     {
-#if defined (SDL_h_)
       if (flg_nodata)
       {
+#if defined (SDL_h_)
         SDL_Delay(1);
         if (0 == (self->_play_channel_bits.load())) { continue; }
-      }
 #else
-      if (flg_nodata)
-      {
-        if (self->_cfg.use_dac && dac_offset)
-        { // Gradual transition of DAC output to 0;
-          flg_i2s_started = spk_i2s_mute;
-          size_t idx = 0;
-          do
-          {
-            auto tmp = (uint32_t)((1.0f + cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
-            sound_buf32[idx] = tmp | tmp << 16;
-          } while (++idx < dma_buf_len);
-          size_t write_bytes;
-          i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
-          if (self->_cfg.dac_zero_level == 0)
-          {
-            dac_offset = 0;
+        if (buf_cnt)
+        { // (no data... wait for new data)
+          --buf_cnt;
+          uint32_t wait_msec = 1 + (self->_cfg.dma_buf_len / (spk_sample_rate_x256 >> 17));
+          flg_nodata = (0 == ulTaskNotifyTake( pdFALSE, wait_msec ));
+        }
+
+        if (flg_nodata && 0 == buf_cnt)
+        {
+          if (self->_cfg.use_dac && dac_offset)
+          { // Gradual transition of DAC output to 0;
+            flg_i2s_started = spk_i2s_mute;
+            size_t idx = 0;
+            do
+            {
+              auto tmp = (uint32_t)((1.0f + cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
+              sound_buf32[idx] = tmp | tmp << 16;
+            } while (++idx < dma_buf_len);
+            size_t write_bytes;
+            i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
+            if (self->_cfg.dac_zero_level == 0)
+            {
+              dac_offset = 0;
+            }
           }
-        }
 
-        // バッファ全てゼロになるまで出力を繰返す;
-        memset(sound_buf32, 0, dma_buf_len * sizeof(uint32_t));
-        // DAC使用時は長めに設定する
-        size_t retry = (self->_cfg.dma_buf_count << self->_cfg.use_dac) + 1;
-        while (!ulTaskNotifyTake( pdTRUE, 0 ) && --retry)
-        {
-          size_t write_bytes;
-          i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
-        }
+          // バッファ全てゼロになるまで出力を繰返す;
+          memset(sound_buf32, 0, dma_buf_len * sizeof(uint32_t));
+          // DAC使用時は長めに設定する
+          size_t retry = (self->_cfg.dma_buf_count << self->_cfg.use_dac) + 1;
+          while (!ulTaskNotifyTake( pdTRUE, 0 ) && --retry)
+          {
+            size_t write_bytes;
+            i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
+          }
 
-        if (!retry)
-        {
+          if (!retry)
+          {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-          if (self->_cfg.use_dac)
-          {
-            flg_i2s_started = spk_i2s_stop;
-            i2s_stop(i2s_port);
-            i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+            if (self->_cfg.use_dac)
+            {
+              flg_i2s_started = spk_i2s_stop;
+              i2s_stop(i2s_port);
+              i2s_set_dac_mode(i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+            }
+#endif
+            // 新しいデータが届くまで待機;
+            ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
           }
-#endif
-          // 新しいデータが届くまで待機;
-          ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
         }
-      }
-      ulTaskNotifyTake( pdTRUE, 0 );
-
 #endif
+      }
+
+#if !defined (SDL_h_)
+      ulTaskNotifyTake( pdTRUE, 0 );
+#endif
+
 
     flg_nodata = true;
 
@@ -405,10 +423,11 @@ namespace m5
 
       float volume = magnification * (self->_master_volume * self->_master_volume);
 
+      size_t data_length = 0;
+
       for (size_t ch = 0; ch < sound_channel_max; ++ch)
       {
         if (0 == (self->_play_channel_bits.load() & (1 << ch))) { continue; }
-        flg_nodata = false;
 
         auto ch_info = &(self->_ch_info[ch]);
         int ch_diff = ch_info->diff;
@@ -568,13 +587,21 @@ label_continue_sample:
               ch_diff += in_rate;
             } while (++idx < dma_buf_len && ch_diff < 0);
           }
+          if (data_length < idx) { data_length = idx; }
         } while (idx < dma_buf_len);
         ch_info->diff = ch_diff;
         ch_info->index = ch_index;
       }
 
+      flg_nodata = (data_length == 0);
+
       if (!flg_nodata)
       {
+        if (++buf_cnt >= self->_cfg.dma_buf_count)
+        {
+          buf_cnt = self->_cfg.dma_buf_count;
+        }
+
         if (self->_cfg.use_dac)
         {
   /// DAC出力は cfg.dac_zero_levelが0に設定されている場合、振幅のオフセットを動的に変更する。;
@@ -609,8 +636,8 @@ label_continue_sample:
               surplus[out_stereo] = v2;
             }
             sound_buf32[idx >> 1] = v1 << 16 | v2;
-          } while (++idx < dma_buf_len);
-          if (biasing) { dac_offset -= (dac_offset * dma_buf_len) >> 15; }
+          } while (++idx < data_length);
+          if (biasing) { dac_offset -= (dac_offset * data_length) >> 15; }
         }
         else if (self->_cfg.buzzer)
         {
@@ -634,7 +661,7 @@ label_continue_sample:
               }
             } while (bit >>= 1);
             sound_buf32[idx] = bitdata;
-          } while (++idx < dma_buf_len);
+          } while (++idx < data_length);
           surplus16 = flg_nodata ? 0x8000 : tmp;
         }
         else
@@ -651,14 +678,20 @@ label_continue_sample:
             else if (v2 > INT16_MAX) { v2 = INT16_MAX; }
 
             sound_buf32[idx >> 1] = v1 << 16 | (uint16_t)v2;
-          } while (++idx < dma_buf_len);
+          } while (++idx < data_length);
         }
 
 #if defined (SDL_h_)
-        SDL_QueueAudio(1, sound_buf32, dma_buf_len * sizeof(int16_t));
+        SDL_QueueAudio(1, sound_buf32, data_length * sizeof(int16_t));
 #else
         size_t write_bytes;
-        i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int16_t) << self->_cfg.buzzer, &write_bytes, portMAX_DELAY);
+        size_t data_bytes = data_length * sizeof(int16_t) << self->_cfg.buzzer;
+        i2s_write(i2s_port, sound_buf32, data_bytes, &write_bytes, 0);
+        if (write_bytes < data_bytes) {
+          auto sb8 = (uint8_t*)sound_buf32;
+          i2s_write(i2s_port, &sb8[write_bytes], data_bytes - write_bytes, &write_bytes, portMAX_DELAY);
+          buf_cnt = self->_cfg.dma_buf_count;
+        }
 #endif
       }
     }
@@ -719,20 +752,28 @@ label_continue_sample:
   void Speaker_Class::end(void)
   {
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
-    if (!_task_running) { return; }
-    _task_running = false;
-    stop();
-    if (_task_handle)
+    if (_task_running)
     {
+      _task_running = false;
+      stop();
+      if (_task_handle)
+      {
 #if defined (SDL_h_)
-      SDL_WaitThread(_task_handle, nullptr);
-      _task_handle = nullptr;
+        SDL_WaitThread(_task_handle, nullptr);
+        _task_handle = nullptr;
 #else
-      xTaskNotifyGive(_task_handle);
-      do { vTaskDelay(1); } while (_task_handle);
+        xTaskNotifyGive(_task_handle);
+        do { vTaskDelay(1); } while (_task_handle);
 #endif
+      }
     }
     _play_channel_bits.store(0);
+    for (size_t ch = 0; ch < sound_channel_max; ++ch)
+    {
+      auto chinfo = &_ch_info[ch];
+      chinfo->wavinfo[0].clear();
+      chinfo->wavinfo[1].clear();
+    }
   }
 
   void Speaker_Class::stop(void)

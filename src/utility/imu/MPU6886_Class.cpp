@@ -244,7 +244,11 @@ namespace m5
     }
     else
     {
-      if (!readRegister(0x3A, raw_buf, 15) || ((raw_buf[0] & 1) == 0))
+      if (!readRegister(0x3A, raw_buf, 1) || ((raw_buf[0] & 1) == 0))
+      {
+        return imu_spec_none;
+      }
+      if (!readRegister(0x3B, &raw_buf[1], 14))
       {
         return imu_spec_none;
       }

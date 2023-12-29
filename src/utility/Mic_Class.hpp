@@ -13,11 +13,7 @@
 #include <freertos/task.h>
 #include <soc/i2s_struct.h>
 
-#if __has_include(<driver/i2s_std.h>)
- #include <driver/i2s_std.h>
-#else
- #include <driver/i2s.h>
-#endif
+#include <driver/i2s.h>
 
 #endif
 
@@ -67,10 +63,10 @@ namespace m5
     bool use_adc = false;
 
     /// for I2S dma_buf_len
-    size_t dma_buf_len = 256;
+    size_t dma_buf_len = 128;
 
     /// for I2S dma_buf_count
-    size_t dma_buf_count = 3;
+    size_t dma_buf_count = 8;
 
     /// background task priority
     uint8_t task_priority = 2;
@@ -171,6 +167,7 @@ namespace m5
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
 
+    int32_t _offset = 0;
     volatile bool _task_running = false;
     volatile bool _is_recording = false;
 #if defined (SDL_h_)
