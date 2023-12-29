@@ -66,23 +66,10 @@ namespace m5
   {
     if (_cfg.pin_data_in  < 0) { return ESP_FAIL; }
 
-    SAMPLE_RATE_TYPE sample_rate = _calc_rec_rate();
-/*
- ESP-IDF ver4系にて I2S_MODE_ADC_BUILT_IN を使用するとサンプリングレートが正しく反映されない不具合があったため、特殊な対策を実装している。
- ・指定するサンプリングレートの値を1/16にする
- ・I2S_MODE_ADC_BUILT_INを使用せずに初期化を行う
- ・最後にI2S0のレジスタを操作してADCモードを有効にする。
-*/
-    bool use_pdm = (_cfg.pin_bck < 0);
-    if (_cfg.use_adc) { sample_rate >>= 4; use_pdm = false;}
-//  ESP_LOGV("Mic","sampling rate:%" PRIu32 , sample_rate);
     i2s_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_config_t));
-    i2s_config.mode                 = use_pdm
-                                //  ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
-                                    ? (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | (0x1 << 6) ) // 0x1<<6 is I2S_MODE_PDM
-                                    : (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX );
-    i2s_config.sample_rate          = sample_rate;
+    i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX );
+	  i2s_config.sample_rate          = 48000; // dummy setting.
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
     i2s_config.channel_format       = _cfg.stereo ? I2S_CHANNEL_FMT_RIGHT_LEFT : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
@@ -172,18 +159,108 @@ namespace m5
     return err;
   }
 
+  // クロックディバイダー計算用関数 (実装は Speaker_Class.cpp内)
+  void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq);
+
   void Mic_Class::mic_task(void* args)
   {
     auto self = (Mic_Class*)args;
-    i2s_start(self->_cfg.i2s_port);
-
     int oversampling = self->_cfg.over_sampling;
     if (     oversampling < 1) { oversampling = 1; }
     else if (oversampling > 8) { oversampling = 8; }
-    oversampling <<= 1;
+
+    bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
+    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 80 MHz
+    uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
+    uint32_t div_a, div_b, div_n;
+
+    // CoreS3 のマイクはmclkの倍率(div_m)の値を8以上に設定しないと精度が落ちる。
+    uint32_t div_m = 8;
+
+    // PDM録音時、DSR(データサンプリングレート) 64に設定する
+    if (use_pdm) { bits = 64; div_m = 2; }
+    calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
+
+#if defined ( I2S1I_BCK_OUT_IDX )
+    auto dev = (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
+#else
+    auto dev = &I2S0;
+#endif
+
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+
+    dev->rx_conf.rx_pdm_en = use_pdm;
+    dev->rx_conf.rx_tdm_en = !use_pdm;
+    dev->rx_conf.rx_pdm2pcm_en = use_pdm;
+    dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
+    if (!use_pdm) {
+      dev->rx_conf.rx_pdm2pcm_en = 0;
+      dev->rx_conf.rx_mono = 0;
+      dev->rx_conf.rx_mono_fst_vld = 0;
+      dev->rx_tdm_ctrl.rx_tdm_tot_chan_num = self->_cfg.stereo ? 1 : 0;
+      dev->rx_conf.rx_update = 1;
+    }
+
+    dev->rx_conf1.rx_bck_div_num = div_m - 1;
+    dev->rx_clkm_conf.rx_clkm_div_num = div_n;
+
+    dev->rx_clkm_div_conf.val = 0;
+    if (div_b > (div_a >> 1)) {
+      dev->rx_clkm_div_conf.rx_clkm_div_yn1 = 1;
+      div_b = div_a - div_b;
+    }
+    int div_y = 1;
+    int div_x = 0;
+    if (div_b)
+    {
+      div_x = div_a / div_b - 1;
+      div_y = div_a % div_b;
+
+      if (div_y == 0)
+      { // div_yが0になる場合、分数成分が無視される不具合があり、
+        // 指定よりクロックが速くなってしまう。
+        // 回避策として、誤差が少なくなる設定値を導入する。
+        // これにより、誤差をクロック周期512回に1回程度のズレに抑える。;
+        div_y = 1;
+        div_b = 511;
+      }
+    }
+
+    dev->rx_clkm_div_conf.rx_clkm_div_x = div_x;
+    dev->rx_clkm_div_conf.rx_clkm_div_y = div_y;
+    dev->rx_clkm_div_conf.rx_clkm_div_z = div_b;
+
+    dev->rx_clkm_conf.rx_clk_sel = 2;   // PLL_160M_CLK
+    dev->tx_clkm_conf.clk_en = 1;
+    dev->rx_clkm_conf.rx_clk_active = 1;
+
+#else
+
+    if (use_pdm)
+    {
+      dev->pdm_conf.rx_sinc_dsr_16_en = 1; // 0=DSR64 / 1=DSR128
+      dev->pdm_conf.pdm2pcm_conv_en = 1;
+      dev->pdm_conf.rx_pdm_en = 1;
+    }
+
+    dev->sample_rate_conf.rx_bck_div_num = div_m;
+    dev->clkm_conf.clkm_div_a = div_a;
+    dev->clkm_conf.clkm_div_b = div_b;
+    dev->clkm_conf.clkm_div_num = div_n;
+    dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+
+    // If RX is not reset here, BCK polarity may be inverted.
+    dev->conf.rx_reset = 1;
+    dev->conf.rx_fifo_reset = 1;
+    dev->conf.rx_reset = 0;
+    dev->conf.rx_fifo_reset = 0;
+
+#endif
+
+    i2s_start(self->_cfg.i2s_port);
+
     int32_t gain = self->_cfg.magnification;
-    const float f_gain = (float)gain / oversampling;
-    int32_t offset = 0;
+    const float f_gain = (float)gain / (oversampling << 1);
     size_t src_idx = ~0u;
     size_t src_len = 0;
     int32_t sum_value[4] = { 0,0 };
@@ -232,40 +309,35 @@ namespace m5
           src_idx = 0;
         }
 
-        if (self->_cfg.use_adc)
+        do
         {
-          do
-          {
-#if defined (CONFIG_IDF_TARGET_ESP32)
-            sum_value[1 - (src_idx & 1)] += (src_buf[src_idx] & 0x0FFF) - 2048;
-#else
-            sum_value[src_idx & 1] += (src_buf[src_idx] & 0x0FFF) - 2048;
-#endif
-            ++src_idx;
-          } while (--os_remain && (src_idx < src_len));
-        }
-        else
-        {
-          do
-          {
-#if defined (CONFIG_IDF_TARGET_ESP32)
-            sum_value[1 - (src_idx & 1)] += src_buf[src_idx];
-#else
-            sum_value[src_idx & 1] += src_buf[src_idx];
-#endif
-            ++src_idx;
-          } while (--os_remain && (src_idx < src_len));
-        }
+          sum_value[0] += src_buf[src_idx  ];
+          sum_value[1] += src_buf[src_idx+1];
+          src_idx += 2;
+        } while (--os_remain && (src_idx < src_len));
+
         if (os_remain) { continue; }
         os_remain = oversampling;
 
+#if defined (CONFIG_IDF_TARGET_ESP32)
+        auto sv0 = sum_value[1];
+        auto sv1 = sum_value[0];
+#else
         auto sv0 = sum_value[0];
         auto sv1 = sum_value[1];
+#endif
+        if (self->_cfg.use_adc) {
+          sv0 -= 2048 * oversampling;
+          sv1 -= 2048 * oversampling;
+        }
+
         auto value_tmp = sv0 + sv1;
-        sum_value[0] += offset;
-        sum_value[1] += offset;
+        int32_t offset = self->_offset;
+        sum_value[0] = sv0 + offset;
+        sum_value[1] = sv1 + offset;
         // Automatic zero level adjustment
         offset = (32 + offset * 62 - value_tmp) >> 6;
+        self->_offset = offset;
 
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)
