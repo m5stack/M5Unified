@@ -629,6 +629,10 @@ namespace m5
 
       case pmic_t::pmic_unknown:
       default:
+        if(_rtcIntPin == GPIO_NUM_MAX && _wakeupPin < GPIO_NUM_MAX)
+        {
+          esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
+        }
         break;
       }
     }
