@@ -1,18 +1,43 @@
 # M5Unified
-### M5Stack Series unified library .
+### Arduino / ESP-IDF Library for M5Stack Series
 
+## Usage
+This library provides access to the built-in hardware of M5Stack controllers.  Library functionality is available through the `m5` namespace, and includes the following:
+
+- LCD display access, fonts, and graphical primitives (in conjunction with [M5GFX](https://github.com/M5Stack/M5GFX))
+- Touchscreen and hardware button access
+- Speaker and microphone access
+- Power and battery charging control
+- Accelerometer, gyroscope, magnetometer access
+- Real-time clock and wakeup timer access
+
+M5Unified requires M5GFX to be installed.
 
 #### How To Use
+
+`#include "M5Unified.h"`
+
+In the Arduino IDE, once the M5Unified library is installed through Library Manager, the following example programs are available under File > Examples > M5Unified > Basic.
+
+- **Displays:** A basic demonstration of printing text on each of the supported M5Stack displays is in [Displays](examples/Basic/Displays/Displays.ino).
+- **Buttons:** A demo of detecting and responding to button presses is in [Button](examples/Basic/Button/Button.ino).
+- **Touch:** A demo of detecting and reacting to touch events is in [Touch](examples/Basic/Touch/Touch.ino).
+- **Speaker:** An example of playing wave audio through built-in speakers and accessories that support audio is in [Speaker](examples/Basic/Speaker/Speaker.ino)
+- **Clock:** An example of connecting to an Internet time server over WiFi and setting the built-in clock is in [RTC][examples/Basic/Rtc/Rtc.ino).
+- **Microphone:** An example that records a short clip and plays it back through the speaker is in [Microphone](examples/Basic/Microphone/Microphone.ino).
+- **IMU:** An example demonstrating the accelerometer / gyro / magnetometer is in [IMU](examples/Basic/Imu/Imu.ino)
+- **Advanced** examples include playing audio over Bluetooth and streaming and decoding MP3 audio, and are in the [Advanced folder](examples/Advanced).
+
 [Please see examples/Basic/HowToUse](examples/Basic/HowToUse/HowToUse.ino)
 
 
-## Supported framework
+## Supported frameworks
  - ESP-IDF
  - Arduino for ESP32
 
-## Supported device (ESP32)
- - M5Stack BASIC / GRAY / GO / FIRE
- - M5Stack Core2 /Core2 v1.1 / Tough
+## Supported devices (ESP32)
+ - M5Stack Core (BASIC / GRAY / GO / FIRE)
+ - M5Stack Core2 / Core2 v1.1 / Tough
  - M5Stick C / CPlus / CPlus2
  - M5Stack CoreInk
  - M5Station
@@ -20,7 +45,7 @@
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5STAMP PICO
 
-## Supported device (ESP32S3)
+## Supported devices (ESP32S3)
  - M5Stack CoreS3
  - M5ATOMS3 / S3Lite / S3U
  - M5STAMPS3
@@ -29,34 +54,33 @@
  - M5Capsule
  - M5Cardputer
 
-## Supported device (ESP32C3)
+## Supported devices (ESP32C3)
  - M5STAMPC3 / C3U
 
-
-## Supported device (external display)
+## Supported external displays and video adapters
  - Unit LCD
  - Unit OLED
  - Unit Mini OLED
  - Unit RCA
  - Unit GLASS
  - Unit GLASS2
- - ATOM Display (with M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
- - Module Display (with M5Stack / Core2 / Tough)
- - Module RCA (with M5Stack / Core2 / Tough)
+ - ATOM Display (HDMI adapter for M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
+ - Module Display (HDMI adapter for M5Stack Core / Core2 / Tough)
+ - Module RCA (NTSC/PAL video adapter for M5Stack Core / Core2 / Tough)
 
-## Supported device (external speaker)
+## Supported external speakers and audio adapters
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - SPK HAT2 (with M5StickCPlus)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3 / S3Lite)
- - Module Display (with M5Stack / Core2 / Tough)
- - Module RCA (with M5Stack / Core2 / Tough)
+ - Module Display (Audio over HDMI for M5Stack Core / Core2 / Tough)
+ - Module RCA (M5Stack Core / Core2 / Tough)
 
-## Supported device (external unit)
+## Other supported external accessories
  - Unit RTC
  - Unit IMU
 
 
-# H/W infomation
+# Hardware information
 
 ### ESP32 GPIO list
 |                    |M5Stack<BR>BASIC<BR>GRAY           |M5Stack<BR>GO/FIRE                 |M5Stack<BR>Core2(AWS)<BR>Tough         |M5Stick<BR>C/CPlus            |M5Stick<BR>CPlus2          |M5Stack<BR>CoreInk      |M5Paper                |M5Station              |M5ATOM<BR>Lite/Matrix<BR>ECHO/U<BR>PSRAM |M5STAMP<BR>PICO     |                    |
@@ -158,7 +182,7 @@
 |GPIO48         |**CAM_D8**                       | ---                     | ---                     | ---                               | ---                      | ---                      | ---                      |GPIO48         |
 |               |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |M5ATOMS3U                | M5STAMPS3                         | M5Dial                   | M5Capsule                | M5Cardputer              |               |
 
-### AXP192 usage
+### AXP192 power management IC connections
 |              |M5Stack<BR>Core2   |M5Stack<BR>Tough   |M5Stick<BR>C    |M5Stick<BR>CPlus|  M5Station  |              |
 |:------------:|:-----------------:|:-----------------:|:--------------:|:--------------:|:-----------:|:------------:|
 |GPIO0<br>LDO0 |BUS PW EN          |BUS PW EN          |MIC VCC         |MIC VCC         |PortA1.A2 EN |GPIO0<br>LDO0 |
