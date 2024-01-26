@@ -17,23 +17,37 @@ M5Unified requires M5GFX to be installed.
 
 `#include "M5Unified.h"`
 
+#### Examples and Demonstrations
+
 In the Arduino IDE, once the M5Unified library is installed through Library Manager, the following example programs are available under File > Examples > M5Unified > Basic.
 
+- **Combined demonstration:** A demonstration exhibiting several functions in a single example is in [HowToUse](examples/Basic/HowToUse/HowToUse.ino)
+
+##### Separate examples
 - **Displays:** A basic demonstration of printing text on each of the supported M5Stack displays is in [Displays](examples/Basic/Displays/Displays.ino).
 - **Buttons:** A demo of detecting and responding to button presses is in [Button](examples/Basic/Button/Button.ino).
 - **Touch:** A demo of detecting and reacting to touch events is in [Touch](examples/Basic/Touch/Touch.ino).
 - **Speaker:** An example of playing wave audio through built-in speakers and accessories that support audio is in [Speaker](examples/Basic/Speaker/Speaker.ino)
-- **Clock:** An example of connecting to an Internet time server over WiFi and setting the built-in clock is in [RTC][examples/Basic/Rtc/Rtc.ino).
+- **Clock:** An example of connecting to an Internet time server over WiFi and setting the built-in clock is in [RTC](examples/Basic/Rtc/Rtc.ino).
 - **Microphone:** An example that records a short clip and plays it back through the speaker is in [Microphone](examples/Basic/Microphone/Microphone.ino).
 - **IMU:** An example demonstrating the accelerometer / gyro / magnetometer is in [IMU](examples/Basic/Imu/Imu.ino)
 - **Advanced** examples include playing audio over Bluetooth and streaming and decoding MP3 audio, and are in the [Advanced folder](examples/Advanced).
 
-[Please see examples/Basic/HowToUse](examples/Basic/HowToUse/HowToUse.ino)
+##### Examples needing contributors
+- **Power:** A demonstration of detecting the battery level and charging state, powering off, and entering deep sleep mode when power off is unavailable.
+- **RTC wakeup:** A demonstration of using the realtime clock to set a wakeup timer to power-on or bring the device out of sleep mode after a pre-determined number of seconds, on devices that support this.
 
+##### M5Stack hardware functionality supported by the ESP32 ecosystem
+The following functionality is built in to the ESP32 framework or available elsewhere, independent of any hardware included in the M5Stack products, and do not require
+or have explicit support in the M5Unified library.  To use these functions, simply use existing ESP32 or Arduino supporting libraries.  This list is provided for the benefit of newcomers who may be asking where the "M5Unified" support for a particular feature is found, before discovering that it's either already part of the basic ESP32 platform, or a device that is generic enough (e.g. I2C or SPI) to be fully supported with generic libraries found online, including in the Arduino library manager, that work with any platform.
+- Network access using WiFi (built into ESP32)
+- Micro SD card access (SD cards are generic SPI devices)
+- Infrared remote control transmitter
+- Color-changing LED (e.g. on Atom)
 
 ## Supported frameworks
  - ESP-IDF
- - Arduino for ESP32
+ - Arduino IDE
 
 ## Supported devices (ESP32)
  - M5Stack Core (BASIC / GRAY / GO / FIRE)
@@ -45,7 +59,7 @@ In the Arduino IDE, once the M5Unified library is installed through Library Mana
  - M5ATOM Lite / Matrix / ECHO / PSRAM / U
  - M5STAMP PICO
 
-## Supported devices (ESP32S3)
+## Supported devices (ESP32-S3)
  - M5Stack CoreS3
  - M5ATOMS3 / S3Lite / S3U
  - M5STAMPS3
@@ -54,7 +68,7 @@ In the Arduino IDE, once the M5Unified library is installed through Library Mana
  - M5Capsule
  - M5Cardputer
 
-## Supported devices (ESP32C3)
+## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
 
 ## Supported external displays and video adapters
@@ -64,16 +78,16 @@ In the Arduino IDE, once the M5Unified library is installed through Library Mana
  - Unit RCA
  - Unit GLASS
  - Unit GLASS2
- - ATOM Display (HDMI adapter for M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
- - Module Display (HDMI adapter for M5Stack Core / Core2 / Tough)
- - Module RCA (NTSC/PAL video adapter for M5Stack Core / Core2 / Tough)
+ - ATOM Display adapter (HDMI output for M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite)
+ - Module Display adapter (HDMI output for M5Stack Core / Core2 / Tough)
+ - Module RCA adapter (composite NTSC/PAL output for M5Stack Core / Core2 / Tough)
 
 ## Supported external speakers and audio adapters
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - SPK HAT2 (with M5StickCPlus)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / ATOMS3 / S3Lite)
- - Module Display (Audio over HDMI for M5Stack Core / Core2 / Tough)
- - Module RCA (M5Stack Core / Core2 / Tough)
+ - Module Display adapter (Audio over HDMI for M5Stack Core / Core2 / Tough)
+ - Module RCA adapter (M5Stack Core / Core2 / Tough)
 
 ## Other supported external accessories
  - Unit RTC
