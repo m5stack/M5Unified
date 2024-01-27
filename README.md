@@ -33,10 +33,6 @@ In the Arduino IDE, once the M5Unified library is installed through Library Mana
 - **IMU:** An example demonstrating the accelerometer / gyro / magnetometer is in [IMU](examples/Basic/Imu/Imu.ino)
 - **Advanced** examples include playing audio over Bluetooth and streaming and decoding MP3 audio, and are in the [Advanced folder](examples/Advanced).
 
-##### Examples needing contributors
-- **Power:** A demonstration of detecting the battery level and charging state, powering off, and entering deep sleep mode when power off is unavailable.
-- **RTC wakeup:** A demonstration of using the realtime clock to set a wakeup timer to power-on or bring the device out of sleep mode after a pre-determined number of seconds, on devices that support this.
-
 ##### M5Stack hardware functionality supported by the ESP32 ecosystem
 The following functionality is built in to the ESP32 framework or available elsewhere, independent of any hardware included in the M5Stack products, and do not require
 or have explicit support in the M5Unified library.  To use these functions, simply use existing ESP32 or Arduino supporting libraries.  This list is provided for the benefit of newcomers who may be asking where the "M5Unified" support for a particular feature is found, before discovering that it's either already part of the basic ESP32 platform, or a device that is generic enough (e.g. I2C or SPI) to be fully supported with generic libraries found online, including in the Arduino library manager, that work with any platform.
@@ -44,6 +40,11 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 - Micro SD card access (SD cards are generic SPI devices)
 - Infrared remote control transmitter
 - Color-changing LED (e.g. on Atom)
+
+##### Desirable examples worthy of future contribution
+- **Power:** A demonstration of detecting the battery level and charging state, powering off, and entering deep sleep mode when power off is unavailable.
+- **Battery lifespan management:** An example/utility sketch that runs the battery down to an optimum storage percentage (~40%) before powering off as fully as possible, and as a separate function, charges it to a lifespan-preserving 75% maximum, on each M5Stack device where the power management hardware supports this.
+- **RTC wakeup:** A demonstration of using the realtime clock to set a wakeup timer to power-on, or bring the device out of sleep mode after a pre-determined number of seconds, on devices that support this.
 
 ## Supported frameworks
  - ESP-IDF
