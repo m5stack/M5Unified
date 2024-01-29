@@ -81,17 +81,21 @@ namespace m5
       inline bool wasReleased(void) const { return (state & (touch_state_t::mask_touch | touch_state_t::mask_change)) == touch_state_t::mask_change; };
       inline bool isHolding(void) const { return (state & (touch_state_t::mask_touch | touch_state_t::mask_holding)) == (touch_state_t::mask_touch | touch_state_t::mask_holding); }
       inline bool wasHold(void) const { return state == touch_state_t::hold_begin; }
+      inline bool isFlicking(void) const { return (state & touch_state_t::drag) == touch_state_t::flick; }
+      inline bool wasFlicked(void) const { return state == touch_state_t::flick_begin; }
+      inline bool isDragging(void) const { return (state & touch_state_t::drag) == touch_state_t::drag; }
+      inline bool wasDragged(void) const { return state == touch_state_t::drag_begin; }
     };
 
     /// Get the current number of touchpoints.
     /// @return number of touchpoints.
-    inline std::uint8_t getCount(void) const { return _touch_count; }
+    inline std::uint8_t getCount(void) const { return _detail_count; }
 
     /// 
     inline const touch_detail_t& getDetail(std::size_t index = 0) const { return _touch_detail[_touch_raw[index].id < TOUCH_MAX_POINTS ? _touch_raw[index].id : 0]; }
 
 
-    inline const m5gfx::touch_point_t& getTouchPointRaw(std::size_t index = 0) const { return _touch_raw[index < _touch_count ? index : 0]; }
+    inline const m5gfx::touch_point_t& getTouchPointRaw(std::size_t index = 0) const { return _touch_raw[index < _detail_count ? index : 0]; }
 
     void setHoldThresh(std::uint16_t msec) { _msecHold = msec; }
 
@@ -110,7 +114,7 @@ namespace m5
     m5gfx::LGFX_Device* _gfx = nullptr;
     touch_detail_t _touch_detail[TOUCH_MAX_POINTS];
     m5gfx::touch_point_t _touch_raw[TOUCH_MAX_POINTS];
-    std::uint8_t _touch_count;
+    std::uint8_t _detail_count;
 
     bool update_detail(touch_detail_t* dt, std::uint32_t msec, bool pressed, m5gfx::touch_point_t* tp);
     bool update_detail(touch_detail_t* dt, std::uint32_t msec);
