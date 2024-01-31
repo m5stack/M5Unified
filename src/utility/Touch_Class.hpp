@@ -81,10 +81,12 @@ namespace m5
       inline bool wasReleased(void) const { return (state & (touch_state_t::mask_touch | touch_state_t::mask_change)) == touch_state_t::mask_change; };
       inline bool isHolding(void) const { return (state & (touch_state_t::mask_touch | touch_state_t::mask_holding)) == (touch_state_t::mask_touch | touch_state_t::mask_holding); }
       inline bool wasHold(void) const { return state == touch_state_t::hold_begin; }
+      inline bool wasFlickStart(void) const { return state == touch_state_t::flick_begin; }
       inline bool isFlicking(void) const { return (state & touch_state_t::drag) == touch_state_t::flick; }
-      inline bool wasFlicked(void) const { return state == touch_state_t::flick_begin; }
+      inline bool wasFlicked(void) const { return state == touch_state_t::flick_end; }
+      inline bool wasDragStart(void) const { return state == touch_state_t::drag_begin; }
       inline bool isDragging(void) const { return (state & touch_state_t::drag) == touch_state_t::drag; }
-      inline bool wasDragged(void) const { return state == touch_state_t::drag_begin; }
+      inline bool wasDragged(void) const { return state == touch_state_t::drag_end; }
     };
 
     /// Get the current number of touchpoints.
