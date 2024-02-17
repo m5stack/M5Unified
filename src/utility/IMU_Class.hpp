@@ -81,6 +81,7 @@ namespace m5
 
     bool begin(I2C_Class* i2c = nullptr, board_t board = board_t::board_unknown);
     bool init(I2C_Class* i2c = nullptr) { return begin(i2c); }
+    bool sleep(void);
 
     sensor_mask_t update(void);
 

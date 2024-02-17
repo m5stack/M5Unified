@@ -88,6 +88,7 @@ namespace m5
     imu_spec_t getImuRawData(imu_raw_data_t* data) const override;
     void getConvertParam(imu_convert_param_t* param) const;
     bool getTempAdc(int16_t* adc) const override;
+    bool sleep(void) override;
 /*
     bool getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const override;
     bool getGyroAdc(std::int16_t* gx, std::int16_t* gy, std::int16_t* gz) const override;
