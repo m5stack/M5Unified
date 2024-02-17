@@ -268,6 +268,11 @@ namespace m5
 
         , 0x35, 0xA2    // reg35h Enable RTC BAT charge 
         , 0x36, 0x0C    // reg36h 128ms power on, 4s power off
+        , 0x40, 0x00    // reg40h IRQ 1, all disable
+        , 0x41, 0x00    // reg41h IRQ 2, all disable
+        , 0x42, 0x03    // reg42h IRQ 3, power key irq enable
+        , 0x43, 0x00    // reg43h IRQ 4, all disable
+        , 0x44, 0x00    // reg44h IRQ 5, all disable
         , 0x82, 0xFF    // reg82h ADC all on
         , 0x83, 0x80    // reg83h ADC temp on
         , 0x84, 0x32    // reg84h ADC 25Hz
@@ -661,15 +666,6 @@ namespace m5
     {
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      /// RTCタイマーは指定時間になるとGPIO35をLOWにすることで通知を行うが、;
-      /// 回路設計の問題でINTピン(GPIO35)がプルアップされておらず、そのままでは利用できない。;
-      /// そのため、同じくGPIO35に接続されているMPU6886のINTピンを利用してプルアップを実施する。;
-      /// IMUの種類がSH200Qの個体では対応できない (MPU6886が必要);
-      m5gfx::pinMode(GPIO_NUM_35, m5gfx::pin_mode_t::input);
-      for (int i = 1; i >= 0; --i) {
-        M5.Imu.setINTPinActiveLogic(i);
-        if (m5gfx::gpio_in(GPIO_NUM_35)) { break; }
-      }
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
       esp_deep_sleep_start();
       return;
