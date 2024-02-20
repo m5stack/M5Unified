@@ -487,7 +487,7 @@ for (int i = 0; i < 0x50; ++i)
       board = ((const board_t[])
         { //                                                      ↓StampS3 pattern↓
           board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
-          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_M5StampS3, board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
+          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown  , board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
           board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
           board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
         })[result&15];
