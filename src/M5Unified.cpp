@@ -46,12 +46,14 @@ void __attribute((weak)) adc_power_acquire(void)
 
 namespace m5
 {
+int8_t M5Unified::_get_pin_table[pin_name_max];
+
 #if defined (M5UNIFIED_PC_BUILD)
   void M5Unified::_setup_pinmap(board_t id)
-  {}
+  {
+    std::fill(_get_pin_table, _get_pin_table + pin_name_max, 255);
+  }
 #else
-
-int8_t M5Unified::_get_pin_table[pin_name_max];
 // ピン番号テーブル。 unknownをテーブルの最後に配置する。該当が無い場合はunknownの値が使用される。
 static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
                             // In CL,DA, EX CL,DA
