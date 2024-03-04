@@ -38,7 +38,8 @@ namespace m5
     , REG_GYRO_CONFIG   , 0x18  // GYRO_CONFIG(0x1B) : +-2000dps
     , REG_CONFIG        , 0x01  // CONFIG(0x1A)
     , REG_SMPLRT_DIV    , 0x03  // SMPLRT_DIV(0x19)
-    , REG_INT_ENABLE    , 0x00  // INT_ENABLE(0x38)
+    , REG_INT_PIN_CFG   , 0xC0  // INT_PIN_CFG(0x37) : active low, open-drain
+    , REG_INT_ENABLE    , 0x00  // INT_ENABLE(0x38) : all disable
     , REG_ACCEL_CONFIG2 , 0x00  // ACCEL_CONFIG 2(0x1D)
     , REG_USER_CTRL     , 0x00  // USER_CTRL(0x6A)
     , REG_FIFO_EN       , 0x00  // FIFO_EN(0x23)
@@ -65,6 +66,11 @@ namespace m5
 // enableFIFO(Fodr::ODR_500Hz);
 
     return (imu_spec_t)(imu_spec_accel | imu_spec_gyro);
+  }
+
+  bool MPU6886_Class::sleep(void)
+  {
+    return writeRegister8(REG_PWR_MGMT_1, 0x40u);
   }
 
   bool MPU6886_Class::setGyroAdcOffset(std::int16_t gx, std::int16_t gy, std::int16_t gz)

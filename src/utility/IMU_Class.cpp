@@ -156,6 +156,19 @@ namespace m5
     return true;
   }
 
+  bool IMU_Class::sleep(void)
+  {
+    bool res = false;
+    for (size_t i = 0; i < 2; ++i)
+    {
+      if (_imu_instance[i].get())
+      {
+        res = _imu_instance[i]->sleep() || res;
+      }
+    }
+    return res;
+  }
+
   void IMU_Class::_update_convert_param(void)
   {
     if (_imu_instance[0]) { _imu_instance[0]->getConvertParam(&_convert_param); }

@@ -9,19 +9,19 @@ namespace m5
   {
     if (msec - _last_msec <= TOUCH_MIN_UPDATE_MSEC)  /// Avoid high frequency updates
     {
-      if (_touch_count == 0) { return; }
+      if (_detail_count == 0) { return; }
       std::size_t count = 0;
       for (std::size_t i = 0; i < TOUCH_MAX_POINTS; ++i)
       {
         count += update_detail(&_touch_detail[i], msec);
       }
-      _touch_count = count;
+      _detail_count = count;
       return;
     }
 
     _last_msec = msec;
     std::size_t count = _gfx->getTouchRaw(_touch_raw, TOUCH_MAX_POINTS);
-    if (!(count || _touch_count)) { return; }
+    if (!(count || _detail_count)) { return; }
 
     uint32_t updated_id = 0;
     if (count)
@@ -49,7 +49,7 @@ namespace m5
         }
       }
     }
-    _touch_count = count;
+    _detail_count = count;
   }
 
   bool Touch_Class::update_detail(touch_detail_t* det, std::uint32_t msec, bool pressed, m5gfx::touch_point_t* tp)
