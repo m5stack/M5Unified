@@ -315,6 +315,7 @@ namespace m5
 
       case board_t::board_M5Station:
         {
+          Axp192.setLDO2(3300);
           static constexpr std::uint8_t reg92h_96h[] = 
           { 0x00 // GPIO1 NMOS OpenDrain
           , 0x00 // GPIO2 NMOS OpenDrain
