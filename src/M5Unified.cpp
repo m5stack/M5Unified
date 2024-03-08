@@ -493,7 +493,7 @@ for (int i = 0; i < 0x50; ++i)
           board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
           board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
         })[result&15];
-      if (board == board_t::board_M5StampS3) {
+      if ((result & 3) == 2) { // StampS3 pattern
         if ((result >> 3) == 0b110) { board = board_t::board_M5Capsule; }
       }
       for (auto &backup : pin_backup) {
