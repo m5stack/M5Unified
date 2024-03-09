@@ -12,6 +12,7 @@
 #include <sdkconfig.h>
 
 #include <esp_adc_cal.h>
+#include <soc/soc_caps.h>
 #include <soc/adc_channel.h>
 
 #if __has_include (<esp_idf_version.h>)
@@ -635,10 +636,12 @@ namespace m5
 
       case pmic_t::pmic_unknown:
       default:
+#if SOC_PM_SUPPORT_EXT_WAKEUP
         if(_rtcIntPin == GPIO_NUM_MAX && _wakeupPin < GPIO_NUM_MAX)
         {
           esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
         }
+#endif
         break;
       }
     }
