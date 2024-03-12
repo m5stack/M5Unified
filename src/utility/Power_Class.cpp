@@ -325,6 +325,8 @@ namespace m5
           , 0x00 // GPIO3 low, GPIO4 low
           };
           Axp192.writeRegister(0x92, reg92h_96h, sizeof(reg92h_96h));
+          Ina3221[0].begin();
+          Ina3221[1].begin();
         }
         break;
 
@@ -347,7 +349,7 @@ namespace m5
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
 
       // for Core2 v1.1 (AXP2101+INA3221)
-      if (Ina3221.begin())
+      if (Ina3221[0].begin())
       {}
     }
 
@@ -418,7 +420,7 @@ namespace m5
       {
         bool cancel = false;
         if (_pmic == pmic_axp2101) {
-          cancel = (enable && (Ina3221.getShuntVoltage(0) < 0.0f || Ina3221.getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
+          cancel = (enable && (Ina3221[0].getShuntVoltage(0) < 0.0f || Ina3221[0].getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
           if (!cancel) {
             Axp2101.setBLDO2(enable * 3300);
             break;
@@ -986,7 +988,7 @@ namespace m5
 #else
 
       // for Core2 v1.1
-      return 1000.0f * Ina3221.getCurrent(0); // 0=CH1. CH1=BAT Current.
+      return 1000.0f * Ina3221[0].getCurrent(0); // 0=CH1. CH1=BAT Current.
 
 #endif
 
