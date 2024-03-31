@@ -697,7 +697,7 @@ namespace m5
     M5.Display.waitDisplay();
 #if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
 #else
 
@@ -736,7 +736,7 @@ namespace m5
   {
 #if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","lightSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
 #else
 
@@ -837,7 +837,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:

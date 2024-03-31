@@ -68,6 +68,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+{ board_t::board_unknown      , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  }, // NanoC6
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
 { board_t::board_M5Paper      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_32,GPIO_NUM_25 },
@@ -86,6 +88,7 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 { board_t::board_M5Dial       , GPIO_NUM_1 ,GPIO_NUM_2 , 255        ,255         },
 { board_t::board_M5DinMeter   , GPIO_NUM_1 ,GPIO_NUM_2 , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
@@ -100,6 +103,7 @@ static constexpr const uint8_t _pin_table_port_de[][5] = {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 { board_t::board_M5StackCoreS3, 14,10, 18,17 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_5 ,GPIO_NUM_13 },
 { board_t::board_M5StackCore2 , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_27,GPIO_NUM_19 },
@@ -115,6 +119,7 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5Capsule    , GPIO_NUM_14, GPIO_NUM_12, GPIO_NUM_39, GPIO_NUM_11 },
 { board_t::board_M5Cardputer  , GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, GPIO_NUM_4  },
@@ -134,6 +139,8 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_M5StampC3    , GPIO_NUM_2  },
 { board_t::board_M5StampC3U   , GPIO_NUM_2  },
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+{ board_t::board_M5NanoC6     , GPIO_NUM_20 },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
@@ -155,6 +162,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 { board_t::board_M5DinMeter    , GPIO_NUM_46 },
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 
 { board_t::board_M5StickCPlus2 , GPIO_NUM_4  },
@@ -517,6 +525,12 @@ for (int i = 0; i < 0x50; ++i)
       *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    if (board == board_t::board_unknown)
+    { // NanoC6      {
+      board = board_t::board_M5NanoC6;
+    }
+
 #endif
 
     return board;
@@ -532,7 +546,7 @@ for (int i = 0; i < 0x50; ++i)
     gpio_num_t ex_sda = (gpio_num_t)getPin(pin_name_t::ex_i2c_sda);
 
     i2c_port_t ex_port = I2C_NUM_0;
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if SOC_I2C_NUM == 1
     i2c_port_t in_port = I2C_NUM_0;
 #else
     i2c_port_t in_port = I2C_NUM_1;
@@ -671,6 +685,12 @@ for (int i = 0; i < 0x50; ++i)
       break;
 
     case board_t::board_M5StampC3U:
+      m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input_pullup);
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    case board_t::board_M5NanoC6:
       m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input_pullup);
       break;
 
@@ -1258,6 +1278,18 @@ for (int i = 0; i < 0x50; ++i)
       break;
 
     case board_t::board_M5StampC3U:
+      BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_9));
+      break;
+
+    default:
+      break;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    switch (_board)
+    {
+    case board_t::board_M5NanoC6:
       BtnA.setRawState(ms, !m5gfx::gpio_in(GPIO_NUM_9));
       break;
 

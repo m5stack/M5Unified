@@ -229,7 +229,7 @@ namespace m5
     auto dev = &I2S0;
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {

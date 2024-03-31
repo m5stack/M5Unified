@@ -187,7 +187,7 @@ namespace m5
     auto dev = &I2S0;
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
