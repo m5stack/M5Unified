@@ -97,6 +97,8 @@ namespace m5
     /// not for use.
     static const char* pathToFileName(const char * path);
 
+    void flush(void) { fflush(stdout); }
+
   private:
     M5GFX* _display = nullptr;
 

@@ -34,6 +34,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+  static constexpr int M5NanoC6_LED_PIN = 7;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
   static constexpr int TimerCam_LED_PIN = 2;
@@ -544,6 +547,21 @@ namespace m5
   void Power_Class::setLed(uint8_t brightness)
   {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    static std::unique_ptr<m5gfx::Light_PWM> led;
+
+    if (led.get() == nullptr)
+    {
+      led.reset(new m5gfx::Light_PWM());
+      auto cfg = led->config();
+      cfg.invert = false;
+      cfg.pwm_channel = 7;
+      cfg.pin_bl = M5NanoC6_LED_PIN;
+      led->config(cfg);
+      led->init(brightness);
+    }
+    led->setBrightness(brightness);
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
@@ -872,7 +890,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -910,7 +928,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -938,7 +956,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -966,7 +984,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1003,7 +1021,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1032,7 +1050,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1060,7 +1078,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
