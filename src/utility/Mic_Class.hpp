@@ -27,6 +27,13 @@ namespace m5
 {
   class M5Unified;
 
+  enum input_channel_t : uint8_t
+  {
+    input_only_right = 0,
+    input_only_left = 1,
+    input_stereo = 2,
+  };
+
   struct mic_config_t
   {
     /// i2s_data_in (for mic)
@@ -44,11 +51,16 @@ namespace m5
     /// input sampling rate (Hz)
     uint32_t sample_rate = 16000;
 
-    /// use stereo output
-    bool stereo = false;
-
-    /// <<This value is no longer used>>
-    int input_offset = 0;
+    union
+    {
+      struct
+      {
+        uint8_t left_channel : 1;
+        uint8_t stereo : 1;
+        uint8_t reserve : 6;
+      };
+      input_channel_t input_channel = input_only_right;
+    };
 
     /// Sampling times of obtain the average value
     uint8_t over_sampling = 2;

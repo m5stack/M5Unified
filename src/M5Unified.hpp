@@ -366,6 +366,8 @@ namespace m5
       // Speaker selection is performed after the Module Display has been determined.
       _begin_spk(cfg);
 
+      update();
+
       bool port_a_used = _begin_rtc_imu(cfg);
       (void)port_a_used;
 
@@ -513,8 +515,6 @@ namespace m5
       {
         Display.setBrightness(brightness);
       }
-
-      update();
     }
 
   private:

@@ -72,6 +72,9 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
 
+## Supported devices (ESP32-C6)
+ - M5NanoC6
+
 ## Supported external displays and video adapters
  - Unit LCD
  - Unit OLED
@@ -367,14 +370,16 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  <TR>
   <TH></TH>
   <TH>ATOMS3<BR>/S3Lite</TH>
+  <TH>NanoC6</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>
-  <TD><IMG src="docs/img/pin_def_atom_s3_porta.svg" title="G,V,2,1"></TD>
+  <TD colspan="2"><IMG src="docs/img/pin_def_atom_s3_porta.svg" title="G,V,2,1"></TD>
  </TR>
  <TR align="center">
   <TD>Bus</TD>
   <TD><IMG src="docs/img/pin_def_atom_s3.svg"></TD>
+  <TD></TD>
  </TR>
 </TABLE>
 

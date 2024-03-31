@@ -71,7 +71,7 @@ namespace m5
     i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX );
 	  i2s_config.sample_rate          = 48000; // dummy setting.
     i2s_config.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
-    i2s_config.channel_format       = _cfg.stereo ? I2S_CHANNEL_FMT_RIGHT_LEFT : I2S_CHANNEL_FMT_ONLY_RIGHT;
+    i2s_config.channel_format       = _cfg.stereo ? I2S_CHANNEL_FMT_RIGHT_LEFT : _cfg.left_channel ? I2S_CHANNEL_FMT_ONLY_LEFT : I2S_CHANNEL_FMT_ONLY_RIGHT;
     i2s_config.communication_format = (i2s_comm_format_t)( COMM_FORMAT_I2S );
     i2s_config.dma_buf_count        = _cfg.dma_buf_count;
     i2s_config.dma_buf_len          = _cfg.dma_buf_len;
@@ -187,14 +187,15 @@ namespace m5
     auto dev = &I2S0;
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
+#if defined (I2S_RX_PDM2PCM_EN)
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
+#endif
     if (!use_pdm) {
-      dev->rx_conf.rx_pdm2pcm_en = 0;
       dev->rx_conf.rx_mono = 0;
       dev->rx_conf.rx_mono_fst_vld = 0;
       dev->rx_tdm_ctrl.rx_tdm_tot_chan_num = self->_cfg.stereo ? 1 : 0;

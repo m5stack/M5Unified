@@ -86,6 +86,12 @@ namespace m5
         {
           *(static_cast<m5gfx::touch_point_t*>(det)) = *tp;
           tm = touch_state_t::touch_begin;
+
+          if (msec - det->base_msec > _msecHold
+           || abs(det->base_x - tp->x) > ((_flickThresh+1) << 2) // TODO:検討、タッチ座標が大きくずれた場合にカウントをクリアするか否か
+           || abs(det->base_y - tp->y) > ((_flickThresh+1) << 2)
+           )
+          { det->click_count = 0; }
           det->base_msec = msec;
           det->base_x = tp->x;
           det->base_y = tp->y;
@@ -103,6 +109,12 @@ namespace m5
       tm = (tm & touch_state_t::mask_touch)
          ? static_cast<touch_state_t>((tm | touch_state_t::mask_change) & ~touch_state_t::mask_touch)
          : touch_state_t::none;
+
+      if (tm == touch_state_t::touch_end) {
+        // 連続タップ判定のためにbase_msecを更新
+        det->base_msec = msec;
+        det->click_count++;
+      }
     }
     det->state = tm;
     return true;

@@ -288,6 +288,10 @@ void setup(void)
   case m5::board_t::board_M5StampC3U:
     name = "StampC3U";
     break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+  case m5::board_t::board_M5NanoC6:
+    name = "NanoC6";
+    break;
 #else
   case m5::board_t::board_M5Stack:
     name = "Stack";

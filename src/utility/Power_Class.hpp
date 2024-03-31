@@ -164,7 +164,8 @@ namespace m5
     AXP2101_Class Axp2101;
     AXP192_Class Axp192;
     IP5306_Class Ip5306;
-    INA3221_Class Ina3221;
+    // secondery INA3221 for M5Station.
+    INA3221_Class Ina3221[2] = { { 0x40 }, { 0x41 } };
 
 #endif
 

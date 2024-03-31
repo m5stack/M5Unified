@@ -12,6 +12,7 @@
 #include <sdkconfig.h>
 
 #include <esp_adc_cal.h>
+#include <soc/soc_caps.h>
 #include <soc/adc_channel.h>
 
 #if __has_include (<esp_idf_version.h>)
@@ -32,6 +33,9 @@ namespace m5
   static constexpr const uint32_t i2c_freq = 100000;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+  static constexpr int M5NanoC6_LED_PIN = 7;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static constexpr int TimerCam_POWER_HOLD_PIN = 33;
@@ -315,6 +319,7 @@ namespace m5
 
       case board_t::board_M5Station:
         {
+          Axp192.setLDO2(3300);
           static constexpr std::uint8_t reg92h_96h[] = 
           { 0x00 // GPIO1 NMOS OpenDrain
           , 0x00 // GPIO2 NMOS OpenDrain
@@ -323,6 +328,8 @@ namespace m5
           , 0x00 // GPIO3 low, GPIO4 low
           };
           Axp192.writeRegister(0x92, reg92h_96h, sizeof(reg92h_96h));
+          Ina3221[0].begin();
+          Ina3221[1].begin();
         }
         break;
 
@@ -345,7 +352,7 @@ namespace m5
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
 
       // for Core2 v1.1 (AXP2101+INA3221)
-      if (Ina3221.begin())
+      if (Ina3221[0].begin())
       {}
     }
 
@@ -416,7 +423,7 @@ namespace m5
       {
         bool cancel = false;
         if (_pmic == pmic_axp2101) {
-          cancel = (enable && (Ina3221.getShuntVoltage(0) < 0.0f || Ina3221.getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
+          cancel = (enable && (Ina3221[0].getShuntVoltage(0) < 0.0f || Ina3221[0].getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
           if (!cancel) {
             Axp2101.setBLDO2(enable * 3300);
             break;
@@ -540,6 +547,21 @@ namespace m5
   void Power_Class::setLed(uint8_t brightness)
   {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    static std::unique_ptr<m5gfx::Light_PWM> led;
+
+    if (led.get() == nullptr)
+    {
+      led.reset(new m5gfx::Light_PWM());
+      auto cfg = led->config();
+      cfg.invert = false;
+      cfg.pwm_channel = 7;
+      cfg.pin_bl = M5NanoC6_LED_PIN;
+      led->config(cfg);
+      led->init(brightness);
+    }
+    led->setBrightness(brightness);
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
@@ -634,10 +656,12 @@ namespace m5
 
       case pmic_t::pmic_unknown:
       default:
+#if SOC_PM_SUPPORT_EXT_WAKEUP
         if(_rtcIntPin == GPIO_NUM_MAX && _wakeupPin < GPIO_NUM_MAX)
         {
           esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
         }
+#endif
         break;
       }
     }
@@ -691,7 +715,7 @@ namespace m5
     M5.Display.waitDisplay();
 #if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
 #else
 
@@ -730,7 +754,7 @@ namespace m5
   {
 #if !defined (M5UNIFIED_PC_BUILD)
     ESP_LOGD("Power","lightSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
 #else
 
@@ -831,7 +855,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -866,7 +890,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -904,7 +928,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -932,7 +956,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -960,7 +984,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -982,7 +1006,7 @@ namespace m5
 #else
 
       // for Core2 v1.1
-      return 1000.0f * Ina3221.getCurrent(0); // 0=CH1. CH1=BAT Current.
+      return 1000.0f * Ina3221[0].getCurrent(0); // 0=CH1. CH1=BAT Current.
 
 #endif
 
@@ -997,7 +1021,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1026,7 +1050,7 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1054,7 +1078,7 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
