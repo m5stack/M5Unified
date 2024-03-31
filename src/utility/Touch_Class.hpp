@@ -10,7 +10,7 @@
 
 namespace m5
 {
-  enum touch_state_t
+  enum touch_state_t : uint8_t
   { none         = 0b0000
   , touch        = 0b0001
   , touch_end    = 0b0010
@@ -69,6 +69,7 @@ namespace m5
 
       std::uint32_t base_msec;
       touch_state_t state = touch_state_t::none;
+      std::uint8_t click_count = 0;
 
       inline int deltaX(void) const { return x - prev_x; }
       inline int deltaY(void) const { return y - prev_y; }
@@ -87,6 +88,7 @@ namespace m5
       inline bool wasDragStart(void) const { return state == touch_state_t::drag_begin; }
       inline bool isDragging(void) const { return (state & touch_state_t::drag) == touch_state_t::drag; }
       inline bool wasDragged(void) const { return state == touch_state_t::drag_end; }
+      inline std::uint8_t getClickCount(void) const { return click_count; }
     };
 
     /// Get the current number of touchpoints.
