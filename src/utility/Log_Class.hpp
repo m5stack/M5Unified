@@ -94,6 +94,9 @@ namespace m5
     /// @param target target display.
     void setDisplay(M5GFX& target) { setDisplay(&target); }
 
+
+    void dump(const void* addr, uint32_t len, esp_log_level_t level = esp_log_level_t::ESP_LOG_NONE);
+
     /// not for use.
     static const char* pathToFileName(const char * path);
 

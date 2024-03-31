@@ -125,4 +125,38 @@ namespace m5
   {
     _display = target;
   }
+
+  void Log_Class::dump(const void* a, uint32_t len, esp_log_level_t level)
+  {
+    len = (len + 3) >> 2;
+    if (!len) return;
+    auto addr = reinterpret_cast<uint32_t*>((uintptr_t)a & ~0x03);
+    char buf[84];
+    do {
+      int pos = snprintf(buf, sizeof(buf), "0x%08x|", (uintptr_t)addr);
+      // printf("0x%08x|", (uintptr_t)addr);
+      int l = len > 4 ? 4 : len;
+      for (int i = 0; i < l; ++i) {
+        unsigned int tmp = addr[i];
+        pos += snprintf(&buf[pos], (int)sizeof(buf) - pos, " %02x %02x %02x %02x ", tmp&0xFF, (tmp>>8)&0xFF, (tmp>>16)&0xFF,(tmp>>24));
+      }
+      for (int i = l; i < 4; ++i) {
+        pos += snprintf(&buf[pos], (int)sizeof(buf) - pos, " __ __ __ __ ");
+      }
+      buf[pos] = '|';
+      ++pos;
+      for (int i = 0; i < l; ++i) {
+        unsigned int tmp = addr[i];
+        pos += snprintf(&buf[pos], (int)sizeof(buf) - pos, "%c%c%c%c" 
+          , std::max(' ', (char)tmp)
+          , std::max(' ', (char)(tmp>>8))
+          , std::max(' ', (char)(tmp>>16))
+          , std::max(' ', (char)(tmp>>24)));
+      }
+      buf[pos] = 0;
+      operator()(level, buf);
+      addr += l;
+      len -= l;
+    } while (len);
+  }
 }
