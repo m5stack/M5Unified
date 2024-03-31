@@ -373,8 +373,8 @@ or have explicit support in the M5Unified library.  To use these functions, simp
   <TH>NanoC6</TH>
  </TR>
  <TR align="center">
-  <TD colspan="2">PortA</TD>
-  <TD><IMG src="docs/img/pin_def_atom_s3_porta.svg" title="G,V,2,1"></TD>
+  <TD>PortA</TD>
+  <TD colspan="2"><IMG src="docs/img/pin_def_atom_s3_porta.svg" title="G,V,2,1"></TD>
  </TR>
  <TR align="center">
   <TD>Bus</TD>
