@@ -75,35 +75,15 @@ namespace m5
 
     if (_log_level[log_target_serial] >= level)
     {
+      const char* suf = (suffix && _suffix[log_target_serial]) ? _suffix[log_target_serial] : "";
+
       if (level != ESP_LOG_NONE && _use_color[log_target_serial])
       {
-#if defined(M5UNIFIED_PC_BUILD)
-        ::printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
-#elif defined ( ARDUINO )
-        log_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
-#else
-        esp_rom_printf("\033[0;%dm%s\033[0m", log_colors_serial[level], str);
-#endif
+        ::printf("\033[0;%dm%s\033[0m%s", log_colors_serial[level], str, suf);
       }
       else
       {
-#if defined(M5UNIFIED_PC_BUILD)
-        std::cout << str;
-#elif defined ( ARDUINO )
-        log_printf(str);
-#else
-        esp_rom_printf(str);
-#endif
-      }
-      if (suffix && _suffix[log_target_serial])
-      {
-#if defined(M5UNIFIED_PC_BUILD)
-        std::cout << _suffix[log_target_serial];
-#elif defined ( ARDUINO )
-        log_printf(_suffix[log_target_serial]);
-#else
-        esp_rom_printf(_suffix[log_target_serial]);
-#endif
+        ::printf("%s%s", str, suf);
       }
 
 #if defined(M5UNIFIED_PC_BUILD)
