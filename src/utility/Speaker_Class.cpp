@@ -14,6 +14,10 @@
  #endif
 #endif
 
+#if __has_include (<soc/pcr_struct.h>)
+#include <soc/pcr_struct.h>
+#endif
+
 #ifndef NON_BREAK
 #define NON_BREAK ;
 #endif
@@ -211,7 +215,11 @@ namespace m5
 #else
     i2s_stop(i2s_port);
 
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 80 MHz
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#else
+    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
+#endif
     uint32_t bits = (self->_cfg.use_dac) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
     uint32_t div_m = 32 / bits; /// MCLKを使用しない場合、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
@@ -223,10 +231,10 @@ namespace m5
     const int32_t spk_sample_rate_x256 = (float)PLL_D2_CLK * SAMPLERATE_MUL / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
-#if defined ( I2S1I_BCK_OUT_IDX )
-    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
-#else
+#if SOC_I2S_NUM == 1
     auto dev = &I2S0;
+#else
+    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
 #endif
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
@@ -238,11 +246,9 @@ namespace m5
     }
 
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
-    dev->tx_clkm_conf.tx_clkm_div_num = div_n;
 
-    dev->tx_clkm_div_conf.val = 0;
-    if (div_b > (div_a >> 1)) {
-      dev->tx_clkm_div_conf.tx_clkm_div_yn1 = 1;
+    bool yn1 = (div_b > (div_a >> 1));
+    if (yn1) {
       div_b = div_a - div_b;
     }
     int div_y = 1;
@@ -262,11 +268,22 @@ namespace m5
       }
     }
 
+#if __has_include (<soc/pcr_struct.h>) // for C6
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = div_x;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_y = div_y;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_z = div_b;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_yn1 = yn1;
+    PCR.i2s_tx_clkm_conf.i2s_tx_clkm_div_num = div_n;
+    PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK
+#else
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
     dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
+    dev->tx_clkm_div_conf.tx_clkm_div_yn1 = yn1;
+    dev->tx_clkm_conf.tx_clkm_div_num = div_n;
+    dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
+#endif
 
-    dev->tx_clkm_conf.tx_clk_sel = 2;   // PLL_160M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
 
