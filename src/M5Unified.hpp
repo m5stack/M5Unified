@@ -217,11 +217,11 @@ namespace m5
   M5Tough:                                    BtnPWR
   M5ATOM:                      BtnA
 */
-    Button_Class BtnA;
-    Button_Class BtnB;
-    Button_Class BtnC;
-    Button_Class BtnEXT;  // CoreInk top button
-    Button_Class BtnPWR;  // CoreInk power button / AXP192 power button
+    Button_Class &BtnA = _buttons[0];
+    Button_Class &BtnB = _buttons[1];
+    Button_Class &BtnC = _buttons[2];
+    Button_Class &BtnEXT = _buttons[3];  // CoreInk top button
+    Button_Class &BtnPWR = _buttons[4];  // CoreInk power button / AXP192 power button
 
     /// for internal I2C device
     I2C_Class& In_I2C = m5::In_I2C;
@@ -519,6 +519,8 @@ namespace m5
 
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
+
+    Button_Class _buttons[5];
 
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint32_t _updateMsec = 0;
