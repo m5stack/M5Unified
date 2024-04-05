@@ -303,14 +303,6 @@ namespace m5
 
 #endif
     i2s_zero_dma_buffer(i2s_port);
-#endif
-    // ステレオ出力の場合は倍率を2倍する
-    const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
-
-    int32_t dac_offset = std::min(INT16_MAX-255, self->_cfg.dac_zero_level << 8);
-
-    uint8_t buf_cnt = 0;
-    bool flg_nodata = false;
 
     enum spk_i2s_state
     {
@@ -319,7 +311,14 @@ namespace m5
       spk_i2s_run,
     };
     spk_i2s_state flg_i2s_started = spk_i2s_stop;
+#endif
+    // ステレオ出力の場合は倍率を2倍する
+    const float magnification = (float)(self->_cfg.magnification << out_stereo) / spk_sample_rate_x256 / (1 << 28);
 
+    int32_t dac_offset = std::min(INT16_MAX-255, self->_cfg.dac_zero_level << 8);
+
+    uint8_t buf_cnt = 0;
+    bool flg_nodata = false;
 
     union
     {
@@ -744,11 +743,11 @@ label_continue_sample:
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if defined (SDL_h_)
-      _task_handle = SDL_CreateThread((SDL_ThreadFunction)spk_task, "spk_task", this);
+      _task_handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
 #else
+      size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
 
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)

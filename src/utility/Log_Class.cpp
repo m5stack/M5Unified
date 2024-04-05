@@ -3,6 +3,8 @@
 
 #include "Log_Class.hpp"
 
+#include <inttypes.h>
+
 #if defined ( M5UNIFIED_PC_BUILD )
 #include <iostream>
 static constexpr const uint8_t log_colors_serial[] = { 98, 91, 93, 92, 96, 97, };
