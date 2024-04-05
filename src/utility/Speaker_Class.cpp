@@ -192,7 +192,6 @@ namespace m5
   void Speaker_Class::spk_task(void* args)
   {
     auto self = (Speaker_Class*)args;
-    const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
     const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
 
@@ -213,6 +212,7 @@ namespace m5
     const int32_t spk_sample_rate_x256 = self->_cfg.sample_rate * SAMPLERATE_MUL;
 
 #else
+    const i2s_port_t i2s_port = self->_cfg.i2s_port;
     i2s_stop(i2s_port);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
@@ -398,7 +398,7 @@ namespace m5
     flg_nodata = true;
 
 #if defined (SDL_h_)
-      auto border = std::max<int>(2048, self->_cfg.sample_rate >> 3);
+      uint32_t border = std::max<int>(2048, self->_cfg.sample_rate >> 3);
       while (SDL_GetQueuedAudioSize(1) > border) { SDL_Delay(1); }
 #else
       if (flg_i2s_started != spk_i2s_run)

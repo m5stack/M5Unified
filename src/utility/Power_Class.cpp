@@ -402,10 +402,13 @@ namespace m5
 
   void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
   {
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)enable;
+    (void)port_mask;
+#else
     switch (M5.getBoard())
     {
-#if defined (M5UNIFIED_PC_BUILD)
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         _core_s3_output(_core_s3_bus_en, enable);
@@ -469,6 +472,7 @@ namespace m5
     default:
       break;
     }
+#endif
   }
 
   bool Power_Class::getExtOutput(void)
@@ -512,6 +516,7 @@ namespace m5
 
   void Power_Class::setUsbOutput(bool enable)
   {
+    (void)enable;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
@@ -547,6 +552,7 @@ namespace m5
   void Power_Class::setLed(uint8_t brightness)
   {
 #if defined (M5UNIFIED_PC_BUILD)
+    (void)brightness;
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
@@ -616,7 +622,9 @@ namespace m5
 
   void Power_Class::_powerOff(bool withTimer)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)withTimer;
+#else
     bool use_deepsleep = true;
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
@@ -713,7 +721,10 @@ namespace m5
   {
     M5.Display.sleep();
     M5.Display.waitDisplay();
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)micro_seconds;
+    (void)touch_wakeup;
+#else
     ESP_LOGD("Power","deepSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
@@ -752,7 +763,10 @@ namespace m5
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)micro_seconds;
+    (void)touch_wakeup;
+#else
     ESP_LOGD("Power","lightSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 

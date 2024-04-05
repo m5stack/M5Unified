@@ -49,7 +49,7 @@ namespace m5
 int8_t M5Unified::_get_pin_table[pin_name_max];
 
 #if defined (M5UNIFIED_PC_BUILD)
-  void M5Unified::_setup_pinmap(board_t id)
+  void M5Unified::_setup_pinmap(board_t)
   {
     std::fill(_get_pin_table, _get_pin_table + pin_name_max, 255);
   }
@@ -215,12 +215,15 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
   bool M5Unified::_speaker_enabled_cb(void* args, bool enabled)
   {
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)args;
+    (void)enabled;
+#else
     auto self = (M5Unified*)args;
 
     switch (self->getBoard())
     {
-#if defined (M5UNIFIED_PC_BUILD)
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Speaker.config();
@@ -293,17 +296,21 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     default:
       break;
     }
+#endif
     return true;
   }
 
   bool M5Unified::_microphone_enabled_cb(void* args, bool enabled)
   {
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)args;
+    (void)enabled;
+#else
     auto self = (M5Unified*)args;
 
     switch (self->getBoard())
     {
-#if defined (M5UNIFIED_PC_BUILD)
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
       {
         auto cfg = self->Mic.config();
@@ -381,6 +388,7 @@ for (int i = 0; i < 0x50; ++i)
     default:
       break;
     }
+#endif
     return true;
   }
 
@@ -538,7 +546,9 @@ for (int i = 0; i < 0x50; ++i)
 
   void M5Unified::_setup_i2c(board_t board)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)board;
+#else
 
     gpio_num_t in_scl = (gpio_num_t)getPin(pin_name_t::in_i2c_scl);
     gpio_num_t in_sda = (gpio_num_t)getPin(pin_name_t::in_i2c_sda);

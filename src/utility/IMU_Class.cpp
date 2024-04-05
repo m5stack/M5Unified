@@ -27,7 +27,10 @@ namespace m5
 
   bool IMU_Class::begin(I2C_Class* i2c, m5::board_t board)
   {
-#if !defined(M5UNIFIED_PC_BUILD)
+#if defined(M5UNIFIED_PC_BUILD)
+    (void)i2c;
+    (void)board;
+#else
     if (i2c)
     {
       i2c->begin();
