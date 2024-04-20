@@ -157,6 +157,8 @@ namespace m5
 
     void setPort(I2C_Class* i2c) { _i2c = i2c; }
 
+    void setClock(std::uint32_t freq) { _freq = freq; }
+
     bool writeRegister8(std::uint8_t reg, std::uint8_t data) const
     {
       return _i2c->writeRegister8(_addr, reg, data, _freq);
