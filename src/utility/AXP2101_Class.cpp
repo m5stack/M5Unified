@@ -119,6 +119,17 @@ namespace m5
     }
   }
 
+  void AXP2101_Class::setPreChargeCurrent(std::uint16_t max_mA)
+  {
+    static constexpr std::uint8_t table[] = { 0, 25, 50, 75, 100, 125, 150, 175, 200, 255 };
+    if (max_mA > 200) { max_mA = 200; }
+
+    size_t i = 0;
+    while (table[i] <= max_mA) { ++i; }
+    i -= 1;
+    writeRegister8(0x61, i); 
+  }
+
   void AXP2101_Class::setChargeCurrent(std::uint16_t max_mA)
   {
     max_mA /= 5;

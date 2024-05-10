@@ -31,6 +31,10 @@ namespace m5
     /// @param enable true=enable / false=disable
     void setBatteryCharge(bool enable);
 
+    /// set battery precharge current
+    /// @param max_mA milli ampere. (0 - 200).
+    void setPreChargeCurrent(std::uint16_t max_mA);
+
     /// set battery charge current
     /// @param max_mA milli ampere. (100 - 1320).
     void setChargeCurrent(std::uint16_t max_mA);
