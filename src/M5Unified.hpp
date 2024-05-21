@@ -298,7 +298,7 @@ namespace m5
     board_t getBoard(void) const { return _board; }
 
     /// To call this function in a loop function.
-    void update(void);
+    virtual void update(void);
 
     /// Perform initialization process at startup.
     void begin(void)
@@ -308,7 +308,7 @@ namespace m5
     }
 
     /// Perform initialization process at startup.
-    void begin(config_t cfg)
+    virtual void begin(config_t cfg)
     {
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
