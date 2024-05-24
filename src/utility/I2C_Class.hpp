@@ -72,7 +72,7 @@ namespace m5
     /// @param[out] result read data array.
     /// @param      length data array length.
     /// @return success(true) or failed(false).
-    bool read(std::uint8_t* result, std::size_t length) const;
+    bool read(std::uint8_t* result, std::size_t length, bool last_nack = false) const;
 
     //----------
 
