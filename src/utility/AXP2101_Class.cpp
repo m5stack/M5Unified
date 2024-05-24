@@ -89,27 +89,6 @@ namespace m5
     return res;
   }
 
-  void AXP2101_Class::setReg0x20Bit0(bool flg)
-  {
-#if defined (ESP_LOGE)
-    ESP_LOGE("AXP2101","setReg0x20Bit0 : %d", flg);
-#endif
-    writeRegister8(AXP2101_EFUS_OP_CFG, 0x06);
-    bitOn(AXP2101_EFREQ_CTRL, 0x04);
-    writeRegister8(AXP2101_TWI_ADDR_EXT, 0x01);
-    if (flg)
-    {
-      bitOn(0x20, 1);
-    }
-    else
-    {
-      bitOff(0x20, 1);
-    }
-    writeRegister8(AXP2101_TWI_ADDR_EXT, 0x00);
-    bitOff(AXP2101_EFREQ_CTRL, 0x04);
-    writeRegister8(AXP2101_EFUS_OP_CFG, 0x00);
-  }
-
   void AXP2101_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;

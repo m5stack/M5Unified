@@ -91,8 +91,6 @@ namespace m5
     /// @return 0:none / 1:Long press / 2:Short press / 3:both
     std::uint8_t getPekPress(void);
 
-    void setReg0x20Bit0(bool);
-
   private:
     std::size_t readRegister12(std::uint8_t addr);
     std::size_t readRegister14(std::uint8_t addr);
