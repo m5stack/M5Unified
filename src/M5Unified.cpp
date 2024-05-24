@@ -510,7 +510,22 @@ for (int i = 0; i < 0x50; ++i)
           board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
         })[result&15];
       if ((result & 3) == 2) { // StampS3 pattern
-        if ((result >> 3) == 0b110) { board = board_t::board_M5Capsule; }
+        if ((result >> 3) == 0b110) {
+          board = board_t::board_M5Capsule;
+          // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
+          // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
+          m5gfx::gpio::command(
+            (const uint8_t[]) {
+            m5gfx::gpio::command_mode_output, GPIO_NUM_15,
+            m5gfx::gpio::command_write_low  , GPIO_NUM_15,
+            m5gfx::gpio::command_mode_output, GPIO_NUM_13,
+            m5gfx::gpio::command_write_low  , GPIO_NUM_13,
+            m5gfx::gpio::command_write_high , GPIO_NUM_15,
+            m5gfx::gpio::command_write_high , GPIO_NUM_13,
+            m5gfx::gpio::command_end
+            }
+          );
+        }
       }
       for (auto &backup : pin_backup) {
         backup.restore();
