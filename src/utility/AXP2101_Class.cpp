@@ -164,8 +164,10 @@ namespace m5
     bitOn(0x10, 0x01);
   }
 
+  //enable all ADC channel control or set default values
   void AXP2101_Class::setAdcState(bool enable)
   {
+    writeRegister8(0x30, enable == true ? 0b111111 : 0b11);
   }
 
   void AXP2101_Class::setAdcRate( std::uint8_t rate )
@@ -221,7 +223,12 @@ return 0;
 
   float AXP2101_Class::getVBUSVoltage(void)
   {
-return 0;
+    if (isVBUS() == false) { return 0.0f; }
+    
+    float vBus = readRegister14(0x38);
+    if (vBus >= 16375) { return 0.0f; }
+
+    return vBus / 1000.0f;
   }
 
   float AXP2101_Class::getVBUSCurrent(void)
@@ -231,7 +238,7 @@ return 0;
 
   float AXP2101_Class::getInternalTemperature(void)
   {
-return 0;
+    return 22 + ((7274 - readRegister16(0x3C)) / 20);
   }
 
   float AXP2101_Class::getBatteryPower(void)
