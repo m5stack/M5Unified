@@ -139,6 +139,8 @@ namespace m5
 
     int16_t getRawData(size_t index);
 
+    IMU_Base* getImuInstancePtr(int idx) const { return _imu_instance[idx].get(); }
+
   private:
 
     struct offset_point_t

@@ -352,7 +352,8 @@ namespace m5
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
       if (cfg.external_display.module_display) {
-        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough || _board == board_t::board_M5StackCoreS3)
+        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough
+         || _board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE)
         {
           M5ModuleDisplay dsp(cfg.module_display);
           if (dsp.init()) {
