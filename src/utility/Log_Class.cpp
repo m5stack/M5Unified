@@ -3,6 +3,8 @@
 
 #include "Log_Class.hpp"
 
+#include <inttypes.h>
+
 #if defined ( M5UNIFIED_PC_BUILD )
 #include <iostream>
 static constexpr const uint8_t log_colors_serial[] = { 98, 91, 93, 92, 96, 97, };
@@ -133,7 +135,7 @@ namespace m5
     auto addr = reinterpret_cast<uint32_t*>((uintptr_t)a & ~0x03);
     char buf[84];
     do {
-      int pos = snprintf(buf, sizeof(buf), "0x%08x|", (uintptr_t)addr);
+      int pos = snprintf(buf, sizeof(buf), "0x%08" PRIxPTR "|", (uintptr_t)addr);
       // printf("0x%08x|", (uintptr_t)addr);
       int l = len > 4 ? 4 : len;
       for (int i = 0; i < l; ++i) {

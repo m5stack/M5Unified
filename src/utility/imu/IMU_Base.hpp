@@ -70,7 +70,7 @@ namespace m5
     virtual imu_spec_t begin(I2C_Class* i2c = nullptr) = 0;
     virtual imu_spec_t getImuRawData(imu_raw_data_t* data) const = 0; //{ return (imu_spec_t)0; }
     virtual void getConvertParam(imu_convert_param_t* param) const = 0;//{}
-    virtual bool getTempAdc(int16_t* adc) const { return false; };
+    virtual bool getTempAdc(int16_t* adc) const { (void)adc; return false; };
     virtual bool sleep(void) { return false; };
 /*
     virtual bool getAccelAdc(std::int16_t* ax, std::int16_t* ay, std::int16_t* az) const { return false; }
@@ -80,7 +80,7 @@ namespace m5
     virtual bool getTemp(float *t) const { return false; };
 //*/
 
-    virtual bool setINTPinActiveLogic(bool level) { return false; }
+    virtual bool setINTPinActiveLogic(bool level) { (void)level; return false; }
   };
 }
 

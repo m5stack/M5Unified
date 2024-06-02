@@ -89,27 +89,6 @@ namespace m5
     return res;
   }
 
-  void AXP2101_Class::setReg0x20Bit0(bool flg)
-  {
-#if defined (ESP_LOGE)
-    ESP_LOGE("AXP2101","setReg0x20Bit0 : %d", flg);
-#endif
-    writeRegister8(AXP2101_EFUS_OP_CFG, 0x06);
-    bitOn(AXP2101_EFREQ_CTRL, 0x04);
-    writeRegister8(AXP2101_TWI_ADDR_EXT, 0x01);
-    if (flg)
-    {
-      bitOn(0x20, 1);
-    }
-    else
-    {
-      bitOff(0x20, 1);
-    }
-    writeRegister8(AXP2101_TWI_ADDR_EXT, 0x00);
-    bitOff(AXP2101_EFREQ_CTRL, 0x04);
-    writeRegister8(AXP2101_EFUS_OP_CFG, 0x00);
-  }
-
   void AXP2101_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;
@@ -117,6 +96,17 @@ namespace m5
     {
       writeRegister8(0x18, (val & 0xFD) + (enable << 1));
     }
+  }
+
+  void AXP2101_Class::setPreChargeCurrent(std::uint16_t max_mA)
+  {
+    static constexpr std::uint8_t table[] = { 0, 25, 50, 75, 100, 125, 150, 175, 200, 255 };
+    if (max_mA > 200) { max_mA = 200; }
+
+    size_t i = 0;
+    while (table[i] <= max_mA) { ++i; }
+    i -= 1;
+    writeRegister8(0x61, i); 
   }
 
   void AXP2101_Class::setChargeCurrent(std::uint16_t max_mA)
@@ -174,8 +164,10 @@ namespace m5
     bitOn(0x10, 0x01);
   }
 
+  //enable all ADC channel control or set default values
   void AXP2101_Class::setAdcState(bool enable)
   {
+    writeRegister8(0x30, enable == true ? 0b111111 : 0b11);
   }
 
   void AXP2101_Class::setAdcRate( std::uint8_t rate )
@@ -231,7 +223,12 @@ return 0;
 
   float AXP2101_Class::getVBUSVoltage(void)
   {
-return 0;
+    if (isVBUS() == false) { return 0.0f; }
+    
+    float vBus = readRegister14(0x38);
+    if (vBus >= 16375) { return 0.0f; }
+
+    return vBus / 1000.0f;
   }
 
   float AXP2101_Class::getVBUSCurrent(void)
@@ -241,7 +238,7 @@ return 0;
 
   float AXP2101_Class::getInternalTemperature(void)
   {
-return 0;
+    return 22 + ((7274 - readRegister16(0x3C)) / 20);
   }
 
   float AXP2101_Class::getBatteryPower(void)

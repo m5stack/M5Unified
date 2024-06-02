@@ -27,7 +27,10 @@ namespace m5
 
   bool IMU_Class::begin(I2C_Class* i2c, m5::board_t board)
   {
-#if !defined(M5UNIFIED_PC_BUILD)
+#if defined(M5UNIFIED_PC_BUILD)
+    (void)i2c;
+    (void)board;
+#else
     if (i2c)
     {
       i2c->begin();
@@ -167,6 +170,17 @@ namespace m5
       }
     }
     return res;
+  }
+
+  void IMU_Class::setClock(std::uint32_t freq)
+  {
+    for (size_t i = 0; i < 2; ++i)
+    {
+      if (_imu_instance[i].get())
+      {
+        _imu_instance[i]->setClock(freq);
+      }
+    }
   }
 
   void IMU_Class::_update_convert_param(void)

@@ -31,6 +31,10 @@ namespace m5
     /// @param enable true=enable / false=disable
     void setBatteryCharge(bool enable);
 
+    /// set battery precharge current
+    /// @param max_mA milli ampere. (0 - 200).
+    void setPreChargeCurrent(std::uint16_t max_mA);
+
     /// set battery charge current
     /// @param max_mA milli ampere. (100 - 1320).
     void setChargeCurrent(std::uint16_t max_mA);
@@ -86,8 +90,6 @@ namespace m5
 
     /// @return 0:none / 1:Long press / 2:Short press / 3:both
     std::uint8_t getPekPress(void);
-
-    void setReg0x20Bit0(bool);
 
   private:
     std::size_t readRegister12(std::uint8_t addr);

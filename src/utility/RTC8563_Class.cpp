@@ -277,7 +277,9 @@ namespace m5
 
   void RTC8563_Class::setSystemTimeFromRtc(struct timezone* tz)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)tz;
+#else
     rtc_datetime_t dt;
     if (getDateTime(&dt))
     {

@@ -260,6 +260,9 @@ void setup(void)
   case m5::board_t::board_M5StackCoreS3:
     name = "StackCoreS3";
     break;
+  case m5::board_t::board_M5StackCoreS3SE:
+    name = "StackCoreS3SE";
+    break;
   case m5::board_t::board_M5StampS3:
     name = "StampS3";
     break;
@@ -280,6 +283,12 @@ void setup(void)
     break;
   case m5::board_t::board_M5Capsule:
     name = "Capsule";
+    break;
+  case m5::board_t::board_M5Cardputer:
+    name = "Cardputer";
+    break;
+  case m5::board_t::board_M5VAMeter:
+    name = "VAMeter";
     break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:

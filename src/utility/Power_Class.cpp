@@ -58,6 +58,7 @@ namespace m5
       break;
 
     case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
       M5.In_I2C.bitOn(aw9523_i2c_addr, 0x03, 0b10000000, i2c_freq);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
@@ -402,11 +403,15 @@ namespace m5
 
   void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
   {
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)enable;
+    (void)port_mask;
+#else
     switch (M5.getBoard())
     {
-#if defined (M5UNIFIED_PC_BUILD)
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
       {
         _core_s3_output(_core_s3_bus_en, enable);
       }
@@ -469,6 +474,7 @@ namespace m5
     default:
       break;
     }
+#endif
   }
 
   bool Power_Class::getExtOutput(void)
@@ -478,6 +484,7 @@ namespace m5
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
       {
         static constexpr const uint32_t port0_bitmask = 0b00000010; // BUS EN
         static constexpr const uint8_t port0_reg = 0x02;
@@ -512,10 +519,12 @@ namespace m5
 
   void Power_Class::setUsbOutput(bool enable)
   {
+    (void)enable;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
     case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
       _core_s3_output(_core_s3_usb_en, enable);
       break;
 
@@ -531,6 +540,7 @@ namespace m5
     switch (M5.getBoard())
     {
     case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
       {
         static constexpr const uint8_t reg = 0x02;
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & _core_s3_usb_en;
@@ -547,6 +557,7 @@ namespace m5
   void Power_Class::setLed(uint8_t brightness)
   {
 #if defined (M5UNIFIED_PC_BUILD)
+    (void)brightness;
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
@@ -616,7 +627,9 @@ namespace m5
 
   void Power_Class::_powerOff(bool withTimer)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)withTimer;
+#else
     bool use_deepsleep = true;
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
@@ -713,7 +726,10 @@ namespace m5
   {
     M5.Display.sleep();
     M5.Display.waitDisplay();
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)micro_seconds;
+    (void)touch_wakeup;
+#else
     ESP_LOGD("Power","deepSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 
@@ -752,7 +768,10 @@ namespace m5
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
-#if !defined (M5UNIFIED_PC_BUILD)
+#if defined (M5UNIFIED_PC_BUILD)
+    (void)micro_seconds;
+    (void)touch_wakeup;
+#else
     ESP_LOGD("Power","lightSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
 

@@ -114,7 +114,7 @@ namespace m5
   protected:
     std::uint32_t _last_msec = 0;
     std::int32_t _flickThresh = 8;
-    std::int32_t _msecHold = 500;
+    std::uint32_t _msecHold = 500;
     m5gfx::LGFX_Device* _gfx = nullptr;
     touch_detail_t _touch_detail[TOUCH_MAX_POINTS];
     m5gfx::touch_point_t _touch_raw[TOUCH_MAX_POINTS];
