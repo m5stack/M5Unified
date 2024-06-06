@@ -73,8 +73,9 @@ namespace m5
     {
 #if defined ( ARDUINO )
 
-      /// use "Serial" begin. (0=disabled)
-      uint32_t serial_baudrate = 115200;
+      /// use "Serial" begin. (0=disabled / Usually 115200 is used.)
+      /// When this value is not 0, Serial.begin is executed.
+      uint32_t serial_baudrate = 0;
 
 #endif
 
