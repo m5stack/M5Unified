@@ -6,6 +6,53 @@
 
 #include "I2C_Class.hpp"
 
+#define _BV(b)                          (1ULL << (uint64_t)(b))
+
+//IRQ ENABLE REGISTER
+#define AXP2101_IRQEN0                           0x40
+#define AXP2101_IRQEN1                           0x41
+#define AXP2101_IRQEN2                           0x42
+
+//IRQ STATUS REGISTER
+#define AXP2101_IRQSTAT0                         0x48
+#define AXP2101_IRQSTAT1                         0x49
+#define AXP2101_IRQSTAT2                         0x4A
+#define AXP2101_IRQSTAT_CNT                       3
+
+
+typedef enum {
+    AXP2101_IRQ_BAT_UNDER_TEMP            = _BV(0),   // Battery Under Temperature in Work mode IRQ(bwut_irq)
+    AXP2101_IRQ_BAT_OVER_TEMP             = _BV(1),   // Battery Over Temperature in Work mode IRQ(bwot_irq)
+    AXP2101_IRQ_BAT_CHG_UNDER_TEMP        = _BV(2),   // Battery Under Temperature in Charge mode IRQ(bcut_irq)
+    AXP2101_IRQ_BAT_CHG_OVER_TEMP         = _BV(3),   // Battery Over Temperature in Charge mode IRQ(bcot_irq)
+    AXP2101_IRQ_GAUGE_NEW_SOC             = _BV(4),   // Gauge New SOC IRQ(lowsoc_irq)
+    AXP2101_IRQ_GAUGE_WDT_TIMEOUT         = _BV(5),   // Gauge Watchdog Timeout IRQ(gwdt_irq)
+    AXP2101_IRQ_WARNING_LEVEL1            = _BV(6),   // SOC drop to Warning Level1 IRQ(socwl1_irq)
+    AXP2101_IRQ_WARNING_LEVEL2            = _BV(7),   // SOC drop to Warning Level2 IRQ(socwl2_irq)
+
+    // IRQ2 REG 41H
+    AXP2101_IRQ_PKEY_POSITIVE_EDGE        = _BV(8),   // POWERON Positive Edge IRQ(ponpe_irq_en)
+    AXP2101_IRQ_PKEY_NEGATIVE_EDGE        = _BV(9),   // POWERON Negative Edge IRQ(ponne_irq_en)
+    AXP2101_IRQ_PKEY_LONG_PRESS           = _BV(10),  // POWERON Long PRESS IRQ(ponlp_irq)
+    AXP2101_IRQ_PKEY_SHORT_PRESS          = _BV(11),  // POWERON Short PRESS IRQ(ponsp_irq_en)
+    AXP2101_IRQ_BAT_REMOVE                = _BV(12),  // Battery Remove IRQ(bremove_irq)
+    AXP2101_IRQ_BAT_INSERT                = _BV(13),  // Battery Insert IRQ(binsert_irq)
+    AXP2101_IRQ_VBUS_REMOVE               = _BV(14),  // VBUS Remove IRQ(vremove_irq)
+    AXP2101_IRQ_VBUS_INSERT               = _BV(15),  // VBUS Insert IRQ(vinsert_irq)
+
+    // IRQ3 REG 42H
+    AXP2101_IRQ_BAT_OVER_VOLTAGE          = _BV(16),  // Battery Over Voltage Protection IRQ(bovp_irq)
+    AXP2101_IRQ_CHAGER_TIMER              = _BV(17),  // Charger Safety Timer1/2 expire IRQ(chgte_irq)
+    AXP2101_IRQ_DIE_OVER_TEMP             = _BV(18),  // DIE Over Temperature level1 IRQ(dotl1_irq)
+    AXP2101_IRQ_BAT_CHG_START             = _BV(19),  // Charger start IRQ(chgst_irq)
+    AXP2101_IRQ_BAT_CHG_DONE              = _BV(20),  // Battery charge done IRQ(chgdn_irq)
+    AXP2101_IRQ_BATFET_OVER_CURR          = _BV(21),  // BATFET Over Current Protection IRQ(bocp_irq)
+    AXP2101_IRQ_LDO_OVER_CURR             = _BV(22),  // LDO Over Current IRQ(ldooc_irq)
+    AXP2101_IRQ_WDT_EXPIRE                = _BV(23),   // Watchdog Expire IRQ(wdexp_irq)
+
+    // ALL IRQ
+    AXP2101_IRQ_ALL                      = (0xFFFFFFFFUL)
+} axp2101_irq_t;
 namespace m5
 {
   class AXP2101_Class : public I2C_Device
@@ -91,7 +138,42 @@ namespace m5
     /// @return 0:none / 1:Long press / 2:Short press / 3:both
     std::uint8_t getPekPress(void);
 
+    bool enableIRQ(std::uint64_t registerEn);
+    bool disableIRQ(std::uint64_t registerEn);
+    std::uint64_t getIRQStatuses(void);
+    void clearIRQStatuses();
+    //IRQ STATUS 0
+    bool isDropWarningLevel2Irq(void);
+    bool isDropWarningLevel1Irq(void);
+    bool isGaugeWdtTimeoutIrq();
+    bool isBatChargerUnderTemperatureIrq(void);
+    bool isBatChargerOverTemperatureIrq(void);
+    bool isBatWorkOverTemperatureIrq(void);
+    bool isBatWorkUnderTemperatureIrq(void);
+    //IRQ STATUS 1
+    bool isVbusInsertIrq(void);
+    bool isVbusRemoveIrq(void);
+    bool isBatInsertIrq(void);
+    bool isBatRemoveIrq(void);
+    bool isPekeyShortPressIrq(void);
+    bool isPekeyLongPressIrq(void);
+    bool isPekeyNegativeIrq(void);
+    bool isPekeyPositiveIrq(void);
+    //IRQ STATUS 2
+    bool isWdtExpireIrq(void);
+    bool isLdoOverCurrentIrq(void);
+    bool isBatfetOverCurrentIrq(void);
+    bool isBatChagerDoneIrq(void);
+    bool isBatChagerStartIrq(void);
+    bool isBatDieOverTemperatureIrq(void);
+    bool isChagerOverTimeoutIrq(void);
+    bool isBatOverVoltageIrq(void);
+
+
   private:
+    std::uint8_t statusRegister[AXP2101_IRQSTAT_CNT];
+    std::uint8_t intRegister[AXP2101_IRQSTAT_CNT];
+
     std::size_t readRegister12(std::uint8_t addr);
     std::size_t readRegister14(std::uint8_t addr);
     std::size_t readRegister16(std::uint8_t addr);
@@ -99,6 +181,8 @@ namespace m5
     void _set_LDO(std::uint8_t num, int voltage);
     void _set_DLDO(std::uint8_t num, int voltage);
     bool _get_LDOEn(std::uint8_t num);
+
+    bool setIRQEnRegister(std::uint64_t registerEn, bool enable);
   };
 }
 
