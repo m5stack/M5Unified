@@ -1208,6 +1208,33 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
+#ifdef M5CORES3_SIMULATE_BTNABC
+      case board_t::board_M5StackCoreS3:
+        {
+          use_rawstate_bits = 0b00111;
+          int i = Touch.getCount();
+          while (--i >= 0)
+          {
+            auto raw = Touch.getTouchPointRaw(i);
+            if (raw.y > (240 - 20))
+            {
+              auto det = Touch.getDetail(i);
+              if (det.state & touch_state_t::touch)
+              {
+                if (BtnA.isPressed()) { btn_rawstate_bits |= 1 << 0; }
+                if (BtnB.isPressed()) { btn_rawstate_bits |= 1 << 1; }
+                if (BtnC.isPressed()) { btn_rawstate_bits |= 1 << 2; }
+                if (btn_rawstate_bits || !(det.state & touch_state_t::mask_moving))
+                {
+                  btn_rawstate_bits |= 1 << ((raw.x - 2) / 107);
+                }
+              }
+            }
+          }
+        }
+        break;
+#endif // M5CORES3_SIMULATE_BTNABC
+
       default:
         break;
       }
