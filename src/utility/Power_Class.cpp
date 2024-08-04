@@ -579,7 +579,26 @@ namespace m5
     switch (M5.getBoard())
     {
     case board_t::board_M5StackCore2:
-      Axp192.writeRegister8(0x9A, 255-brightness);
+      switch (_pmic)
+      {
+      case pmic_t::pmic_axp192:
+        Axp192.writeRegister8(0x9A, 255-brightness);
+        break;
+
+      // Cannot set brightness; only off and on
+      case pmic_t::pmic_axp2101:
+        if(brightness == 0)
+        {
+          // CHGLED_CFG : HiZ
+          Axp2101.writeRegister8(0x69, 0x05);
+        }
+        else
+        {
+          // CHGLED_CFG : drive low
+          Axp2101.writeRegister8(0x69, 0x35);
+        }
+        break;
+      }
       break;
 
     case board_t::board_M5StackCoreInk:
