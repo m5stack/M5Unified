@@ -13,8 +13,11 @@
 #include "INA3221_Class.hpp"
 #include "RTC8563_Class.hpp"
 
-#if __has_include (<driver/adc.h>)
+#if __has_include (<esp_adc/adc_oneshot.h>) // ESP-IDF v5 or later
+#include <esp_adc/adc_oneshot.h>
+#elif __has_include (<driver/adc.h>)
 #include <driver/adc.h>
+#include <esp_adc_cal.h>
 #endif
 
 namespace m5
@@ -170,6 +173,7 @@ namespace m5
 #endif
 
   private:
+    std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
 
