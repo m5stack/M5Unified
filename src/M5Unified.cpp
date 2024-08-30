@@ -67,6 +67,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AirQ       , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Cardputer  , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5VAMeter    , GPIO_NUM_6 ,GPIO_NUM_5  , GPIO_NUM_9 ,GPIO_NUM_8  },
+{ board_t::board_M5AtomS3R    , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3R
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -641,7 +642,8 @@ for (int i = 0; i < 0x50; ++i)
       //     This allows communication with ModuleDisplay at 80 MHz.
       for (auto gpio: (const gpio_num_t[]){ GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_23 })
       {
-        *(volatile uint32_t*)(GPIO_PIN_MUX_REG[gpio]) |= FUN_DRV_M; // gpio drive current set to 40mA.
+        uint32_t tmp = *(volatile uint32_t*)(GPIO_PIN_MUX_REG[gpio]);
+        *(volatile uint32_t*)(GPIO_PIN_MUX_REG[gpio]) = tmp | FUN_DRV_M; // gpio drive current set to 40mA.
         gpio_pulldown_dis(gpio); // disable pulldown.
         gpio_pullup_en(gpio);    // enable pullup.
       }
@@ -721,6 +723,7 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5AtomS3:
     case board_t::board_M5AtomS3Lite:
     case board_t::board_M5AtomS3U:
+    case board_t::board_M5AtomS3R:
       m5gfx::pinMode(GPIO_NUM_41, m5gfx::pin_mode_t::input);
       break;
 
@@ -893,6 +896,7 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5AtomS3:
       case board_t::board_M5AtomS3Lite:
+      case board_t::board_M5AtomS3R:
         if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
           m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
@@ -1295,6 +1299,7 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5AtomS3:
     case board_t::board_M5AtomS3Lite:
     case board_t::board_M5AtomS3U:
+    case board_t::board_M5AtomS3R:
       use_rawstate_bits = 0b00001;
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_41)) & 1;
       break;
