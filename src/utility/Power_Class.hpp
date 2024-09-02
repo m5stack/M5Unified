@@ -15,6 +15,7 @@
 
 #if __has_include (<esp_adc/adc_oneshot.h>) // ESP-IDF v5 or later
 #include <esp_adc/adc_oneshot.h>
+#include <esp_adc/adc_cali.h>
 #elif __has_include (<driver/adc.h>)
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
