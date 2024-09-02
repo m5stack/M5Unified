@@ -412,7 +412,13 @@ namespace m5
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
-        _core_s3_output(_core_s3_bus_en, enable);
+        bool cancel = (enable && Axp2101.isVBUS() && !Axp2101.getBatState());
+        if (!cancel)
+        {
+          _core_s3_output(_core_s3_bus_en, enable);
+        } else {
+          ESP_LOGW("Power","setExtPower(true) is canceled.");
+        }
       }
       break;
 

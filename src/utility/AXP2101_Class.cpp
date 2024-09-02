@@ -96,7 +96,7 @@ namespace m5
     std::uint8_t val = 0;
     if (readRegister(0x18, &val, 1))
     {
-      writeRegister8(0x18, (val & 0xFD) + (enable << 1));
+      writeRegister8(0x18, (val & 0xFD) | (enable << 1));
     }
   }
 
@@ -203,7 +203,7 @@ return false;
 
   bool AXP2101_Class::getBatState(void)
   { // Battery present state
-    return readRegister8(0x00) & 0x04;
+    return readRegister8(0x00) & 0x08;
   }
 
   std::uint8_t AXP2101_Class::getPekPress(void)
