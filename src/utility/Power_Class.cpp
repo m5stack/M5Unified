@@ -869,8 +869,17 @@ namespace m5
       if (adc_handle == nullptr) { return 0; }
 
       adc_oneshot_chan_cfg_t config;
+
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+  #define ADC_RAW_ATTEN ADC_ATTEN_DB_12
+ #endif
+#endif
+#ifndef ADC_RAW_ATTEN
+#define ADC_RAW_ATTEN ADC_ATTEN_DB_11
+#endif
+      config.atten = ADC_RAW_ATTEN;
       config.bitwidth = ADC_BITWIDTH_12;
-      config.atten = ADC_ATTEN_DB_12;
       adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config);
     }
     static adc_cali_handle_t adc_cali;
