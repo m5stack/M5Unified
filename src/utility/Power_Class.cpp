@@ -348,6 +348,7 @@ namespace m5
       , 0x68, 0x01 // Battery detection enabled.
       , 0x69, 0x13 // CHGLED setting
       , 0x99, 0x00 // DLDO1 set 0.5v (vibration motor)
+      , 0x30, 0x0F // ADC enabled (for voltage measurement)
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
