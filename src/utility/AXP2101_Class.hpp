@@ -6,8 +6,6 @@
 
 #include "I2C_Class.hpp"
 
-#define _BV(b)                          (1ULL << (uint64_t)(b))
-
 //IRQ ENABLE REGISTER
 #define AXP2101_IRQEN0                           0x40
 #define AXP2101_IRQEN1                           0x41
@@ -20,41 +18,41 @@
 #define AXP2101_IRQSTAT_CNT                       3
 
 
-typedef enum {
-    AXP2101_IRQ_BAT_UNDER_TEMP            = _BV(0),   // Battery Under Temperature in Work mode IRQ(bwut_irq)
-    AXP2101_IRQ_BAT_OVER_TEMP             = _BV(1),   // Battery Over Temperature in Work mode IRQ(bwot_irq)
-    AXP2101_IRQ_BAT_CHG_UNDER_TEMP        = _BV(2),   // Battery Under Temperature in Charge mode IRQ(bcut_irq)
-    AXP2101_IRQ_BAT_CHG_OVER_TEMP         = _BV(3),   // Battery Over Temperature in Charge mode IRQ(bcot_irq)
-    AXP2101_IRQ_GAUGE_NEW_SOC             = _BV(4),   // Gauge New SOC IRQ(lowsoc_irq)
-    AXP2101_IRQ_GAUGE_WDT_TIMEOUT         = _BV(5),   // Gauge Watchdog Timeout IRQ(gwdt_irq)
-    AXP2101_IRQ_WARNING_LEVEL1            = _BV(6),   // SOC drop to Warning Level1 IRQ(socwl1_irq)
-    AXP2101_IRQ_WARNING_LEVEL2            = _BV(7),   // SOC drop to Warning Level2 IRQ(socwl2_irq)
-
-    // IRQ2 REG 41H
-    AXP2101_IRQ_PKEY_POSITIVE_EDGE        = _BV(8),   // POWERON Positive Edge IRQ(ponpe_irq_en)
-    AXP2101_IRQ_PKEY_NEGATIVE_EDGE        = _BV(9),   // POWERON Negative Edge IRQ(ponne_irq_en)
-    AXP2101_IRQ_PKEY_LONG_PRESS           = _BV(10),  // POWERON Long PRESS IRQ(ponlp_irq)
-    AXP2101_IRQ_PKEY_SHORT_PRESS          = _BV(11),  // POWERON Short PRESS IRQ(ponsp_irq_en)
-    AXP2101_IRQ_BAT_REMOVE                = _BV(12),  // Battery Remove IRQ(bremove_irq)
-    AXP2101_IRQ_BAT_INSERT                = _BV(13),  // Battery Insert IRQ(binsert_irq)
-    AXP2101_IRQ_VBUS_REMOVE               = _BV(14),  // VBUS Remove IRQ(vremove_irq)
-    AXP2101_IRQ_VBUS_INSERT               = _BV(15),  // VBUS Insert IRQ(vinsert_irq)
-
-    // IRQ3 REG 42H
-    AXP2101_IRQ_BAT_OVER_VOLTAGE          = _BV(16),  // Battery Over Voltage Protection IRQ(bovp_irq)
-    AXP2101_IRQ_CHAGER_TIMER              = _BV(17),  // Charger Safety Timer1/2 expire IRQ(chgte_irq)
-    AXP2101_IRQ_DIE_OVER_TEMP             = _BV(18),  // DIE Over Temperature level1 IRQ(dotl1_irq)
-    AXP2101_IRQ_BAT_CHG_START             = _BV(19),  // Charger start IRQ(chgst_irq)
-    AXP2101_IRQ_BAT_CHG_DONE              = _BV(20),  // Battery charge done IRQ(chgdn_irq)
-    AXP2101_IRQ_BATFET_OVER_CURR          = _BV(21),  // BATFET Over Current Protection IRQ(bocp_irq)
-    AXP2101_IRQ_LDO_OVER_CURR             = _BV(22),  // LDO Over Current IRQ(ldooc_irq)
-    AXP2101_IRQ_WDT_EXPIRE                = _BV(23),   // Watchdog Expire IRQ(wdexp_irq)
-
-    // ALL IRQ
-    AXP2101_IRQ_ALL                      = (0xFFFFFFFFUL)
-} axp2101_irq_t;
 namespace m5
 {
+  typedef enum {
+      AXP2101_IRQ_BAT_UNDER_TEMP            = 1 << 0,   // Battery Under Temperature in Work mode IRQ(bwut_irq)
+      AXP2101_IRQ_BAT_OVER_TEMP             = 1 << 1,   // Battery Over Temperature in Work mode IRQ(bwot_irq)
+      AXP2101_IRQ_BAT_CHG_UNDER_TEMP        = 1 << 2,   // Battery Under Temperature in Charge mode IRQ(bcut_irq)
+      AXP2101_IRQ_BAT_CHG_OVER_TEMP         = 1 << 3,   // Battery Over Temperature in Charge mode IRQ(bcot_irq)
+      AXP2101_IRQ_GAUGE_NEW_SOC             = 1 << 4,   // Gauge New SOC IRQ(lowsoc_irq)
+      AXP2101_IRQ_GAUGE_WDT_TIMEOUT         = 1 << 5,   // Gauge Watchdog Timeout IRQ(gwdt_irq)
+      AXP2101_IRQ_WARNING_LEVEL1            = 1 << 6,   // SOC drop to Warning Level1 IRQ(socwl1_irq)
+      AXP2101_IRQ_WARNING_LEVEL2            = 1 << 7,   // SOC drop to Warning Level2 IRQ(socwl2_irq)
+
+      // IRQ2 REG 41H
+      AXP2101_IRQ_PKEY_POSITIVE_EDGE        = 1 << 8,   // POWERON Positive Edge IRQ(ponpe_irq_en)
+      AXP2101_IRQ_PKEY_NEGATIVE_EDGE        = 1 << 9,   // POWERON Negative Edge IRQ(ponne_irq_en)
+      AXP2101_IRQ_PKEY_LONG_PRESS           = 1 << 10,  // POWERON Long PRESS IRQ(ponlp_irq)
+      AXP2101_IRQ_PKEY_SHORT_PRESS          = 1 << 11,  // POWERON Short PRESS IRQ(ponsp_irq_en)
+      AXP2101_IRQ_BAT_REMOVE                = 1 << 12,  // Battery Remove IRQ(bremove_irq)
+      AXP2101_IRQ_BAT_INSERT                = 1 << 13,  // Battery Insert IRQ(binsert_irq)
+      AXP2101_IRQ_VBUS_REMOVE               = 1 << 14,  // VBUS Remove IRQ(vremove_irq)
+      AXP2101_IRQ_VBUS_INSERT               = 1 << 15,  // VBUS Insert IRQ(vinsert_irq)
+
+      // IRQ3 REG 42H
+      AXP2101_IRQ_BAT_OVER_VOLTAGE          = 1 << 16,  // Battery Over Voltage Protection IRQ(bovp_irq)
+      AXP2101_IRQ_CHAGER_TIMER              = 1 << 17,  // Charger Safety Timer1/2 expire IRQ(chgte_irq)
+      AXP2101_IRQ_DIE_OVER_TEMP             = 1 << 18,  // DIE Over Temperature level1 IRQ(dotl1_irq)
+      AXP2101_IRQ_BAT_CHG_START             = 1 << 19,  // Charger start IRQ(chgst_irq)
+      AXP2101_IRQ_BAT_CHG_DONE              = 1 << 20,  // Battery charge done IRQ(chgdn_irq)
+      AXP2101_IRQ_BATFET_OVER_CURR          = 1 << 21,  // BATFET Over Current Protection IRQ(bocp_irq)
+      AXP2101_IRQ_LDO_OVER_CURR             = 1 << 22,  // LDO Over Current IRQ(ldooc_irq)
+      AXP2101_IRQ_WDT_EXPIRE                = 1 << 23,   // Watchdog Expire IRQ(wdexp_irq)
+
+      // ALL IRQ
+      AXP2101_IRQ_ALL                      = (0xFFFFFFFFUL)
+  } axp2101_irq_t;
   class AXP2101_Class : public I2C_Device
   {
   public:

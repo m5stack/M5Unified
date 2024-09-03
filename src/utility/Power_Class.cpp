@@ -70,6 +70,7 @@ namespace m5
       , 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
       , 0x69, 0x11 // CHGLED setting
       , 0x10, 0x30 // PMU common config
+      , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
