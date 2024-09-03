@@ -974,7 +974,7 @@ namespace m5
     {
       return f * 1000;
     }
-    return 0;
+    return -1;
   }
 
   int16_t Power_Class::getBatteryVoltage(void)

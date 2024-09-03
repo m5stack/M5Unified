@@ -140,7 +140,7 @@ namespace m5
     is_charging_t isCharging(void);
 
     /// Get VBUS voltage
-    /// @return VBUS voltage [mV]
+    /// @return VBUS voltage [mV] / -1=not supported model
     /// @attention Only for models with AXP192 or AXP2101
     int16_t getVBUSVoltage(void);
 
