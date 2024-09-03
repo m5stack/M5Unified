@@ -139,6 +139,11 @@ namespace m5
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     is_charging_t isCharging(void);
 
+    /// Get VBUS voltage
+    /// @return VBUS voltage [mV]
+    /// @attention Only for models with AXP192 or AXP2101
+    int16_t getVBUSVoltage(void);
+
     /// Get battery voltage
     /// @return battery voltage [mV]
     int16_t getBatteryVoltage(void);

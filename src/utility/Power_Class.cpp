@@ -943,6 +943,40 @@ namespace m5
 #endif
   }
 
+  int16_t Power_Class::getVBUSVoltage(void)
+  {
+    float f = NAN;
+#if !defined (M5UNIFIED_PC_BUILD)
+    switch (_pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
+    case pmic_t::pmic_axp192:
+      f = Axp192.getVBUSVoltage();
+      break;
+
+#endif
+
+    case pmic_t::pmic_axp2101:
+      f = Axp2101.getVBUSVoltage();
+      break;
+
+#endif
+
+    default:
+      break;
+    }
+
+#endif
+    if (isfinite(f))
+    {
+      return f * 1000;
+    }
+    return 0;
+  }
+
   int16_t Power_Class::getBatteryVoltage(void)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
