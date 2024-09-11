@@ -238,6 +238,14 @@ return 0;
 return 0;
   }
 
+  float AXP2101_Class::getTSVoltage(void)
+  {
+    float volt = readRegister14(0x36);
+    if (volt >= 16375) { return 0.0f; }
+
+    return volt / 2000.0f;
+  }
+
   float AXP2101_Class::getInternalTemperature(void)
   {
     return 22 + ((7274 - readRegister16(0x3C)) / 20);

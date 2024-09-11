@@ -130,6 +130,7 @@ namespace m5
     float getACINCurrent(void);
     float getVBUSVoltage(void);
     float getVBUSCurrent(void);
+    float getTSVoltage(void);
     float getAPSVoltage(void);
     float getInternalTemperature(void);
 

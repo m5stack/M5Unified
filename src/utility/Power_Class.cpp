@@ -414,7 +414,7 @@ namespace m5
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
-        bool cancel = (enable && Axp2101.isVBUS() && !Axp2101.getBatState());
+        bool cancel = (enable && !Axp2101.getBatState() && Axp2101.getTSVoltage() > 2.0f && Axp2101.isVBUS());
         if (!cancel)
         {
           _core_s3_output(_core_s3_bus_en, enable);
