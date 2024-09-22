@@ -13,8 +13,14 @@
 #include "INA3221_Class.hpp"
 #include "RTC8563_Class.hpp"
 
-#if __has_include (<driver/adc.h>)
+#if __has_include (<esp_adc/adc_oneshot.h>) // ESP-IDF v5 or later
+#include <esp_adc/adc_oneshot.h>
+ #if __has_include(<esp_adc/adc_cali.h>)
+  #include <esp_adc/adc_cali.h>
+ #endif
+#elif __has_include (<driver/adc.h>)
 #include <driver/adc.h>
+#include <esp_adc_cal.h>
 #endif
 
 namespace m5
@@ -133,6 +139,11 @@ namespace m5
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     is_charging_t isCharging(void);
 
+    /// Get VBUS voltage
+    /// @return VBUS voltage [mV] / -1=not supported model
+    /// @attention Only for models with AXP192 or AXP2101
+    int16_t getVBUSVoltage(void);
+
     /// Get battery voltage
     /// @return battery voltage [mV]
     int16_t getBatteryVoltage(void);
@@ -170,6 +181,7 @@ namespace m5
 #endif
 
   private:
+    std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
 

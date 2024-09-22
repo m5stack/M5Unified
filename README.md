@@ -61,13 +61,14 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - M5STAMP PICO
 
 ## Supported devices (ESP32-S3)
- - M5Stack CoreS3
+ - M5Stack CoreS3 / CoreS3SE
  - M5ATOMS3 / S3Lite / S3U
  - M5STAMPS3
  - M5Dial
  - M5DinMeter
  - M5Capsule
  - M5Cardputer
+ - M5VAMeter
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
@@ -158,7 +159,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 
 
 ### ESP32S3 GPIO list
-|               |M5Stack<BR>CoreS3                |M5ATOMS3 <BR>/ S3Lite    |M5ATOMS3U                | M5STAMPS3                         | M5Dial                   | M5Capsule                | M5Cardputer              |               |
+|               |M5Stack<BR>CoreS3<BR>CoreS3SE    |M5ATOMS3 <BR>/ S3Lite    |M5ATOMS3U                | M5STAMPS3                         | M5Dial                   | M5Capsule                | M5Cardputer              |               |
 |:-------------:|:-------------------------------:|:-----------------------:|:-----------------------:|:---------------------------------:|:------------------------:|:------------------------:|:------------------------:|:-------------:|
 |GPIO 0         |`M-Bus`<BR>**SPK_LRCK**          | ---                     | ---                     | `Bus`<BR>**BTN_A**                | ---                      | ---                      | **BTN_A**                |GPIO 0         |
 |GPIO 1         |`PORT.A`<BR>**I2C0_SCL**         |`PORT.A`<BR>**I2C0_SCL** |`PORT.A`<BR>**I2C0_SCL** | `Bus`                             | `PORT.B`                 | ---                      | `PORT.A`<BR>**I2C0_SCL** |GPIO 1         |
@@ -218,7 +219,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 | DCDC3        |LCD BL             | ---               | ---            | ---            | ---         | DCDC3        |
 
 ### AXP2101 usage
-|           |M5Stack<BR>Core2v1.1  |M5Stack<BR>CoreS3  |           |
+|           |M5Stack<BR>Core2v1.1  |M5Stack<BR>CoreS3<BR>CoreS3SE| |
 |:---------:|:--------------------:|:-----------------:|:---------:|
 | ALDO1     | ---                  |VDD 1v8            | ALDO1     |
 | ALDO2     |LCD RST               |VDDA 3v3           | ALDO2     |
@@ -238,7 +239,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
   <TH></TH>
   <TH width="33%">M5Stack<BR>BASIC/GRAY<BR>GO/FIRE<BR>FACES II</TH>
   <TH width="33%">M5Stack<BR>Core2<BR>Core2AWS<BR>TOUGH</TH>
-  <TH width="33%">M5Stack<BR>CoreS3</TH>
+  <TH width="33%">M5Stack<BR>CoreS3<BR>CoreS3SE</TH>
  </TR>
  <TR align="center">
   <TD rowspan="2">Bus</TD>
@@ -370,7 +371,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  <TR>
   <TH></TH>
   <TH>ATOMS3<BR>/S3Lite</TH>
-  <TH>NanoC6</TH>
+  <TH>NanoC6/Cardputer</TH>
  </TR>
  <TR align="center">
   <TD>PortA</TD>

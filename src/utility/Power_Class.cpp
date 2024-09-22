@@ -11,7 +11,6 @@
 #include <esp_sleep.h>
 #include <sdkconfig.h>
 
-#include <esp_adc_cal.h>
 #include <soc/soc_caps.h>
 #include <soc/adc_channel.h>
 
@@ -71,6 +70,7 @@ namespace m5
       , 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
       , 0x69, 0x11 // CHGLED setting
       , 0x10, 0x30 // PMU common config
+      , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
@@ -348,6 +348,7 @@ namespace m5
       , 0x68, 0x01 // Battery detection enabled.
       , 0x69, 0x13 // CHGLED setting
       , 0x99, 0x00 // DLDO1 set 0.5v (vibration motor)
+      , 0x30, 0x0F // ADC enabled (for voltage measurement)
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
@@ -413,7 +414,13 @@ namespace m5
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
-        _core_s3_output(_core_s3_bus_en, enable);
+        bool cancel = (enable && !Axp2101.getBatState() && Axp2101.getTSVoltage() > 2.0f && Axp2101.isVBUS());
+        if (!cancel)
+        {
+          _core_s3_output(_core_s3_bus_en, enable);
+        } else {
+          ESP_LOGW("Power","setExtPower(true) is canceled.");
+        }
       }
       break;
 
@@ -579,7 +586,26 @@ namespace m5
     switch (M5.getBoard())
     {
     case board_t::board_M5StackCore2:
-      Axp192.writeRegister8(0x9A, 255-brightness);
+      switch (_pmic)
+      {
+      case pmic_t::pmic_axp192:
+        Axp192.writeRegister8(0x9A, 255-brightness);
+        break;
+
+      // Cannot set brightness; only off and on
+      case pmic_t::pmic_axp2101:
+        if(brightness == 0)
+        {
+          // CHGLED_CFG : HiZ
+          Axp2101.writeRegister8(0x69, 0x05);
+        }
+        else
+        {
+          // CHGLED_CFG : drive low
+          Axp2101.writeRegister8(0x69, 0x35);
+        }
+        break;
+      }
       break;
 
     case board_t::board_M5StackCoreInk:
@@ -835,38 +861,122 @@ namespace m5
     _timerSleep();
   }
 
-#if !defined (M5UNIFIED_PC_BUILD)
-
-  static std::int32_t getBatteryAdcRaw(uint8_t adc_ch, uint8_t adc_unit)
+  std::int32_t Power_Class::_getBatteryAdcRaw(void)
   {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (M5UNIFIED_PC_BUILD)
+    return 0;
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+
+#if __has_include (<esp_adc/adc_oneshot.h>)
+
+    static adc_oneshot_unit_handle_t adc_handle;
+    if (adc_handle == nullptr) {
+      adc_oneshot_unit_init_cfg_t init_config;
+      init_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
+      adc_oneshot_new_unit(&init_config, &adc_handle);
+      if (adc_handle == nullptr) { return 0; }
+
+      adc_oneshot_chan_cfg_t config;
+
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+  #define ADC_RAW_ATTEN ADC_ATTEN_DB_12
+ #endif
+#endif
+#ifndef ADC_RAW_ATTEN
+#define ADC_RAW_ATTEN ADC_ATTEN_DB_11
+#endif
+      config.atten = ADC_RAW_ATTEN;
+      config.bitwidth = ADC_BITWIDTH_12;
+      adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config);
+    }
+    static adc_cali_handle_t adc_cali;
+    if (adc_cali == nullptr) {
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+        adc_cali_curve_fitting_config_t cali_config;
+        cali_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
+        cali_config.chan = (adc_channel_t)_batAdcCh;
+        cali_config.atten = ADC_ATTEN_DB_12;
+        cali_config.bitwidth = ADC_BITWIDTH_12;
+        adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali);
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+        adc_cali_line_fitting_config_t cali_config;
+        cali_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
+        cali_config.atten = ADC_ATTEN_DB_12;
+        cali_config.bitwidth = ADC_BITWIDTH_12;
+        adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali);
+#endif
+    }
+    int raw, volt;
+    adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw);
+    if (adc_cali == nullptr) {
+      return raw;
+    }
+    adc_cali_raw_to_voltage(adc_cali, raw, &volt);
+    return volt;
+
+#else
     static constexpr int BASE_VOLATAGE = 3600;
 
     static esp_adc_cal_characteristics_t* adc_chars = nullptr;
     if (adc_chars == nullptr)
     {
-      if (adc_unit == 2) {
-        adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_DB_11);
+      if (_batAdcUnit == 2) {
+        adc2_config_channel_atten((adc2_channel_t)_batAdcCh, ADC_ATTEN_DB_11);
       } else {
         adc1_config_width(ADC_WIDTH_BIT_12);
-        adc1_config_channel_atten((adc1_channel_t)adc_ch, ADC_ATTEN_DB_11);
+        adc1_config_channel_atten((adc1_channel_t)_batAdcCh, ADC_ATTEN_DB_11);
       }
       adc_chars = (esp_adc_cal_characteristics_t*)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-      esp_adc_cal_characterize((adc_unit_t)adc_unit, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
+      esp_adc_cal_characterize((adc_unit_t)_batAdcUnit, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
     }
     int raw;
-    if (adc_unit == 2) {
-      adc2_get_raw((adc2_channel_t)adc_ch, adc_bits_width_t::ADC_WIDTH_BIT_12, &raw);
+    if (_batAdcUnit == 2) {
+      adc2_get_raw((adc2_channel_t)_batAdcCh, adc_bits_width_t::ADC_WIDTH_BIT_12, &raw);
     } else {
-      raw = adc1_get_raw((adc1_channel_t)adc_ch);
+      raw = adc1_get_raw((adc1_channel_t)_batAdcCh);
     }
     return esp_adc_cal_raw_to_voltage(raw, adc_chars);
+#endif
+
 #else
     return 0;
 #endif
   }
 
+  int16_t Power_Class::getVBUSVoltage(void)
+  {
+    float f = NAN;
+#if !defined (M5UNIFIED_PC_BUILD)
+    switch (_pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+
+    case pmic_t::pmic_axp192:
+      f = Axp192.getVBUSVoltage();
+      break;
+
 #endif
+
+    case pmic_t::pmic_axp2101:
+      f = Axp2101.getVBUSVoltage();
+      break;
+
+#endif
+
+    default:
+      break;
+    }
+
+#endif
+    if (isfinite(f))
+    {
+      return f * 1000;
+    }
+    return -1;
+  }
 
   int16_t Power_Class::getBatteryVoltage(void)
   {
@@ -891,7 +1001,7 @@ namespace m5
 #endif
 
     case pmic_t::pmic_adc:
-      return getBatteryAdcRaw(_batAdcCh, _batAdcUnit) * _adc_ratio;
+      return _getBatteryAdcRaw() * _adc_ratio;
 
     default:
       return 0;
@@ -928,7 +1038,7 @@ namespace m5
 #endif
 
     case pmic_t::pmic_adc:
-      mv = getBatteryAdcRaw(_batAdcCh, _batAdcUnit) * _adc_ratio;
+      mv = _getBatteryAdcRaw() * _adc_ratio;
       break;
 
     default:
