@@ -592,18 +592,15 @@ namespace m5
         Axp192.writeRegister8(0x9A, 255-brightness);
         break;
 
-      // Cannot set brightness; only off and on
       case pmic_t::pmic_axp2101:
-        if(brightness == 0)
         {
-          // CHGLED_CFG : HiZ
-          Axp2101.writeRegister8(0x69, 0x05);
+          // Cannot set brightness; only off and on
+          uint8_t val = (brightness == 0) ? 0x05 : 0x35;
+          Axp2101.writeRegister8(0x69, val);
         }
-        else
-        {
-          // CHGLED_CFG : drive low
-          Axp2101.writeRegister8(0x69, 0x35);
-        }
+        break;
+
+      default:
         break;
       }
       break;
