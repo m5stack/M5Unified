@@ -275,6 +275,9 @@ void setup(void)
   case m5::board_t::board_M5AtomS3:
     name = "ATOMS3";
     break;
+  case m5::board_t::board_M5AtomS3R:
+    name = "ATOMS3R";
+    break;
   case m5::board_t::board_M5Dial:
     name = "Dial";
     break;

@@ -73,8 +73,14 @@ namespace m5
     if (_imu == imu_t::imu_none)
     {
       auto bmi2 = new BMI270_Class();
-      if (!bmi2->begin(i2c)) { delete bmi2; }
-      else
+      if (!bmi2->begin(i2c)) {
+        bmi2->setAddress(bmi2->getAddress() == 0x68 ? 0x69 : 0x68);
+        if (!bmi2->begin(i2c)) {
+          delete bmi2;
+          bmi2 = nullptr;
+        }
+      }
+      if (bmi2 != nullptr)
       {
         _imu_instance[0].reset(bmi2);
         _imu = imu_t::imu_bmi270;

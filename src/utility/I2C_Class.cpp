@@ -97,6 +97,11 @@ namespace m5
     return m5gfx::i2c::bitOff(_port_num, address, reg, data, freq).has_value();
   }
 
+  bool I2C_Class::scanID(uint8_t addr) const
+  {
+    return start(addr, false, 400000) && stop();
+  }
+
   void I2C_Class::scanID(bool* __restrict__ result) const
   {
     // ESP32S3ではアドレス0~7をスキャン対象に含めると動作が停止する

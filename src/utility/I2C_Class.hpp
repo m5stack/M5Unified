@@ -123,6 +123,8 @@ namespace m5
     /// @param[out] result data array needs 120 Bytes.
     void scanID(bool* result) const;
 
+    bool scanID(uint8_t addr) const;
+
     i2c_port_t getPort(void) const { return _port_num; }
     int8_t getSDA(void) const { return _pin_sda; }
     int8_t getSCL(void) const { return _pin_scl; }
@@ -158,6 +160,10 @@ namespace m5
     void setPort(I2C_Class* i2c) { _i2c = i2c; }
 
     void setClock(std::uint32_t freq) { _freq = freq; }
+
+    void setAddress(std::uint8_t i2c_addr) { _addr = i2c_addr; }
+
+    std::uint8_t getAddress(void) const { return _addr; }
 
     bool writeRegister8(std::uint8_t reg, std::uint8_t data) const
     {
