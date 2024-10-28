@@ -12,10 +12,6 @@ static size_t rec_record_idx = 2;
 static size_t draw_record_idx = 0;
 static int16_t *rec_data;
 
-#if !defined ( ARDUINO )
- void delay(uint32_t msec) { vTaskDelay(msec / portTICK_PERIOD_MS ); }
-#endif
-
 void setup(void)
 {
   auto cfg = M5.config();
@@ -96,7 +92,7 @@ void loop(void)
     if (M5.Speaker.isEnabled())
     {
       M5.Display.clear();
-      while (M5.Mic.isRecording()) { delay(1); }
+      while (M5.Mic.isRecording()) { M5.delay(1); }
 
       /// Since the microphone and speaker cannot be used at the same time, turn off the microphone here.
       M5.Mic.end();
@@ -115,7 +111,7 @@ void loop(void)
       }
       do
       {
-        delay(1);
+        M5.delay(1);
         M5.update();
       } while (M5.Speaker.isPlaying());
 

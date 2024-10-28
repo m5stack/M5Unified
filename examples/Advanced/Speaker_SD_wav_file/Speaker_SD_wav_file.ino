@@ -126,6 +126,6 @@ void loop(void)
 {
   for (auto filename : files) {
     playSdWav(filename);
-    delay(500);
+    M5.delay(500);
   }
 }

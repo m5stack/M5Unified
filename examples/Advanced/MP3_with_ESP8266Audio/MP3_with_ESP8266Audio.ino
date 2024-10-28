@@ -469,7 +469,7 @@ void setup(void)
 
   while (false == SD.begin(GPIO_NUM_4, SPI, 25000000))
   {
-    delay(500);
+    M5.delay(500);
   }
 
   gfxSetup(&M5.Display);
@@ -487,7 +487,7 @@ void loop(void)
   }
   else
   {
-    delay(1);
+    M5.delay(1);
   }
 
   M5.update();
