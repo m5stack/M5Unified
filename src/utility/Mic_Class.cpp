@@ -62,10 +62,46 @@ namespace m5
     return rate;
   }
 
+#if __has_include(<driver/i2s_std.h>)
+  static error_t _i2s_start(i2s_port_t port) {
+    return ESP_FAIL;
+  }
+  static error_t _i2s_stop(i2s_port_t port)
+  {
+    return ESP_FAIL;
+  }
+  static error_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
+    return ESP_FAIL;
+  }
+  static error_t _i2s_driver_uninstall(i2s_port_t port)
+  {
+    return ESP_FAIL;
+  }
+#else
+  static error_t _i2s_start(i2s_port_t port)
+  {
+    return i2s_start(port);
+  }
+  static error_t _i2s_stop(i2s_port_t port)
+  {
+    return i2s_stop(port);
+  }
+  static error_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
+  {
+    return i2s_read(port, buf, len, result, tick);
+  }
+  static error_t _i2s_driver_uninstall(i2s_port_t port)
+  {
+    return i2s_driver_uninstall(port);
+  }
+#endif
+
   esp_err_t Mic_Class::_setup_i2s(void)
   {
     if (_cfg.pin_data_in  < 0) { return ESP_FAIL; }
-
+#if __has_include(<driver/i2s_std.h>)
+return ESP_FAIL;
+#else
     i2s_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_config_t));
     i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX );
@@ -157,6 +193,7 @@ namespace m5
     }
 
     return err;
+#endif
   }
 
   // クロックディバイダー計算用関数 (実装は Speaker_Class.cpp内)
@@ -258,7 +295,7 @@ namespace m5
 
 #endif
 
-    i2s_start(self->_cfg.i2s_port);
+    _i2s_start(self->_cfg.i2s_port);
 
     int32_t gain = self->_cfg.magnification;
     const float f_gain = (float)gain / (oversampling << 1);
@@ -270,9 +307,10 @@ namespace m5
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
+    memset(src_buf, 0, dma_buf_len * sizeof(int16_t));
 
-    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
-    i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
 
     while (self->_task_running)
     {
@@ -305,7 +343,7 @@ namespace m5
       {
         if (src_idx >= src_len)
         {
-          i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
+          _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
           src_len >>= 1;
           src_idx = 0;
         }
@@ -408,7 +446,7 @@ namespace m5
       }
     }
     self->_is_recording = false;
-    i2s_stop(self->_cfg.i2s_port);
+    _i2s_stop(self->_cfg.i2s_port);
 
     self->_task_handle = nullptr;
     vTaskDelete(nullptr);
@@ -464,7 +502,7 @@ namespace m5
     }
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
-    i2s_driver_uninstall(_cfg.i2s_port);
+    _i2s_driver_uninstall(_cfg.i2s_port);
   }
 
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
