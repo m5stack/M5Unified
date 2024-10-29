@@ -15,6 +15,7 @@
 
 #if __has_include(<driver/i2s_std.h>)
  #include <driver/i2s_std.h>
+ #include <driver/i2s_pdm.h>
 #else
  #include <driver/i2s.h>
 #endif

@@ -76,10 +76,12 @@ namespace m5
   static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
+    if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
     return i2s_channel_enable(_i2s_handle[port]);
   }
   static esp_err_t _i2s_stop(i2s_port_t port)
   {
+    if (_i2s_handle[port] == nullptr) { return ESP_OK; }
     return i2s_channel_disable(_i2s_handle[port]);
   }
   static esp_err_t _i2s_write(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
@@ -94,8 +96,8 @@ namespace m5
     }
     return ESP_OK;
   }
-  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// DACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
       bool dac_en = left_en || right_en;
@@ -127,12 +129,12 @@ namespace m5
       I2S0.conf.tx_right_first = false;
       I2S0.conf.tx_msb_shift = 0;
       I2S0.conf.tx_short_sync = 0;
+      return ESP_OK;
     }
-
+    return ESP_FAIL;
+  }
 #endif
 
-    return ESP_OK;
-  }
 #else
   static esp_err_t _i2s_start(i2s_port_t port)
   {
@@ -197,7 +199,7 @@ namespace m5
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     // i2s_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(16, I2S_SLOT_MODE_STEREO);
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
+    i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
     i2s_config.slot_cfg.slot_mask = i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH;
     i2s_config.slot_cfg.ws_width = 16;
@@ -358,7 +360,6 @@ namespace m5
 
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
-    _i2s_stop(i2s_port);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
