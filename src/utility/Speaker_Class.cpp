@@ -25,6 +25,12 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
+#if __has_include (<hal/dac_ll.h>)
+#include <hal/dac_types.h>
+#include <hal/dac_ll.h>
+#include <driver/rtc_io.h>
+#endif
+
 #endif
 
 #include <math.h>
@@ -66,49 +72,104 @@ namespace m5
 #else
 
 #if __has_include(<driver/i2s_std.h>)
-  static error_t _i2s_start(i2s_port_t port) {
-    return ESP_FAIL;
+
+  static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
+
+  static esp_err_t _i2s_start(i2s_port_t port) {
+    return i2s_channel_enable(_i2s_handle[port]);
   }
-  static error_t _i2s_stop(i2s_port_t port)
+  static esp_err_t _i2s_stop(i2s_port_t port)
   {
-    return ESP_FAIL;
+    return i2s_channel_disable(_i2s_handle[port]);
   }
-  static error_t _i2s_write(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
-    return ESP_FAIL;
+  static esp_err_t _i2s_write(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
+    return i2s_channel_write(_i2s_handle[port], buf, len, result, tick);
   }
-  static error_t _i2s_driver_uninstall(i2s_port_t port)
+  static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
-    return ESP_FAIL;
+    if (_i2s_handle[port] != nullptr) {
+      auto res = i2s_del_channel(_i2s_handle[port]);
+      _i2s_handle[port] = nullptr;
+      return res;
+    }
+    return ESP_OK;
   }
-  static error_t _i2s_set_dac(bool left_en, bool right_en) {
-    return ESP_FAIL;
+  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+    if (port == I2S_NUM_0)
+    { /// DACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
+      bool dac_en = left_en || right_en;
+      bool flg[2] = { right_en, left_en };
+      static constexpr const gpio_num_t gpio_table[2] = { GPIO_NUM_25, GPIO_NUM_26 }; // for ESP32 (not ESP32S2, s2=gpio17,gpio18)
+      static constexpr const dac_channel_t ch_table[] = { DAC_CHAN_0, DAC_CHAN_1 };
+      for (int i = 0; i < 2; ++i)
+      {
+        bool en = flg[i];
+        auto channel = ch_table[i];
+        if (en)
+        {
+          auto gpio_num = gpio_table[i];
+          rtc_gpio_init(gpio_num);
+          rtc_gpio_set_direction(gpio_num, RTC_GPIO_MODE_DISABLED);
+          rtc_gpio_pullup_dis(gpio_num);
+          rtc_gpio_pulldown_dis(gpio_num);
+          dac_ll_power_on(channel);
+        } else {
+          dac_ll_power_down(channel);
+        }
+      }
+      if (dac_en == true) {
+        dac_ll_rtc_sync_by_adc(false);
+      }
+      dac_ll_digi_enable_dma(dac_en);
+
+      I2S0.conf2.lcd_en = true;
+      I2S0.conf.tx_right_first = false;
+      I2S0.conf.tx_msb_shift = 0;
+      I2S0.conf.tx_short_sync = 0;
+    }
+
+#endif
+
+    return ESP_OK;
   }
 #else
-  static error_t _i2s_start(i2s_port_t port)
+  static esp_err_t _i2s_start(i2s_port_t port)
   {
     return i2s_start(port);
   }
-  static error_t _i2s_stop(i2s_port_t port)
+  static esp_err_t _i2s_stop(i2s_port_t port)
   {
     return i2s_stop(port);
   }
-  static error_t _i2s_write(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
+  static esp_err_t _i2s_write(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
   {
     return i2s_write(port, buf, len, result, tick);
   }
-  static error_t _i2s_driver_uninstall(i2s_port_t port)
+  static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
     return i2s_driver_uninstall(port);
   }
-  static error_t _i2s_set_dac(bool left_en, bool right_en) {
-    i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE;
-    if (left_en) {
-      dac_mode = right_en ? I2S_DAC_CHANNEL_BOTH_EN : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN;
+  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    if (port == I2S_NUM_0)
+    { /// レジスタを操作してDACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
+      i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE;
+      if (left_en) {
+        dac_mode = right_en ? I2S_DAC_CHANNEL_BOTH_EN : i2s_dac_mode_t::I2S_DAC_CHANNEL_LEFT_EN;
+      }
+      else if (right_en) {
+        dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_RIGHT_EN;
+      }
+      i2s_set_dac_mode(dac_mode);
+      I2S0.conf2.lcd_en = true;
+      I2S0.conf.tx_right_first = false;
+      I2S0.conf.tx_msb_shift = 0;
+      I2S0.conf.tx_short_sync = 0;
+      return ESP_OK;
     }
-    else if (right_en) {
-      dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_RIGHT_EN;
-    }
-    i2s_set_dac_mode(dac_mode);
+#endif
+    return ESP_FAIL;
   }
 #endif
 
@@ -121,7 +182,51 @@ namespace m5
     if (_cfg.use_dac && _cfg.i2s_port != I2S_NUM_0) { return ESP_FAIL; }
 #endif
 #if __has_include(<driver/i2s_std.h>)
-return ESP_FAIL;
+
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(_cfg.i2s_port, I2S_ROLE_MASTER);
+    chan_cfg.dma_desc_num = _cfg.dma_buf_count;
+    chan_cfg.dma_frame_num = _cfg.dma_buf_len;
+    _i2s_driver_uninstall(_cfg.i2s_port);
+    esp_err_t err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
+    if (err != ESP_OK) { return err; }
+
+    i2s_std_config_t i2s_config;
+    memset(&i2s_config, 0, sizeof(i2s_std_config_t));
+    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+    i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
+    i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+    // i2s_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(16, I2S_SLOT_MODE_STEREO);
+    i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
+    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
+    i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
+    i2s_config.slot_cfg.slot_mask = i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH;
+    i2s_config.slot_cfg.ws_width = 16;
+    i2s_config.slot_cfg.ws_pol = false;
+    i2s_config.slot_cfg.bit_shift = true;
+#if SOC_I2S_HW_VERSION_1    // For esp32/esp32-s2
+    i2s_config.slot_cfg.msb_right = false;
+#else
+    i2s_config.slot_cfg.left_align = true;
+    i2s_config.slot_cfg.big_endian = false;
+    i2s_config.slot_cfg.bit_order_lsb = false;
+#endif
+    i2s_config.gpio_cfg.bclk = (gpio_num_t)_cfg.pin_bck;
+    i2s_config.gpio_cfg.ws   = (gpio_num_t)_cfg.pin_ws;
+    i2s_config.gpio_cfg.dout = (gpio_num_t)_cfg.pin_data_out;
+    i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
+    i2s_config.gpio_cfg.din  = (gpio_num_t)I2S_PIN_NO_CHANGE;
+    err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
+
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    if (_cfg.use_dac)
+    {
+      bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
+      bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
+      err = _i2s_set_dac(_cfg.i2s_port, left_en, right_en);
+    }
+#endif
+
+    return err;
 #else
 
     i2s_config_t i2s_config;
@@ -150,7 +255,7 @@ return ESP_FAIL;
     esp_err_t err;
     if (ESP_OK != (err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr)))
     {
-      i2s_driver_uninstall(_cfg.i2s_port);
+      _i2s_driver_uninstall(_cfg.i2s_port);
       err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr);
     }
     if (err != ESP_OK) { return err; }
@@ -158,16 +263,9 @@ return ESP_FAIL;
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_dac)
     {
-      bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
       bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
-      err = _i2s_set_dac(left_en, right_en);
-      if (_cfg.i2s_port == I2S_NUM_0)
-      { /// レジスタを操作してDACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
-        I2S0.conf2.lcd_en = true;
-        I2S0.conf.tx_right_first = false;
-        I2S0.conf.tx_msb_shift = 0;
-        I2S0.conf.tx_short_sync = 0;
-      }
+      bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
+      err = _i2s_set_dac(_cfg.i2s_port, left_en, right_en);
     }
     else
 #endif
@@ -427,7 +525,7 @@ return ESP_FAIL;
             {
               flg_i2s_started = spk_i2s_stop;
               _i2s_stop(i2s_port);
-              _i2s_set_dac(false, false); //i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
+              _i2s_set_dac(i2s_port, false, false); //i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE);
             }
 #endif
             // 新しいデータが届くまで待機;
@@ -457,7 +555,7 @@ return ESP_FAIL;
           {
             bool left_en = out_stereo || (self->_cfg.pin_data_out == GPIO_NUM_26);
             bool right_en = out_stereo || (self->_cfg.pin_data_out == GPIO_NUM_25);
-            _i2s_set_dac(left_en, right_en);
+            _i2s_set_dac(i2s_port, left_en, right_en);
           }
 #endif
           _i2s_start(i2s_port);
@@ -761,7 +859,7 @@ label_continue_sample:
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (self->_cfg.use_dac)
     {
-      _i2s_set_dac(false, false);
+      _i2s_set_dac(i2s_port, false, false);
       m5gfx::gpio_lo(self->_cfg.pin_data_out);
       m5gfx::pinMode(self->_cfg.pin_data_out, m5gfx::pin_mode_t::output);
     }
