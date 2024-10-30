@@ -62,7 +62,7 @@ namespace m5
           break;
         }
 
-        if (board == m5::board_t::board_M5Atom)
+        if (board == m5::board_t::board_M5AtomMatrix)
         { // ATOM Matrix's IMU is oriented differently, so change the setting.
           _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転
           _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転

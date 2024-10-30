@@ -9,8 +9,8 @@
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
-#if __has_include (<driver/i2s.h>)
-#include <driver/i2s.h>
+#if __has_include (<driver/i2s_type.h>)
+#include <driver/i2s_type.h>
 #endif
 
 #if __has_include (<esp_idf_version.h>)
@@ -77,7 +77,9 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
 { board_t::board_M5Paper      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_32,GPIO_NUM_25 },
 { board_t::board_M5TimerCam   , GPIO_NUM_14,GPIO_NUM_12 , GPIO_NUM_13,GPIO_NUM_4  },
-{ board_t::board_M5Atom       , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
+{ board_t::board_M5AtomLite   , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
+{ board_t::board_M5AtomMatrix , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
+{ board_t::board_M5AtomECHO   , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_M5AtomU      , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_M5AtomPsram  , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_unknown      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_33,GPIO_NUM_32 }, // Core2,Tough,StickC,CoreInk,Station,StampPico
@@ -151,7 +153,9 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
 { board_t::board_M5Station    , GPIO_NUM_4  },
-{ board_t::board_M5Atom       , GPIO_NUM_27 },
+{ board_t::board_M5AtomLite   , GPIO_NUM_27 },
+{ board_t::board_M5AtomMatrix , GPIO_NUM_27 },
+{ board_t::board_M5AtomECHO   , GPIO_NUM_27 },
 { board_t::board_M5AtomU      , GPIO_NUM_27 },
 { board_t::board_M5AtomPsram  , GPIO_NUM_27 },
 { board_t::board_M5StampPico  , GPIO_NUM_27 },
@@ -420,12 +424,62 @@ for (int i = 0; i < 0x50; ++i)
         break;
 
       case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
-        m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
-        m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
-        board = m5gfx::gpio_in(GPIO_NUM_2)
-              ? (m5gfx::gpio_in(GPIO_NUM_34) ? board_t::board_M5Atom : board_t::board_M5AtomU)
-              : board_t::board_M5StampPico;
-        m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pulldown);
+        {
+          m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_19, GPIO_NUM_22, GPIO_NUM_27, GPIO_NUM_33, GPIO_NUM_34 };
+          m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
+          m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
+          board = board_t::board_M5StampPico;
+          if (m5gfx::gpio_in(GPIO_NUM_2)) // Branches other than StampPico ( StampPico G2 is always LOW )
+          {
+            board = board_t::board_M5AtomU;
+            if (m5gfx::gpio_in(GPIO_NUM_34)) { // Branches other than AtomU ( AtomU G34 is always LOW )
+              board = board_t::board_M5AtomMatrix;
+              portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+              portMUX_INITIALIZE(&mux);
+              uint32_t g27 = 0;
+              for (int i = 0; i < 8; ++i){
+                lgfx::pinMode(GPIO_NUM_27, lgfx::pin_mode_t::input_pulldown);
+                delay(1);
+                taskENTER_CRITICAL(&mux);
+                lgfx::pinMode(GPIO_NUM_27, lgfx::pin_mode_t::input_pullup);
+                g27 += lgfx::gpio_in(GPIO_NUM_27);
+                taskEXIT_CRITICAL(&mux);
+              }
+              if (g27 > 4) { // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
+                auto result = m5gfx::gpio::command(
+                  (const uint8_t[]) {
+                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_22,
+                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_19,
+                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_33,
+                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_33,
+                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_19,
+                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_22,
+                  m5gfx::gpio::command_read               , GPIO_NUM_33,
+                  m5gfx::gpio::command_read               , GPIO_NUM_19,
+                  m5gfx::gpio::command_read               , GPIO_NUM_22,
+                  m5gfx::gpio::command_mode_input         , GPIO_NUM_33,
+                  m5gfx::gpio::command_mode_input         , GPIO_NUM_19,
+                  m5gfx::gpio::command_mode_input         , GPIO_NUM_22,
+                  m5gfx::gpio::command_delay              , 1,
+                  m5gfx::gpio::command_read               , GPIO_NUM_33,
+                  m5gfx::gpio::command_read               , GPIO_NUM_19,
+                  m5gfx::gpio::command_read               , GPIO_NUM_22,
+                  }
+                );
+                // G19 G22 G33 = ECHOのI2Sスピーカ用ピン。プルアップを無効化するとすぐにLOWになるため、この性質を利用して判定する。
+                // なお当該ピンに何かを外付けしている場合は判定に失敗する可能性がある。
+                board = board_t::board_M5AtomLite;
+                if ((result) == 0b111000)
+                { // Branches for AtomECHO
+                  board = board_t::board_M5AtomECHO;
+                }
+              }
+            }
+          }
+          for (auto &backup : pin_backup) {
+            backup.restore();
+          }
+        }
         break;
 
       case 6: // EFUSE_RD_CHIP_VER_PKG_ESP32PICOV3_02: // ATOM PSRAM
@@ -464,7 +518,7 @@ for (int i = 0; i < 0x50; ++i)
 
 #elif defined ( ARDUINO_M5STACK_ATOM ) || defined ( ARDUINO_M5Stack_ATOM )
 
-        board = board_t::board_M5Atom;
+        board = board_t::board_M5AtomLite;
 
 #elif defined ( ARDUINO_M5STACK_TIMER_CAM ) || defined ( ARDUINO_M5Stack_Timer_CAM )
 
@@ -476,69 +530,82 @@ for (int i = 0; i < 0x50; ++i)
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (board == board_t::board_unknown)
-    { /// StampS3 or AtomS3Lite,S3U ?
-      ///   After setting GPIO38 to INPUT PULL-UP, change to INPUT and read it.
-      ///   In the case of STAMPS3: Returns 0. Charge is sucked by SGM2578.
-      ///   In the case of ATOMS3Lite/S3U : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
-      ///
-      /// AtomS3Lite or AtomS3U ?
-      ///   After setting GPIO4 to INPUT PULL-UP, read it.
-      ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
-      ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
 
-      m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
-      auto result = m5gfx::gpio::command(
-        (const uint8_t[]) {
-        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_4,
-        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_12,
-        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_38,
-        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_8,
-        m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_10,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
-        m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
-        m5gfx::gpio::command_read               , GPIO_NUM_8,
-        m5gfx::gpio::command_read               , GPIO_NUM_10,
-        m5gfx::gpio::command_read               , GPIO_NUM_4,
-        m5gfx::gpio::command_read               , GPIO_NUM_12,
-        m5gfx::gpio::command_read               , GPIO_NUM_38,
-        m5gfx::gpio::command_mode_input         , GPIO_NUM_38,
-        m5gfx::gpio::command_delay              , 1,
-        m5gfx::gpio::command_read               , GPIO_NUM_38,
-        m5gfx::gpio::command_end
+    switch (m5gfx::get_pkg_ver())
+    {
+    default:
+    case 0: // EFUSE_PKG_VERSION_ESP32S3:     // QFN56
+      if (board == board_t::board_unknown)
+      { /// StampS3 or AtomS3Lite,S3U ?
+        ///   After setting GPIO38 to INPUT PULL-UP, change to INPUT and read it.
+        ///   In the case of STAMPS3: Returns 0. Charge is sucked by SGM2578.
+        ///   In the case of ATOMS3Lite/S3U : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
+        ///
+        /// AtomS3Lite or AtomS3U ?
+        ///   After setting GPIO4 to INPUT PULL-UP, read it.
+        ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
+        ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
+
+        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
+        auto result = m5gfx::gpio::command(
+          (const uint8_t[]) {
+          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_4,
+          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_12,
+          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_38,
+          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_8,
+          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_10,
+          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
+          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
+          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
+          m5gfx::gpio::command_read               , GPIO_NUM_8,
+          m5gfx::gpio::command_read               , GPIO_NUM_10,
+          m5gfx::gpio::command_read               , GPIO_NUM_4,
+          m5gfx::gpio::command_read               , GPIO_NUM_12,
+          m5gfx::gpio::command_read               , GPIO_NUM_38,
+          m5gfx::gpio::command_mode_input         , GPIO_NUM_38,
+          m5gfx::gpio::command_delay              , 1,
+          m5gfx::gpio::command_read               , GPIO_NUM_38,
+          m5gfx::gpio::command_end
+          }
+        );
+        /// result には、command_read で得たGPIOの状態が1bitずつ4回分入っている。
+        board = ((const board_t[])
+          { //                                                      ↓StampS3 pattern↓
+            board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
+            board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown  , board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
+            board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
+            board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
+          })[result&15];
+        if ((result & 3) == 2) { // StampS3 pattern
+          if ((result >> 3) == 0b110) {
+            board = board_t::board_M5Capsule;
+            // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
+            // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
+            m5gfx::gpio::command(
+              (const uint8_t[]) {
+              m5gfx::gpio::command_mode_output, GPIO_NUM_15,
+              m5gfx::gpio::command_write_low  , GPIO_NUM_15,
+              m5gfx::gpio::command_mode_output, GPIO_NUM_13,
+              m5gfx::gpio::command_write_low  , GPIO_NUM_13,
+              m5gfx::gpio::command_write_high , GPIO_NUM_15,
+              m5gfx::gpio::command_write_high , GPIO_NUM_13,
+              m5gfx::gpio::command_end
+              }
+            );
+          }
         }
-      );
-      /// result には、command_read で得たGPIOの状態が1bitずつ4回分入っている。
-      board = ((const board_t[])
-        { //                                                      ↓StampS3 pattern↓
-          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
-          board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown  , board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
-          board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
-          board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
-        })[result&15];
-      if ((result & 3) == 2) { // StampS3 pattern
-        if ((result >> 3) == 0b110) {
-          board = board_t::board_M5Capsule;
-          // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
-          // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
-          m5gfx::gpio::command(
-            (const uint8_t[]) {
-            m5gfx::gpio::command_mode_output, GPIO_NUM_15,
-            m5gfx::gpio::command_write_low  , GPIO_NUM_15,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_13,
-            m5gfx::gpio::command_write_low  , GPIO_NUM_13,
-            m5gfx::gpio::command_write_high , GPIO_NUM_15,
-            m5gfx::gpio::command_write_high , GPIO_NUM_13,
-            m5gfx::gpio::command_end
-            }
-          );
+        for (auto &backup : pin_backup) {
+          backup.restore();
         }
       }
-      for (auto &backup : pin_backup) {
-        backup.restore();
+      break;
+
+    case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
+      if (board == board_t::board_unknown)
+      { /// AtomS3RCam or AtomS3RProto ?
       }
     }
+
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
     if (board == board_t::board_unknown)
@@ -651,7 +718,9 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-    case board_t::board_M5Atom:
+    case board_t::board_M5AtomLite:
+    case board_t::board_M5AtomMatrix:
+    case board_t::board_M5AtomECHO:
     case board_t::board_M5AtomU:
       // Countermeasure to the problem that CH552 applies 4v to GPIO0, thus reducing WiFi sensitivity.
       // Setting output_high adds a bias of 3.3v and suppresses overvoltage.
@@ -684,7 +753,9 @@ for (int i = 0; i < 0x50; ++i)
       m5gfx::pinMode(GPIO_NUM_37, m5gfx::pin_mode_t::input);
       NON_BREAK; /// don't break;
 
-    case board_t::board_M5Atom:
+    case board_t::board_M5AtomLite:
+    case board_t::board_M5AtomMatrix:
+    case board_t::board_M5AtomECHO:
     case board_t::board_M5AtomPsram:
     case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
@@ -846,7 +917,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
-      case board_t::board_M5Atom:
+      case board_t::board_M5AtomECHO:
         { /// ATOM ECHO builtin PDM mic
           mic_cfg.pin_data_in = GPIO_NUM_23;
           mic_cfg.pin_ws = GPIO_NUM_33;
@@ -1032,7 +1103,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
-      case board_t::board_M5Atom:
+      case board_t::board_M5AtomECHO:
         if (cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOM ECHO
           spk_cfg.pin_bck = GPIO_NUM_19;
@@ -1041,6 +1112,8 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.magnification = 12;
         }
         NON_BREAK;
+      case board_t::board_M5AtomLite:
+      case board_t::board_M5AtomMatrix:
       case board_t::board_M5AtomPsram:
         if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOMIC SPK
@@ -1250,7 +1323,9 @@ for (int i = 0; i < 0x50; ++i)
                         | (((raw_gpio32_39 >> (GPIO_NUM_37 & 31)) & 1) << 2); // gpio37 C
       NON_BREAK; /// don't break;
 
-    case board_t::board_M5Atom:
+    case board_t::board_M5AtomLite:
+    case board_t::board_M5AtomMatrix:
+    case board_t::board_M5AtomECHO:
     case board_t::board_M5AtomPsram:
     case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
