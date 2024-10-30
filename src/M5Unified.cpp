@@ -79,7 +79,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5TimerCam   , GPIO_NUM_14,GPIO_NUM_12 , GPIO_NUM_13,GPIO_NUM_4  },
 { board_t::board_M5AtomLite   , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_M5AtomMatrix , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
-{ board_t::board_M5AtomECHO   , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
+{ board_t::board_M5AtomEcho   , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_M5AtomU      , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_M5AtomPsram  , GPIO_NUM_21,GPIO_NUM_25 , GPIO_NUM_32,GPIO_NUM_26 },
 { board_t::board_unknown      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_33,GPIO_NUM_32 }, // Core2,Tough,StickC,CoreInk,Station,StampPico
@@ -155,7 +155,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5Station    , GPIO_NUM_4  },
 { board_t::board_M5AtomLite   , GPIO_NUM_27 },
 { board_t::board_M5AtomMatrix , GPIO_NUM_27 },
-{ board_t::board_M5AtomECHO   , GPIO_NUM_27 },
+{ board_t::board_M5AtomEcho   , GPIO_NUM_27 },
 { board_t::board_M5AtomU      , GPIO_NUM_27 },
 { board_t::board_M5AtomPsram  , GPIO_NUM_27 },
 { board_t::board_M5StampPico  , GPIO_NUM_27 },
@@ -471,7 +471,7 @@ for (int i = 0; i < 0x50; ++i)
                 board = board_t::board_M5AtomLite;
                 if ((result) == 0b111000)
                 { // Branches for AtomECHO
-                  board = board_t::board_M5AtomECHO;
+                  board = board_t::board_M5AtomEcho;
                 }
               }
             }
@@ -720,7 +720,7 @@ for (int i = 0; i < 0x50; ++i)
     case board_t::board_M5StickCPlus:
     case board_t::board_M5AtomLite:
     case board_t::board_M5AtomMatrix:
-    case board_t::board_M5AtomECHO:
+    case board_t::board_M5AtomEcho:
     case board_t::board_M5AtomU:
       // Countermeasure to the problem that CH552 applies 4v to GPIO0, thus reducing WiFi sensitivity.
       // Setting output_high adds a bias of 3.3v and suppresses overvoltage.
@@ -755,7 +755,7 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5AtomLite:
     case board_t::board_M5AtomMatrix:
-    case board_t::board_M5AtomECHO:
+    case board_t::board_M5AtomEcho:
     case board_t::board_M5AtomPsram:
     case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:
@@ -917,7 +917,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
-      case board_t::board_M5AtomECHO:
+      case board_t::board_M5AtomEcho:
         { /// ATOM ECHO builtin PDM mic
           mic_cfg.pin_data_in = GPIO_NUM_23;
           mic_cfg.pin_ws = GPIO_NUM_33;
@@ -1103,7 +1103,7 @@ for (int i = 0; i < 0x50; ++i)
         }
         break;
 
-      case board_t::board_M5AtomECHO:
+      case board_t::board_M5AtomEcho:
         if (cfg.internal_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
         { // for ATOM ECHO
           spk_cfg.pin_bck = GPIO_NUM_19;
@@ -1325,7 +1325,7 @@ for (int i = 0; i < 0x50; ++i)
 
     case board_t::board_M5AtomLite:
     case board_t::board_M5AtomMatrix:
-    case board_t::board_M5AtomECHO:
+    case board_t::board_M5AtomEcho:
     case board_t::board_M5AtomPsram:
     case board_t::board_M5AtomU:
     case board_t::board_M5StampPico:

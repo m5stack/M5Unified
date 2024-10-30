@@ -345,7 +345,7 @@ void setup(void)
   case m5::board_t::board_M5AtomMatrix:
     name = "ATOM Matrix";
     break;
-  case m5::board_t::board_M5AtomECHO:
+  case m5::board_t::board_M5AtomEcho:
     name = "ATOM ECHO";
     break;
   case m5::board_t::board_M5AtomPsram:
