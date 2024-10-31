@@ -21,9 +21,14 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if __has_include (<hal/adc_hal.h>)
-#include <hal/adc_hal.h>
-#include <driver/rtc_io.h>
+#if __has_include (<hal/adc_ll.h>)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
+ #include <hal/adc_ll.h>
+ #include <driver/rtc_io.h>
+
+ #pragma GCC diagnostic pop
 #endif
 
 #define __STDC_FORMAT_MACROS
