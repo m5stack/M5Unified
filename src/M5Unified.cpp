@@ -9,6 +9,10 @@
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
+#if __has_include (<driver/touch_sensor.h>)
+#include <driver/touch_sensor.h>
+#endif
+
 #if __has_include (<driver/i2s_type.h>)
 #include <driver/i2s_type.h>
 #endif
@@ -425,19 +429,41 @@ for (int i = 0; i < 0x50; ++i)
 
       case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
         {
-          m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_19, GPIO_NUM_22, GPIO_NUM_27, GPIO_NUM_33, GPIO_NUM_34 };
-          m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
+          m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_13, GPIO_NUM_19, GPIO_NUM_22, GPIO_NUM_27, GPIO_NUM_33, GPIO_NUM_34 };
           m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
+          m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
           board = board_t::board_M5StampPico;
           if (m5gfx::gpio_in(GPIO_NUM_2)) // Branches other than StampPico ( StampPico G2 is always LOW )
           {
             board = board_t::board_M5AtomU;
             if (m5gfx::gpio_in(GPIO_NUM_34)) { // Branches other than AtomU ( AtomU G34 is always LOW )
               board = board_t::board_M5AtomMatrix;
+#if SOC_TOUCH_SENSOR_SUPPORTED
+/* G27(RGBLED)に対してタッチセンサを用い、容量の差に基づいて LiteとMatrix の識別を行う。
+  G27に対してタッチセンサを使用すると、得られる値は Liteの方が値が大きく、Matrixの方が小さい。
+  なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
+*/
+              uint16_t g13, g27;
+              touch_pad_init();
+              touch_pad_config(TOUCH_PAD_NUM4, SOC_TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM4 == GPIO13
+              touch_pad_config(TOUCH_PAD_NUM7, SOC_TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM7 == GPIO27
+              touch_pad_read(TOUCH_PAD_NUM4, &g13);
+              touch_pad_read(TOUCH_PAD_NUM7, &g27);
+              touch_pad_deinit();
+              int diff = (g27 * 3 - g13);
+              // M5_LOGV("G13 = %d / G27 = %d / diff = %d", g13, g27, diff);
+              if (diff >= 0)
+#else
+/*
+  タッチセンサAPIが使えない場合の処理 (ESP-IDFのバージョンに依る)
+  GPIOの立上り速度の差を用いて LiteとMatrix の識別を行う。
+  (Matrixの方がinput_pullupでHIGHになるまでの時間が長いため、この性質を利用して判定する)
+*/
               portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-              portMUX_INITIALIZE(&mux);
               uint32_t g27 = 0;
-              for (int i = 0; i < 8; ++i){
+              // 8回読み取って立上り速度の差を見る
+              for (int i = 0; i < 8; ++i)
+              {
                 lgfx::pinMode(GPIO_NUM_27, lgfx::pin_mode_t::input_pulldown);
                 delay(1);
                 taskENTER_CRITICAL(&mux);
@@ -445,7 +471,9 @@ for (int i = 0; i < 0x50; ++i)
                 g27 += lgfx::gpio_in(GPIO_NUM_27);
                 taskEXIT_CRITICAL(&mux);
               }
-              if (g27 > 4) { // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
+              if (g27 > 4)
+#endif
+              { // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
                 auto result = m5gfx::gpio::command(
                   (const uint8_t[]) {
                   m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_22,
