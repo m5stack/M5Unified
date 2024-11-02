@@ -15,7 +15,7 @@ namespace m5
   {
     uint16_t id = readRegister16(0xFF);
 #if defined (ESP_LOGV)
-      ESP_LOGV("INA3221", "regFFh:%04x", id);
+      // ESP_LOGV("INA3221", "regFFh:%04x", id);
 #endif
     _init = (id == 0x3220);
     return _init;

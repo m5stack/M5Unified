@@ -439,8 +439,8 @@ for (int i = 0; i < 0x50; ++i)
             if (m5gfx::gpio_in(GPIO_NUM_34)) { // Branches other than AtomU ( AtomU G34 is always LOW )
               board = board_t::board_M5AtomMatrix;
 #if SOC_TOUCH_SENSOR_SUPPORTED
-/* G27(RGBLED)に対してタッチセンサを用い、容量の差に基づいて LiteとMatrix の識別を行う。
-  G27に対してタッチセンサを使用すると、得られる値は Liteの方が値が大きく、Matrixの方が小さい。
+/* G27(RGBLED)に対してタッチセンサを用い、容量の差に基づいて Matrix の識別を行う。
+  G27に対してタッチセンサを使用すると、得られる値は Lite/ECHOの方が大きく、Matrixの方が小さい。
   なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
 */
               uint16_t g13, g27;
@@ -452,6 +452,8 @@ for (int i = 0; i < 0x50; ++i)
               touch_pad_deinit();
               int diff = (g27 * 3 - g13);
               // M5_LOGV("G13 = %d / G27 = %d / diff = %d", g13, g27, diff);
+
+              // Branches other than AtomMatrix
               if (diff >= 0)
 #else
 /*
@@ -471,9 +473,11 @@ for (int i = 0; i < 0x50; ++i)
                 g27 += lgfx::gpio_in(GPIO_NUM_27);
                 taskEXIT_CRITICAL(&mux);
               }
+
+              // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
               if (g27 > 4)
 #endif
-              { // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
+              {
                 auto result = m5gfx::gpio::command(
                   (const uint8_t[]) {
                   m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_22,
@@ -631,6 +635,7 @@ for (int i = 0; i < 0x50; ++i)
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
       if (board == board_t::board_unknown)
       { /// AtomS3RCam or AtomS3RProto ?
+        board = board_t::board_M5AtomS3RProto;
       }
     }
 
@@ -996,24 +1001,33 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomS3:
       case board_t::board_M5AtomS3Lite:
       case board_t::board_M5AtomS3R:
-        if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (cfg.external_speaker.atomic_spk)
         { // for ATOMIC SPK
-          m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
-          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
-          if (m5gfx::gpio_in(GPIO_NUM_6)
-            && m5gfx::gpio_in(GPIO_NUM_7))
-          {
-            ESP_LOGD("M5Unified", "ATOMIC SPK");
-            // atomic_spkのSDカード用ピンを割当
-            _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
-            _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
-            _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
-            cfg.internal_imu = false; /// avoid conflict with i2c
-            cfg.internal_rtc = false; /// avoid conflict with i2c
-            spk_cfg.pin_bck = GPIO_NUM_5;
-            spk_cfg.pin_ws = GPIO_NUM_39;
-            spk_cfg.pin_data_out = GPIO_NUM_38;
-            spk_cfg.magnification = 16;
+          bool atomdisplay = false;
+          for (int i = 0; i < getDisplayCount(); ++i) {
+            if (Displays(i).getBoard() == board_t::board_M5AtomDisplay) {
+              atomdisplay = true;
+              break;
+            }
+          }
+          if (!atomdisplay) {
+            m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
+            m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
+            if (m5gfx::gpio_in(GPIO_NUM_6)
+              && m5gfx::gpio_in(GPIO_NUM_7))
+            {
+              ESP_LOGD("M5Unified", "ATOMIC SPK");
+              // atomic_spkのSDカード用ピンを割当
+              _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
+              _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
+              _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
+              cfg.internal_imu = false; /// avoid conflict with i2c
+              cfg.internal_rtc = false; /// avoid conflict with i2c
+              spk_cfg.pin_bck = GPIO_NUM_5;
+              spk_cfg.pin_ws = GPIO_NUM_39;
+              spk_cfg.pin_data_out = GPIO_NUM_38;
+              spk_cfg.magnification = 16;
+            }
           }
         }
         break;
@@ -1143,29 +1157,38 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomLite:
       case board_t::board_M5AtomMatrix:
       case board_t::board_M5AtomPsram:
-        if (cfg.external_speaker.atomic_spk && (Display.getBoard() != board_t::board_M5AtomDisplay))
+        if (cfg.external_speaker.atomic_spk)
         { // for ATOMIC SPK
-          // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
-          gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
-          m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
-          m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
-          if (m5gfx::gpio_in(GPIO_NUM_19)
-            && m5gfx::gpio_in(pin        ))
-          {
-            ESP_LOGD("M5Unified", "ATOMIC SPK");
-            // atomic_spkのSDカード用ピンを割当
-            _get_pin_table[sd_spi_sclk] = pin;
-            _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
-            _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
-            cfg.internal_imu = false; /// avoid conflict with i2c
-            cfg.internal_rtc = false; /// avoid conflict with i2c
-            spk_cfg.pin_bck = GPIO_NUM_22;
-            spk_cfg.pin_ws = GPIO_NUM_21;
-            spk_cfg.pin_data_out = GPIO_NUM_25;
-            spk_cfg.magnification = 16;
-            auto mic = Mic.config();
-            mic.pin_data_in = -1;   // disable mic for ECHO
-            Mic.config(mic);
+          bool atomdisplay = false;
+          for (int i = 0; i < getDisplayCount(); ++i) {
+            if (Displays(i).getBoard() == board_t::board_M5AtomDisplay) {
+              atomdisplay = true;
+              break;
+            }
+          }
+          if (!atomdisplay) {
+            // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
+            gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
+            m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
+            m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
+            if (m5gfx::gpio_in(GPIO_NUM_19)
+              && m5gfx::gpio_in(pin        ))
+            {
+              ESP_LOGD("M5Unified", "ATOMIC SPK");
+              // atomic_spkのSDカード用ピンを割当
+              _get_pin_table[sd_spi_sclk] = pin;
+              _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
+              _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
+              cfg.internal_imu = false; /// avoid conflict with i2c
+              cfg.internal_rtc = false; /// avoid conflict with i2c
+              spk_cfg.pin_bck = GPIO_NUM_22;
+              spk_cfg.pin_ws = GPIO_NUM_21;
+              spk_cfg.pin_data_out = GPIO_NUM_25;
+              spk_cfg.magnification = 16;
+              auto mic = Mic.config();
+              mic.pin_data_in = -1;   // disable mic for ECHO
+              Mic.config(mic);
+          }
           }
         }
         break;
