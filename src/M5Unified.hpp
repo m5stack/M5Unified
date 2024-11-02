@@ -335,7 +335,7 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (cfg.external_display.atom_display) {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-        if (_board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R || _board == board_t::board_M5AtomS3RCam || _board == board_t::board_M5AtomS3RProto)
+        if (_board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R || _board == board_t::board_M5AtomS3RCam || _board == board_t::board_M5AtomS3RExt)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
         if (_board == board_t::board_M5AtomLite || _board == board_t::board_M5AtomMatrix || _board == board_t::board_M5AtomEcho || _board == board_t::board_M5AtomPsram)
 #else

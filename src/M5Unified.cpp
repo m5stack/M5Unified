@@ -71,7 +71,9 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AirQ       , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Cardputer  , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5VAMeter    , GPIO_NUM_6 ,GPIO_NUM_5  , GPIO_NUM_9 ,GPIO_NUM_8  },
-{ board_t::board_M5AtomS3R    , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3R
+{ board_t::board_M5AtomS3R    , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5AtomS3RExt , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -634,8 +636,9 @@ for (int i = 0; i < 0x50; ++i)
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
       if (board == board_t::board_unknown)
-      { /// AtomS3RCam or AtomS3RProto ?
-        board = board_t::board_M5AtomS3RProto;
+      { /// AtomS3RCam or AtomS3RExt ?
+        // board = board_t::board_M5AtomS3RCam;
+        board = board_t::board_M5AtomS3RExt;
       }
     }
 
@@ -1001,6 +1004,8 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomS3:
       case board_t::board_M5AtomS3Lite:
       case board_t::board_M5AtomS3R:
+      case board_t::board_M5AtomS3RCam:
+      case board_t::board_M5AtomS3RExt:
         if (cfg.external_speaker.atomic_spk)
         { // for ATOMIC SPK
           bool atomdisplay = false;
