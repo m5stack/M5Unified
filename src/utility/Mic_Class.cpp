@@ -23,6 +23,7 @@
 
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wconversion"
  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 
  #include <hal/adc_ll.h>
@@ -292,6 +293,7 @@ namespace m5
     esp_err_t err = i2s_new_channel(&chan_cfg, nullptr, &_i2s_handle[_cfg.i2s_port]);
     if (err != ESP_OK) { return err; }
 
+#if SOC_I2S_SUPPORTS_PDM_RX
 if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_pdm_rx_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_pdm_rx_config_t));
@@ -305,7 +307,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.gpio_cfg.clk = (gpio_num_t)_cfg.pin_ws; 
     i2s_config.gpio_cfg.din = (gpio_num_t)_cfg.pin_data_in;
     err = i2s_channel_init_pdm_rx_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
-} else {
+} else
+#endif
+{
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
