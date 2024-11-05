@@ -61,12 +61,13 @@ namespace m5
           _imu = imu_t::imu_unknown;
           break;
         }
-
+#if defined (CONFIG_IDF_TARGET_ESP32) || !defined ( CONFIG_IDF_TARGET )
         if (board == m5::board_t::board_M5AtomMatrix)
         { // ATOM Matrix's IMU is oriented differently, so change the setting.
           _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転
           _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転
         }
+#endif
       }
     }
 
@@ -84,8 +85,20 @@ namespace m5
       {
         _imu_instance[0].reset(bmi2);
         _imu = imu_t::imu_bmi270;
-        // CoreS3 BMI270 + BMM150 構成では、地磁気のY軸Z軸をそれぞれ反転する
-        _internal_axisorder_fixed[sensor_index_mag] = (internal_axisorder_t)(axis_invert_y | axis_invert_z); // Y軸,Z軸反転
+
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+        if (board == m5::board_t::board_M5StackCoreS3)
+        {  // CoreS3 では、地磁気のY軸Z軸をそれぞれ反転する
+          _internal_axisorder_fixed[sensor_index_mag] = (internal_axisorder_t)(axis_invert_y | axis_invert_z); // Y軸,Z軸反転
+        } else
+        if (board == m5::board_t::board_M5AtomS3R || board == m5::board_t::board_M5AtomS3RCam || board == m5::board_t::board_M5AtomS3RExt)
+        { // AtomS3Rシリーズ では、ジャイロと加速度のY軸とX軸を入れ替え、Y軸を反転するほか、地磁気のX軸とZ軸をそれぞれ反転する
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
+          _internal_axisorder_fixed[sensor_index_mag  ] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転
+        }
+#endif
+
       }
     }
 
