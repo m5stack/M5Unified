@@ -447,8 +447,8 @@ for (int i = 0; i < 0x50; ++i)
 */
               uint16_t g13, g27;
               touch_pad_init();
-              touch_pad_config(TOUCH_PAD_NUM4, SOC_TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM4 == GPIO13
-              touch_pad_config(TOUCH_PAD_NUM7, SOC_TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM7 == GPIO27
+              touch_pad_config(TOUCH_PAD_NUM4, TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM4 == GPIO13
+              touch_pad_config(TOUCH_PAD_NUM7, TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM7 == GPIO27
               touch_pad_read(TOUCH_PAD_NUM4, &g13);
               touch_pad_read(TOUCH_PAD_NUM7, &g27);
               touch_pad_deinit();
@@ -637,8 +637,8 @@ for (int i = 0; i < 0x50; ++i)
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
       if (board == board_t::board_unknown)
       { /// AtomS3RCam or AtomS3RExt ?
-        // board = board_t::board_M5AtomS3RCam;
-        board = board_t::board_M5AtomS3RExt;
+        board = board_t::board_M5AtomS3RCam;
+        // board = board_t::board_M5AtomS3RExt;
       }
     }
 

@@ -864,6 +864,15 @@ namespace m5
     return 0;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
 
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0) || (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 7) && ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0))
+  #define ADC_RAW_ATTEN ADC_ATTEN_DB_12
+ #endif
+#endif
+#ifndef ADC_RAW_ATTEN
+#define ADC_RAW_ATTEN ADC_ATTEN_DB_11
+#endif
+
 #if __has_include (<esp_adc/adc_oneshot.h>)
 
     static adc_oneshot_unit_handle_t adc_handle;
@@ -874,15 +883,6 @@ namespace m5
       if (adc_handle == nullptr) { return 0; }
 
       adc_oneshot_chan_cfg_t config;
-
-#if defined (ESP_IDF_VERSION_VAL)
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
-  #define ADC_RAW_ATTEN ADC_ATTEN_DB_12
- #endif
-#endif
-#ifndef ADC_RAW_ATTEN
-#define ADC_RAW_ATTEN ADC_ATTEN_DB_11
-#endif
       config.atten = ADC_RAW_ATTEN;
       config.bitwidth = ADC_BITWIDTH_12;
       adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config);
@@ -919,13 +919,13 @@ namespace m5
     if (adc_chars == nullptr)
     {
       if (_batAdcUnit == 2) {
-        adc2_config_channel_atten((adc2_channel_t)_batAdcCh, ADC_ATTEN_DB_11);
+        adc2_config_channel_atten((adc2_channel_t)_batAdcCh, ADC_RAW_ATTEN);
       } else {
         adc1_config_width(ADC_WIDTH_BIT_12);
-        adc1_config_channel_atten((adc1_channel_t)_batAdcCh, ADC_ATTEN_DB_11);
+        adc1_config_channel_atten((adc1_channel_t)_batAdcCh, ADC_RAW_ATTEN);
       }
       adc_chars = (esp_adc_cal_characteristics_t*)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-      esp_adc_cal_characterize((adc_unit_t)_batAdcUnit, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
+      esp_adc_cal_characterize((adc_unit_t)_batAdcUnit, ADC_RAW_ATTEN, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
     }
     int raw;
     if (_batAdcUnit == 2) {

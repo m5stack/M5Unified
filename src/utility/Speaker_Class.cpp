@@ -152,8 +152,8 @@ namespace m5
   {
     return i2s_driver_uninstall(port);
   }
-  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+  static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してDACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
       i2s_dac_mode_t dac_mode = i2s_dac_mode_t::I2S_DAC_CHANNEL_DISABLE;
@@ -170,9 +170,9 @@ namespace m5
       I2S0.conf.tx_short_sync = 0;
       return ESP_OK;
     }
-#endif
     return ESP_FAIL;
   }
+#endif
 #endif
 
   esp_err_t Speaker_Class::_setup_i2s(void)
