@@ -9,8 +9,12 @@
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
-#if __has_include (<driver/touch_sensor.h>)
-#include <driver/touch_sensor.h>
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+ #if __has_include (<driver/touch_sens.h>)
+ #include <driver/touch_sens.h>
+ #elif __has_include (<driver/touch_sensor.h>)
+ #include <driver/touch_sensor.h>
+ #endif
 #endif
 
 #if __has_include (<driver/i2s_type.h>)
@@ -637,8 +641,75 @@ for (int i = 0; i < 0x50; ++i)
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
       if (board == board_t::board_unknown)
       { /// AtomS3RCam or AtomS3RExt ?
-        board = board_t::board_M5AtomS3RCam;
-        // board = board_t::board_M5AtomS3RExt;
+      // Cam    = GC0308 = I2C 7bit addr = 0x21
+      // CamM12 = OV3660 = I2C 7bit addr = 0x3C
+        board = board_t::board_M5AtomS3RExt;
+        m5gfx::gpio_lo(GPIO_NUM_18);
+        m5gfx::pinMode(GPIO_NUM_18, m5gfx::pin_mode_t::output);
+        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_9, GPIO_NUM_12, GPIO_NUM_21 };
+        { // G9=SCL, G12=SDA, G21=XCLK
+          m5gfx::gpio::command(
+            (const uint8_t[]) {
+            m5gfx::gpio::command_write_low, GPIO_NUM_9,
+            m5gfx::gpio::command_mode_output, GPIO_NUM_9,  // SCL
+            m5gfx::gpio::command_write_low, GPIO_NUM_12,
+            m5gfx::gpio::command_mode_output, GPIO_NUM_12, // SDA
+            m5gfx::gpio::command_mode_output, GPIO_NUM_21, // XCL
+            m5gfx::gpio::command_write_high, GPIO_NUM_9,
+            m5gfx::gpio::command_write_high, GPIO_NUM_21,
+            m5gfx::gpio::command_write_high, GPIO_NUM_12,
+          });
+          auto lo_reg = m5gfx::get_gpio_lo_reg(GPIO_NUM_21);
+          auto hi_reg = m5gfx::get_gpio_hi_reg(GPIO_NUM_21);
+
+          // prepare camera module (need XCLK signal)
+          for (int xclk = 32768 * 54; xclk != 0; --xclk)
+          {
+            *lo_reg = 1 << GPIO_NUM_21;
+            *hi_reg = 1 << GPIO_NUM_21;
+          }
+          uint32_t result = 0;
+          for (uint8_t i2caddr: (const uint8_t[]){ 0x3C << 1, 0x21 << 1 }) {
+            for (int xclk = 32768 * 2; xclk != 0; --xclk) {
+              *lo_reg = 1 << GPIO_NUM_21;
+              *hi_reg = 1 << GPIO_NUM_21;
+            }
+            bool nack = true;
+            // The camera module is identified using I2C communication via GPIO self-operation.
+            *lo_reg = 1 << GPIO_NUM_12;  // SDA LOW = START
+            for (int cycle = 0; cycle < 20; ++cycle) {
+              for (int j = 0; j < 2; ++j) {
+                for (int xclk = 8; xclk != 0; --xclk) {
+                  *lo_reg = 1 << GPIO_NUM_21;
+                  *hi_reg = 1 << GPIO_NUM_21;
+                }
+                *((cycle & 1) ? hi_reg : lo_reg) = 1 << GPIO_NUM_9; // SCL
+              }
+              if (cycle & 1) {
+                if (cycle == 17) {
+                  nack = m5gfx::gpio_in(GPIO_NUM_12);
+                }
+              } else {
+                *((i2caddr & 0x80) ? hi_reg : lo_reg) = 1 << GPIO_NUM_12; // SDA
+                i2caddr <<= 1;
+                if (cycle >= 16) {
+                  m5gfx::pinMode(GPIO_NUM_12, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
+                }
+              }
+            }
+            *hi_reg = 1 << GPIO_NUM_12;  // SDA HIGH = STOP
+            result = result << 1 | nack;
+          }
+          // printf("CAM TEST  RESULT: %08x \r\n", (int)result);
+          if (result == 1 || result == 2) {
+          // result == 1 : OV3660
+          // result == 2 : GC0308
+            board = board_t::board_M5AtomS3RCam;
+          }
+        }
+        for (auto &backup : pin_backup) {
+          backup.restore();
+        }
       }
     }
 
