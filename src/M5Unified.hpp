@@ -151,7 +151,7 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
                              = board_t::board_M5StampC3;
 #elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
-                             = board_t::board_M5Atom;
+                             = board_t::board_M5AtomLite;
 #else
                              = board_t::board_unknown;
 #endif
@@ -333,9 +333,14 @@ namespace m5
       }
 
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
       if (cfg.external_display.atom_display) {
-        if (_board == board_t::board_M5Atom || _board == board_t::board_M5AtomPsram || _board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R)
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+        if (_board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R || _board == board_t::board_M5AtomS3RCam || _board == board_t::board_M5AtomS3RExt)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+        if (_board == board_t::board_M5AtomLite || _board == board_t::board_M5AtomMatrix || _board == board_t::board_M5AtomEcho || _board == board_t::board_M5AtomPsram)
+#else
+        if (false)
+#endif
         {
           M5AtomDisplay dsp(cfg.atom_display);
           if (dsp.init_without_reset()) {
@@ -343,7 +348,6 @@ namespace m5
           }
         }
       }
-#endif
 #endif
 
       _begin(cfg);
@@ -496,7 +500,9 @@ namespace m5
               || board == board_t::board_M5Tough
               || board == board_t::board_M5Station
               || (!port_a_used && ( // ATOM does not allow video output via UnitRCA when PortA is used.
-                   board == board_t::board_M5Atom
+                   board == board_t::board_M5AtomLite
+                || board == board_t::board_M5AtomMatrix
+                || board == board_t::board_M5AtomEcho
                 || board == board_t::board_M5AtomPsram
                 || board == board_t::board_M5AtomU
               )))

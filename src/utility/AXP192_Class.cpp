@@ -29,7 +29,7 @@ namespace m5
     {
       _init = (val == 0x03);
 #if defined (ESP_LOGV)
-      ESP_LOGV("AXP192", "reg03h:%02x : init:%d", val, _init);
+      // ESP_LOGV("AXP192", "reg03h:%02x : init:%d", val, _init);
 #endif
     }
     return _init;

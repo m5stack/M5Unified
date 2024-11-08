@@ -9,8 +9,14 @@
 #if defined ( ESP_PLATFORM )
 
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
-#include <driver/i2s.h>
+
+#if __has_include(<driver/i2s_std.h>)
+ #include <driver/i2s_std.h>
+#else
+ #include <driver/i2s.h>
+#endif
 
 #endif
 

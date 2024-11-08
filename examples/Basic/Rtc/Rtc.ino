@@ -63,7 +63,7 @@ void setup(void)
   for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)
   {
     M5.Log.print(".");
-    delay(500);
+    M5.delay(500);
   }
   if (WiFi.status() == WL_CONNECTED) {
     M5.Log.println("\r\nWiFi Connected.");
@@ -72,10 +72,10 @@ void setup(void)
     while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
     {
       M5.Log.print(".");
-      delay(1000);
+      M5.delay(1000);
     }
 #else
-    delay(1600);
+    M5.delay(1600);
     struct tm timeInfo;
     while (!getLocalTime(&timeInfo, 1000))
     {
@@ -101,7 +101,7 @@ void loop(void)
 {
   static constexpr const char* const wd[7] = {"Sun","Mon","Tue","Wed","Thr","Fri","Sat"};
 
-  delay(500);
+  M5.delay(500);
 
   auto dt = M5.Rtc.getDateTime();
   M5.Display.setCursor(0,0);

@@ -6,8 +6,15 @@
 // If you use SD card, write this.
 #include <SD.h>
 
+#if __has_include(<LittleFS.h>)
+// If you use LittleFS, write this.
+//  #include <LittleFS.h>
+#endif
+
+#if __has_include(<SPIFFS.h>)
 // If you use SPIFFS, write this.
-#include <SPIFFS.h>
+//  #include <SPIFFS.h>
+#endif
 
 #endif
 
@@ -275,6 +282,9 @@ void setup(void)
   case m5::board_t::board_M5AtomS3:
     name = "ATOMS3";
     break;
+  case m5::board_t::board_M5AtomS3R:
+    name = "ATOMS3R";
+    break;
   case m5::board_t::board_M5Dial:
     name = "Dial";
     break;
@@ -329,8 +339,14 @@ void setup(void)
   case m5::board_t::board_M5Station:
     name = "Station";
     break;
-  case m5::board_t::board_M5Atom:
-    name = "ATOM";
+  case m5::board_t::board_M5AtomLite:
+    name = "ATOM Lite";
+    break;
+  case m5::board_t::board_M5AtomMatrix:
+    name = "ATOM Matrix";
+    break;
+  case m5::board_t::board_M5AtomEcho:
+    name = "ATOM ECHO";
     break;
   case m5::board_t::board_M5AtomPsram:
     name = "ATOM PSRAM";

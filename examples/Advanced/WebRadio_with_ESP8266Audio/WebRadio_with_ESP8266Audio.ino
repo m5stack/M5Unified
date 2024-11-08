@@ -252,7 +252,7 @@ static void decodeTask(void*)
 {
   for (;;)
   {
-    delay(1);
+    M5.delay(1);
     if (playindex != ~0u)
     {
       auto index = playindex;
@@ -588,7 +588,7 @@ void setup(void)
   preallocateCodec = malloc(preallocateCodecSize);
   if (!preallocateBuffer || !preallocateCodec) {
     M5.Display.printf("FATAL ERROR:  Unable to preallocate %d bytes for app\n", preallocateBufferSize + preallocateCodecSize);
-    for (;;) { delay(1000); }
+    for (;;) { M5.delay(1000); }
   }
 
   { /// custom setting
@@ -616,7 +616,7 @@ void setup(void)
   // Try forever
   while (WiFi.status() != WL_CONNECTED) {
     M5.Display.print(".");
-    delay(100);
+    M5.delay(100);
   }
   M5.Display.clear();
 
@@ -636,7 +636,7 @@ void loop(void)
     int frame;
     do
     {
-      delay(1);
+      M5.delay(1);
     } while (prev_frame == (frame = millis() >> 3)); /// 8 msec cycle wait
     prev_frame = frame;
   }

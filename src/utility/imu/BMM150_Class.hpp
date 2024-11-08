@@ -11,7 +11,7 @@ namespace m5
   class BMM150_Class : public IMU_Base
   {
   public:
-    static constexpr const std::uint8_t CHIP_ID_ADDR            = 0x40;
+    static constexpr const std::uint8_t CHIP_ID_ADDR = 0x40;
 
     static constexpr std::uint8_t DEFAULT_ADDRESS = 0x10;
 

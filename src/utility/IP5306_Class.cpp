@@ -36,7 +36,7 @@ namespace m5
     if (_init)
     {
 #if defined (ESP_LOGV)
-      ESP_LOGV("IP5306", "found");
+      // ESP_LOGV("IP5306", "found");
 #endif
     }
     return _init;
