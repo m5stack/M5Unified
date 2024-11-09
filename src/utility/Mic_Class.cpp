@@ -12,6 +12,10 @@
  #endif
 #endif
 
+#if __has_include (<soc/pcr_struct.h>)
+#include <soc/pcr_struct.h>
+#endif
+
 #ifndef NON_BREAK
 #define NON_BREAK ;
 #endif
@@ -402,7 +406,13 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     else if (oversampling > 8) { oversampling = 8; }
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 80 MHz
+
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#else
+    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
+#endif
+
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
 
@@ -435,11 +445,9 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     }
 
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
-    dev->rx_clkm_conf.rx_clkm_div_num = div_n;
 
-    dev->rx_clkm_div_conf.val = 0;
-    if (div_b > (div_a >> 1)) {
-      dev->rx_clkm_div_conf.rx_clkm_div_yn1 = 1;
+    bool yn1 = (div_b > (div_a >> 1));
+    if (yn1) {
       div_b = div_a - div_b;
     }
     int div_y = 1;
@@ -459,13 +467,25 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
       }
     }
 
+#if __has_include (<soc/pcr_struct.h>) // for C6
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = div_x;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_y = div_y;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_z = div_b;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_yn1 = yn1;
+    PCR.i2s_rx_clkm_conf.i2s_rx_clkm_div_num = div_n;
+    PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;   // PLL_240M_CLK
+    PCR.i2s_rx_clkm_conf.i2s_rx_clkm_en = 1;
+    PCR.pll_div_clk_en.pll_240m_clk_en = 1;
+#else
     dev->rx_clkm_div_conf.rx_clkm_div_x = div_x;
     dev->rx_clkm_div_conf.rx_clkm_div_y = div_y;
     dev->rx_clkm_div_conf.rx_clkm_div_z = div_b;
-
-    dev->rx_clkm_conf.rx_clk_sel = 2;   // PLL_160M_CLK
+    dev->rx_clkm_div_conf.rx_clkm_div_yn1 = yn1;
+    dev->rx_clkm_conf.rx_clkm_div_num = div_n;
+    dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->rx_clkm_conf.rx_clk_active = 1;
+#endif
 
 #else
 

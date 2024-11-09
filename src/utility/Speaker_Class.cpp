@@ -421,6 +421,8 @@ namespace m5
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_yn1 = yn1;
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_div_num = div_n;
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK
+    PCR.i2s_tx_clkm_conf.i2s_tx_clkm_en = 1;
+    PCR.pll_div_clk_en.pll_240m_clk_en = 1;
 #else
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
@@ -428,10 +430,9 @@ namespace m5
     dev->tx_clkm_div_conf.tx_clkm_div_yn1 = yn1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
-#endif
-
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
+#endif
 
 #else
 
