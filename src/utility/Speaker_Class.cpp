@@ -432,6 +432,8 @@ namespace m5
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
+    dev->tx_conf.tx_update = 1;
+    dev->tx_conf.tx_update = 0;
 #endif
 
 #else
