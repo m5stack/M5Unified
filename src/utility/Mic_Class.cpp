@@ -485,6 +485,8 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->rx_clkm_conf.rx_clk_active = 1;
+    dev->rx_conf.rx_update = 1;
+    dev->rx_conf.rx_update = 0;
 #endif
 
 #else
