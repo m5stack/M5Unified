@@ -87,7 +87,7 @@ namespace m5
         _imu = imu_t::imu_bmi270;
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-        if (board == m5::board_t::board_M5StackCoreS3)
+        if (board == m5::board_t::board_M5StackCoreS3 && bmi2->getAddress() == 0x69)
         {  // CoreS3 では、地磁気のY軸Z軸をそれぞれ反転する
           _internal_axisorder_fixed[sensor_index_mag] = (internal_axisorder_t)(axis_invert_y | axis_invert_z); // Y軸,Z軸反転
         } else
