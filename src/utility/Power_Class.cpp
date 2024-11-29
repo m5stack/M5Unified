@@ -878,6 +878,7 @@ namespace m5
     static adc_oneshot_unit_handle_t adc_handle;
     if (adc_handle == nullptr) {
       adc_oneshot_unit_init_cfg_t init_config;
+      memset(&init_config, 0, sizeof(init_config));
       init_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
       adc_oneshot_new_unit(&init_config, &adc_handle);
       if (adc_handle == nullptr) { return 0; }
