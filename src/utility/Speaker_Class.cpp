@@ -188,6 +188,7 @@ namespace m5
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(_cfg.i2s_port, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = _cfg.dma_buf_count;
     chan_cfg.dma_frame_num = _cfg.dma_buf_len;
+    chan_cfg.auto_clear_before_cb = true;
     _i2s_driver_uninstall(_cfg.i2s_port);
     esp_err_t err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
     if (err != ESP_OK) { return err; }

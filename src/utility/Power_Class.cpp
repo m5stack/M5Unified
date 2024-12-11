@@ -75,6 +75,13 @@ namespace m5
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
       break;
 
+    case board_t::board_M5PaperS3:
+      _batAdcCh = ADC1_GPIO3_CHANNEL;
+      _batAdcUnit = 1;
+      _pmic = pmic_t::pmic_adc;
+      _adc_ratio = 2.0f;
+      break;
+
     case board_t::board_M5Capsule:
       _batAdcCh = ADC1_GPIO6_CHANNEL;
       _batAdcUnit = 1;
