@@ -300,6 +300,9 @@ void setup(void)
   case m5::board_t::board_M5VAMeter:
     name = "VAMeter";
     break;
+  case m5::board_t::board_M5PaperS3:
+    name = "PaperS3";
+    break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:
     name = "StampC3";
