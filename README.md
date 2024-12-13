@@ -70,6 +70,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - M5Capsule
  - M5Cardputer
  - M5VAMeter
+ - [M5PaperS3 (need EPDiy library) ](https://github.com/m5stack/M5GFX/blob/master/docs/M5PaperS3.md)
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
