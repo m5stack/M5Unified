@@ -587,6 +587,33 @@ namespace m5
     }
     led->setBrightness(brightness);
 
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    static std::unique_ptr<m5gfx::Light_PWM> led;
+
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5PaperS3:
+      if (led.get() == nullptr)
+      {
+        led.reset(new m5gfx::Light_PWM());
+        auto cfg = led->config();
+        cfg.invert = false;
+        cfg.pwm_channel = 7;
+
+        /// M5PaperS3 : LED = GPIO0
+        switch (M5.getBoard()) {
+        case board_t::board_M5PaperS3:
+          cfg.pin_bl = GPIO_NUM_0;
+          break;
+        }
+        led->config(cfg);
+        led->init(brightness);
+      }
+      led->setBrightness(brightness);
+      break;
+    default: break;
+    }
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
