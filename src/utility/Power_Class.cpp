@@ -605,6 +605,9 @@ namespace m5
         case board_t::board_M5PaperS3:
           cfg.pin_bl = GPIO_NUM_0;
           break;
+
+        default:
+          break;
         }
         led->config(cfg);
         led->init(brightness);
