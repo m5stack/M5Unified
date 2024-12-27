@@ -1,9 +1,8 @@
-
-
 #define WIFI_SSID "SET YOUR WIFI SSID"
 #define WIFI_PASS "SET YOUR WIFI PASS"
 
 
+#include <WiFi.h>
 #include <HTTPClient.h>
 #include <math.h>
 
@@ -13,7 +12,6 @@
 #include <AudioFileSource.h>
 #include <AudioFileSourceBuffer.h>
 #include <AudioGeneratorMP3.h>
-#include <AudioOutputI2S.h>
 
 #include <M5UnitLCD.h>
 #include <M5UnitOLED.h>
@@ -25,8 +23,6 @@ static constexpr uint8_t m5spk_virtual_channel = 0;
 /// set web radio station url
 static constexpr const char* station_list[][2] =
 {
-  {"MAXXED Out"        , "http://149.56.195.94:8015/steam"},
-  {"Asia Dream"        , "http://igor.torontocast.com:1025/;.-mp3"},
   {"thejazzstream"     , "http://wbgo.streamguys.net/thejazzstream"},
   {"181-beatles_128k"  , "http://listen.181fm.com/181-beatles_128k.mp3"},
   {"illstreet-128-mp3" , "http://ice1.somafm.com/illstreet-128-mp3"},
@@ -34,6 +30,8 @@ static constexpr const char* station_list[][2] =
   {"dronezone-128-mp3" , "http://ice1.somafm.com/dronezone-128-mp3"},
   {"Lite Favorites"    , "http://naxos.cdnstream.com:80/1255_128"},
   {"Classic FM"        , "http://media-ice.musicradio.com:80/ClassicFMMP3"},
+  {"MAXXED Out"        , "http://149.56.195.94:8015/steam"},
+  {"Asia Dream"        , "http://igor.torontocast.com:1025/;.-mp3"},
 };
 static constexpr const size_t stations = sizeof(station_list) / sizeof(station_list[0]);
 
@@ -594,7 +592,7 @@ void setup(void)
   { /// custom setting
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
-    spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+    spk_cfg.sample_rate = 48000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
     spk_cfg.task_pinned_core = APP_CPU_NUM;
     M5.Speaker.config(spk_cfg);
   }
@@ -642,13 +640,16 @@ void loop(void)
   }
 
   M5.update();
-  if (M5.BtnA.wasPressed())
+  auto td = M5.Touch.getDetail();
+  if (M5.BtnA.wasPressed() || td.wasPressed())
   {
     M5.Speaker.tone(440, 50);
   }
-  if (M5.BtnA.wasDecideClickCount())
+  int cc = M5.BtnA.getClickCount();
+  if (cc == 0) cc = td.getClickCount();
+  if (M5.BtnA.wasDecideClickCount() || td.wasClicked())
   {
-    switch (M5.BtnA.getClickCount())
+    switch (cc)
     {
     case 1:
       M5.Speaker.tone(1000, 100);
@@ -663,13 +664,13 @@ void loop(void)
       break;
     }
   }
-  if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed())
+  if (M5.BtnA.isHolding() || M5.BtnB.isPressed() || M5.BtnC.isPressed() || td.isHolding())
   {
     size_t v = M5.Speaker.getVolume();
     int add = (M5.BtnB.isPressed()) ? -1 : 1;
-    if (M5.BtnA.isHolding())
+    if (M5.BtnA.isHolding() || td.isHolding())
     {
-      add = M5.BtnA.getClickCount() ? -1 : 1;
+      add = (M5.BtnA.getClickCount() || td.getClickCount()) ? -1 : 1;
     }
     v += add;
     if (v <= 255)
