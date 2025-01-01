@@ -33,6 +33,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
   static constexpr int M5PaperS3_CHG_STAT_PIN = 4;
+  static constexpr int M5PaperS3_PWROFF_PULSE_PIN = 44;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
   static constexpr int M5NanoC6_LED_PIN = 7;
@@ -78,6 +79,9 @@ namespace m5
 
     case board_t::board_M5PaperS3:
       m5gfx::pinMode(M5PaperS3_CHG_STAT_PIN, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(M5PaperS3_PWROFF_PULSE_PIN, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_lo(M5PaperS3_PWROFF_PULSE_PIN);
+
       _batAdcCh = ADC1_GPIO3_CHANNEL;
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
@@ -692,6 +696,29 @@ namespace m5
 #if defined (M5UNIFIED_PC_BUILD)
     (void)withTimer;
 #else
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    (void) withTimer;
+    if (M5.getBoard() == board_t::board_M5PaperS3)
+    {
+      // Notes:
+      //  M5PaperS3 can power off when running from battery or USB-C,
+      //   so there is no need for a deepsleep or lightsleep fallback.
+      //  Neither does the RTC interrupt line (nINT_STAT_TRIG) need to be
+      //   setup as it is directly connected to the power on/off logic.
+      //  During debugging it was observed that sometimes M5PaperS3
+      //   doesn't power off on the first attempt, so try multiple times.
+      for(int attempt = 0; attempt < 5; attempt++)
+      {
+        m5gfx::gpio_hi(M5PaperS3_PWROFF_PULSE_PIN);
+        m5gfx::delay(250);
+        m5gfx::gpio_lo(M5PaperS3_PWROFF_PULSE_PIN);
+        m5gfx::delay(250);
+      }
+      return;
+    }
+#endif
+
     bool use_deepsleep = true;
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
