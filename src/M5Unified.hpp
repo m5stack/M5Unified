@@ -88,7 +88,8 @@ namespace m5
           uint8_t hat_spk : 1;
           uint8_t atomic_spk : 1;
           uint8_t hat_spk2 : 1;
-          uint8_t reserve : 3;
+          uint8_t atomic_echo : 1;
+          uint8_t reserve : 2;
         } external_speaker;
         uint8_t external_speaker_value = 0x00;
       };
@@ -546,8 +547,14 @@ namespace m5
     void _setup_i2c(board_t);
 
     static void _setup_pinmap(board_t);
-    static bool _speaker_enabled_cb(void* args, bool enabled);
-    static bool _microphone_enabled_cb(void* args, bool enabled);
+    static bool _speaker_enabled_cb_core2(void* args, bool enabled);
+    static bool _speaker_enabled_cb_cores3(void* args, bool enabled);
+    static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
+    static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
+    static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
+    static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
+
     static int8_t _get_pin_table[pin_name_max];
   };
 }
