@@ -218,21 +218,21 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   }
 #endif
 
-static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
-{
-  // bulk_data example..
-  // const uint8_t bulk_data[] = {
-  //   2, 0x00, 0x00,       // <- datalen = 2, reg = 0x00, data = 0x00
-  //   3, 0x01, 0x00, 0x02, // <- datalen = 3, reg = 0x01, data = 0x00, 0x02
-  //   0 };                 // <- datalen 0 is end of data.
+  static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
+  {
+    // bulk_data example..
+    // const uint8_t bulk_data[] = {
+    //   2, 0x00, 0x00,       // <- datalen = 2, reg = 0x00, data = 0x00
+    //   3, 0x01, 0x00, 0x02, // <- datalen = 3, reg = 0x01, data = 0x00, 0x02
+    //   0 };                 // <- datalen 0 is end of data.
 
-  while (*bulk_data) {
-    uint8_t len = *bulk_data++;
-    uint8_t r = retry + 1;
-    while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { M5.delay(1); }
-    bulk_data += len;
+    while (*bulk_data) {
+      uint8_t len = *bulk_data++;
+      uint8_t r = retry + 1;
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { M5.delay(1); }
+      bulk_data += len;
+    }
   }
-}
 
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
@@ -351,7 +351,14 @@ static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, 
       2, 0x00, 0x1F,
       0
     };
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
+#endif
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    backup_i2c_setting.restore();
+#endif
     return true;
   }
 
@@ -447,7 +454,14 @@ static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, 
       2, 0x00, 0x1F,
       0
     };
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
+#endif
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    backup_i2c_setting.restore();
+#endif
+
     return true;
   }
 
@@ -1342,7 +1356,7 @@ static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, 
                 spk_cfg.pin_data_out = GPIO_NUM_25;
                 spk_cfg.magnification = 16;
                 auto mic = Mic.config();
-                mic.pin_data_in = -1;   // disable mic for ECHO
+                mic.pin_data_in = -1;   // disable mic for ATOMECHO
                 Mic.config(mic);
               }
             }
