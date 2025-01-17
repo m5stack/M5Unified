@@ -25,6 +25,7 @@
 #include <esp_log.h>
 #include <math.h>
 
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wconversion"
@@ -34,6 +35,7 @@
  #include <driver/rtc_io.h>
 
  #pragma GCC diagnostic pop
+#endif
 #endif
 
 #define __STDC_FORMAT_MACROS
