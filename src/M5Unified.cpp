@@ -1501,17 +1501,38 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     if (Touch.isEnabled())
     {
       Touch.update(ms);
+
+      int tb_y = 0;
+      int tb_k = 0;
       switch (_board)
       {
       case board_t::board_M5StackCore2:
+      case board_t::board_M5Tough:
       case board_t::board_M5StackCoreS3SE:
-        {
+      case board_t::board_M5StackCoreS3:
+        tb_y = 240;
+        tb_k = 614; // (65536*3/320)
+        break;
+      case board_t::board_M5Paper:
+      case board_t::board_M5PaperS3:
+        tb_y = 960;
+        tb_k = 364; // (65536*3/540)
+        break;
+      default:
+        break;
+      }
+
+      if (tb_k)
+      {
+          tb_y -= _touch_button_height;
+          if (tb_y < 0) { tb_y = 0; }
+
           use_rawstate_bits = 0b00111;
           int i = Touch.getCount();
           while (--i >= 0)
           {
             auto raw = Touch.getTouchPointRaw(i);
-            if (raw.y > 240)
+            if (raw.y >= tb_y)
             {
               auto det = Touch.getDetail(i);
               if (det.state & touch_state_t::touch)
@@ -1521,16 +1542,11 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
                 if (BtnC.isPressed()) { btn_rawstate_bits |= 1 << 2; }
                 if (btn_rawstate_bits || !(det.state & touch_state_t::mask_moving))
                 {
-                  btn_rawstate_bits |= 1 << ((raw.x - 2) / 107);
+                  btn_rawstate_bits |= 1 << ((raw.x * tb_k) >> 16);
                 }
               }
             }
           }
-        }
-        break;
-
-      default:
-        break;
       }
     }
 
@@ -1693,6 +1709,27 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       }
     }
 #endif
+  }
+
+  void M5Unified::setTouchButtonHeightByRatio(uint8_t ratio)
+  {
+    uint32_t height = 0;
+    switch (_board)
+    {
+    case board_t::board_M5StackCore2:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackCoreS3:
+      height = 240;
+      break;
+    case board_t::board_M5Paper:
+    case board_t::board_M5PaperS3:
+      height = 960;
+      break;
+    default:
+      break;
+    }
+    _touch_button_height = height * ratio / 255;
   }
 
   M5GFX& M5Unified::getDisplay(size_t index)

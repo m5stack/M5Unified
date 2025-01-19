@@ -526,6 +526,10 @@ namespace m5
       }
     }
 
+    void setTouchButtonHeightByRatio(uint8_t ratio);
+    void setTouchButtonHeight(uint16_t pixel) { _touch_button_height = pixel; }
+    uint16_t getTouchButtonHeight(void) const { return _touch_button_height; }
+
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
@@ -533,6 +537,7 @@ namespace m5
 
     std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
     std::uint32_t _updateMsec = 0;
+    std::uint16_t _touch_button_height = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
     std::uint8_t _primary_display_index = -1;
