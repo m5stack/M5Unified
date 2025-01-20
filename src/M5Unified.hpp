@@ -323,7 +323,7 @@ namespace m5
 
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
-      bool res = Display.init_without_reset();
+      bool res = Display.init_with_option(false, cfg.clear_display);
       auto board = _check_boardtype(Display.getBoard());
       if (board == board_t::board_unknown) { board = cfg.fallback_board; }
       _board = board;
