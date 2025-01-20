@@ -30,19 +30,22 @@
 namespace m5
 {
   static constexpr const uint32_t i2c_freq = 100000;
+
+#if !defined (M5UNIFIED_PC_BUILD)
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
-  static constexpr int M5PaperS3_CHG_STAT_PIN = 4;
-  static constexpr int M5PaperS3_PWROFF_PULSE_PIN = 44;
+  static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
+  static constexpr int M5PaperS3_PWROFF_PULSE_PIN = GPIO_NUM_44;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
-  static constexpr int M5NanoC6_LED_PIN = 7;
+  static constexpr int M5NanoC6_LED_PIN = GPIO_NUM_7;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-  static constexpr int TimerCam_POWER_HOLD_PIN = 33;
-  static constexpr int TimerCam_LED_PIN = 2;
-  static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
-  static constexpr int StickCPlus2_LED_PIN = 19;
+  static constexpr int TimerCam_POWER_HOLD_PIN = GPIO_NUM_33;
+  static constexpr int TimerCam_LED_PIN = GPIO_NUM_2;
+  static constexpr int M5Paper_EXT5V_ENABLE_PIN = GPIO_NUM_5;
+  static constexpr int StickCPlus2_LED_PIN = GPIO_NUM_19;
+#endif
 #endif
 
   bool Power_Class::begin(void)

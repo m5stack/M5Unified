@@ -218,6 +218,24 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   }
 #endif
 
+  static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
+  {
+    // bulk_data example..
+    // const uint8_t bulk_data[] = {
+    //   2, 0x00, 0x00,       // <- datalen = 2, reg = 0x00, data = 0x00
+    //   3, 0x01, 0x00, 0x02, // <- datalen = 3, reg = 0x01, data = 0x00, 0x02
+    //   0 };                 // <- datalen 0 is end of data.
+
+    while (*bulk_data) {
+      uint8_t len = *bulk_data++;
+      uint8_t r = retry + 1;
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { M5.delay(1); }
+      bulk_data += len;
+    }
+  }
+
+  static constexpr uint8_t es8311_i2c_addr0 = 0x18;
+  static constexpr uint8_t es8311_i2c_addr1 = 0x19;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t es7210_i2c_addr = 0x40;
@@ -235,184 +253,215 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 #endif
 
-  bool M5Unified::_speaker_enabled_cb(void* args, bool enabled)
+  bool M5Unified::_speaker_enabled_cb_core2(void* args, bool enabled)
   {
-#if defined (M5UNIFIED_PC_BUILD)
     (void)args;
     (void)enabled;
-#else
+#if defined (CONFIG_IDF_TARGET_ESP32)
     auto self = (M5Unified*)args;
-
-    switch (self->getBoard())
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StackCoreS3:
-    case board_t::board_M5StackCoreS3SE:
-      {
-        auto cfg = self->Speaker.config();
-        if (cfg.pin_bck == GPIO_NUM_34 && enabled)
-        {
-          self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-          /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
-          static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
-          size_t reg0x06_value = 0;
-          size_t rate = (cfg.sample_rate + 1102) / 2205;
-          while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
-
-          reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
-          aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
-          aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
-          aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
-          aw88298_write_reg( 0x06, reg0x06_value );
-          aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
-        }
-        else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
-        {
-          aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
-          self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
-        }
+    auto spk_cfg = self->Speaker.config();
+    if (spk_cfg.pin_bck      == GPIO_NUM_12
+      && spk_cfg.pin_ws       == GPIO_NUM_0
+      && spk_cfg.pin_data_out == GPIO_NUM_2
+    ) {
+      switch (self->Power.getType()) {
+      case m5::Power_Class::pmic_axp192:
+        self->Power.Axp192.setGPIO2(enabled);
+        break;
+      case m5::Power_Class::pmic_axp2101:
+        self->Power.Axp2101.setALDO3(enabled * 3300);
+        break;
+      default:
+        break;
       }
-      break;
-
-#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StackCore2:
-    case board_t::board_M5Tough:
-      {
-        auto spk_cfg = self->Speaker.config();
-        if (spk_cfg.pin_bck      == GPIO_NUM_12
-         && spk_cfg.pin_ws       == GPIO_NUM_0
-         && spk_cfg.pin_data_out == GPIO_NUM_2
-        ) {
-          switch (self->Power.getType()) {
-          case m5::Power_Class::pmic_axp192:
-            self->Power.Axp192.setGPIO2(enabled);
-            break;
-          case m5::Power_Class::pmic_axp2101:
-            self->Power.Axp2101.setALDO3(enabled * 3300);
-            break;
-          default:
-            break;
-          }
-        }
-      }
-      break;
-
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-    case board_t::board_M5StickCPlus2:
-    case board_t::board_M5StackCoreInk:
-      /// for SPK HAT
-      if (self->use_hat_spk)
-      {
-        gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
-        if (enabled)
-        {
-          m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
-          m5gfx::gpio_hi(pin_en);
-        }
-        else
-        { m5gfx::gpio_lo(pin_en); }
-      }
-      break;
-
-#endif
-    default:
-      break;
     }
 #endif
     return true;
   }
 
-  bool M5Unified::_microphone_enabled_cb(void* args, bool enabled)
+  bool M5Unified::_speaker_enabled_cb_cores3(void* args, bool enabled)
   {
-#if defined (M5UNIFIED_PC_BUILD)
     (void)args;
     (void)enabled;
-#else
-    auto self = (M5Unified*)args;
-
-    switch (self->getBoard())
-    {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StackCoreS3:
-    case board_t::board_M5StackCoreS3SE:
-      {
-        auto cfg = self->Mic.config();
-        if (cfg.pin_bck == GPIO_NUM_34)
-        {
-          es7210_write_reg(0x00, 0xFF); // RESET_CTL
-          struct __attribute__((packed)) reg_data_t
-          {
-            uint8_t reg;
-            uint8_t value;
-          };
-          if (enabled)
-          {
-            static constexpr reg_data_t data[] =
-            {
-              { 0x00, 0x41 }, // RESET_CTL
-              { 0x01, 0x1f }, // CLK_ON_OFF
-              { 0x06, 0x00 }, // DIGITAL_PDN
-              { 0x07, 0x20 }, // ADC_OSR
-              { 0x08, 0x10 }, // MODE_CFG
-              { 0x09, 0x30 }, // TCT0_CHPINI
-              { 0x0A, 0x30 }, // TCT1_CHPINI
-              { 0x20, 0x0a }, // ADC34_HPF2
-              { 0x21, 0x2a }, // ADC34_HPF1
-              { 0x22, 0x0a }, // ADC12_HPF2
-              { 0x23, 0x2a }, // ADC12_HPF1
-              { 0x02, 0xC1 },
-              { 0x04, 0x01 },
-              { 0x05, 0x00 },
-              { 0x11, 0x60 },
-              { 0x40, 0x42 }, // ANALOG_SYS
-              { 0x41, 0x70 }, // MICBIAS12
-              { 0x42, 0x70 }, // MICBIAS34
-              { 0x43, 0x1B }, // MIC1_GAIN
-              { 0x44, 0x1B }, // MIC2_GAIN
-              { 0x45, 0x00 }, // MIC3_GAIN
-              { 0x46, 0x00 }, // MIC4_GAIN
-              { 0x47, 0x00 }, // MIC1_LP
-              { 0x48, 0x00 }, // MIC2_LP
-              { 0x49, 0x00 }, // MIC3_LP
-              { 0x4A, 0x00 }, // MIC4_LP
-              { 0x4B, 0x00 }, // MIC12_PDN
-              { 0x4C, 0xFF }, // MIC34_PDN
-              { 0x01, 0x14 }, // CLK_ON_OFF
-            };
-            for (auto& d: data)
-            {
-              es7210_write_reg(d.reg, d.value);
-            }
-          }
-/*
-uint8_t buf[0x50];
-for (int i = 0; i < 0x50; ++i)
-{
-  self->In_I2C.readRegister(es7210_i2c_addr, i, &buf[i], 1, 400000);
-  if ((i & 15) == 15)
-  {
-    auto d = &buf[i-15];
-    ESP_LOGE("DEBUG","%02x  :%02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x"
-    ,i>>4 , d[ 0], d[ 1], d[ 2], d[ 3], d[ 4], d[ 5], d[ 6], d[ 7], d[ 8], d[ 9], d[10], d[11], d[12], d[13], d[14], d[15]);
-  }
-}
-//*/
-        }
-      }
-      break;
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    if (spk_cfg.pin_bck == GPIO_NUM_34 && enabled)
+    {
+      self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+      /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
+      static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
+      size_t reg0x06_value = 0;
+      size_t rate = (spk_cfg.sample_rate + 1102) / 2205;
+      while (rate > rate_tbl[reg0x06_value] && ++reg0x06_value < sizeof(rate_tbl)) {}
 
-#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-      self->Power.Axp192.setLDO0(enabled ? 2800 : 0);
-      break;
-
-#endif
-    default:
-      break;
+      reg0x06_value |= 0x14C0;  // I2SBCK=0 (BCK mode 16*2)
+      aw88298_write_reg( 0x61, 0x0673 );  // boost mode disabled 
+      aw88298_write_reg( 0x04, 0x4040 );  // I2SEN=1 AMPPD=0 PWDN=0
+      aw88298_write_reg( 0x05, 0x0008 );  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
+      aw88298_write_reg( 0x06, reg0x06_value );
+      aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
+    }
+    else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+    {
+      aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
+      self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
     }
 #endif
+    return true;
+  }
+
+  bool M5Unified::_speaker_enabled_cb_hat_spk(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32)
+    auto self = (M5Unified*)args;
+    gpio_num_t pin_en = self->_board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
+    if (enabled)
+    {
+      m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_hi(pin_en);
+    }
+    else
+    { m5gfx::gpio_lo(pin_en); }
+#endif
+    return true;
+  }
+
+  bool M5Unified::_speaker_enabled_cb_atomic_echo(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
+      2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+      2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+      2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+      2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
+      2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
+      2, 0x32, 0xFF,  // 0x32 DAC/ DAC volume (full volume)
+      2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      2, 0x00, 0x1F,
+      0
+    };
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
+#endif
+    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    backup_i2c_setting.restore();
+#endif
+    return true;
+  }
+
+  bool M5Unified::_microphone_enabled_cb_stickc(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32)
+    auto self = (M5Unified*)args;
+    self->Power.Axp192.setLDO0(enabled ? 2800 : 0);
+#endif
+    return true;
+  }
+
+  bool M5Unified::_microphone_enabled_cb_cores3(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    auto self = (M5Unified*)args;
+    auto cfg = self->Mic.config();
+    if (cfg.pin_bck == GPIO_NUM_34)
+    {
+      es7210_write_reg(0x00, 0xFF); // RESET_CTL
+      struct __attribute__((packed)) reg_data_t
+      {
+        uint8_t reg;
+        uint8_t value;
+      };
+      if (enabled)
+      {
+        static constexpr reg_data_t data[] =
+        {
+          { 0x00, 0x41 }, // RESET_CTL
+          { 0x01, 0x1f }, // CLK_ON_OFF
+          { 0x06, 0x00 }, // DIGITAL_PDN
+          { 0x07, 0x20 }, // ADC_OSR
+          { 0x08, 0x10 }, // MODE_CFG
+          { 0x09, 0x30 }, // TCT0_CHPINI
+          { 0x0A, 0x30 }, // TCT1_CHPINI
+          { 0x20, 0x0a }, // ADC34_HPF2
+          { 0x21, 0x2a }, // ADC34_HPF1
+          { 0x22, 0x0a }, // ADC12_HPF2
+          { 0x23, 0x2a }, // ADC12_HPF1
+          { 0x02, 0xC1 },
+          { 0x04, 0x01 },
+          { 0x05, 0x00 },
+          { 0x11, 0x60 },
+          { 0x40, 0x42 }, // ANALOG_SYS
+          { 0x41, 0x70 }, // MICBIAS12
+          { 0x42, 0x70 }, // MICBIAS34
+          { 0x43, 0x1B }, // MIC1_GAIN
+          { 0x44, 0x1B }, // MIC2_GAIN
+          { 0x45, 0x00 }, // MIC3_GAIN
+          { 0x46, 0x00 }, // MIC4_GAIN
+          { 0x47, 0x00 }, // MIC1_LP
+          { 0x48, 0x00 }, // MIC2_LP
+          { 0x49, 0x00 }, // MIC3_LP
+          { 0x4A, 0x00 }, // MIC4_LP
+          { 0x4B, 0x00 }, // MIC12_PDN
+          { 0x4C, 0xFF }, // MIC34_PDN
+          { 0x01, 0x14 }, // CLK_ON_OFF
+        };
+        for (auto& d: data)
+        {
+          es7210_write_reg(d.reg, d.value);
+        }
+      }
+    }
+#endif
+    return true;
+  }
+
+  bool M5Unified::_microphone_enabled_cb_atomic_echo(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
+      2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+      2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+      2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+      2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
+      2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
+      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN)
+      2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      2, 0x00, 0x1F,
+      0
+    };
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
+#endif
+    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    backup_i2c_setting.restore();
+#endif
+
     return true;
   }
 
@@ -947,10 +996,14 @@ for (int i = 0; i < 0x50; ++i)
 
   void M5Unified::_begin_spk(config_t& cfg)
   {
+    bool(*mic_enable_cb)(void*, bool) = nullptr;
+    auto mic_cfg = Mic.config();
+
+    bool(*spk_enable_cb)(void*, bool) = nullptr;
+    auto spk_cfg = Speaker.config();
+
     if (cfg.internal_mic)
     {
-      auto mic_cfg = Mic.config();
-
       mic_cfg.over_sampling = 1;
       mic_cfg.i2s_port = I2S_NUM_0;
       switch (_board)
@@ -969,6 +1022,7 @@ for (int i = 0; i < 0x50; ++i)
           mic_cfg.pin_data_in = GPIO_NUM_14;
           mic_cfg.i2s_port = I2S_NUM_1;
           mic_cfg.stereo = true;
+          mic_enable_cb = _microphone_enabled_cb_cores3;
         }
         break;
 
@@ -1009,6 +1063,14 @@ for (int i = 0; i < 0x50; ++i)
 
       case board_t::board_M5StickC:
       case board_t::board_M5StickCPlus:
+        if (cfg.internal_mic)
+        { /// builtin PDM mic
+          mic_cfg.pin_data_in = GPIO_NUM_34;
+          mic_cfg.pin_ws = GPIO_NUM_0;
+          mic_enable_cb = _microphone_enabled_cb_stickc;
+        }
+        break;
+
       case board_t::board_M5StickCPlus2:
       case board_t::board_M5Tough:
       case board_t::board_M5StackCore2:
@@ -1036,11 +1098,6 @@ for (int i = 0; i < 0x50; ++i)
       default:
         break;
       }
-      if (mic_cfg.pin_data_in >= 0)
-      {
-        Mic.setCallback(this, _microphone_enabled_cb);
-        Mic.config(mic_cfg);
-      }
     }
 
     if (cfg.external_spk_detail.enabled && cfg.external_speaker_value == 0) {
@@ -1050,7 +1107,6 @@ for (int i = 0; i < 0x50; ++i)
 
     if (cfg.internal_spk || cfg.external_speaker_value)
     {
-      auto spk_cfg = Speaker.config();
       // set default speaker gain.
       spk_cfg.magnification = 16;
 #if defined SOC_I2S_NUM
@@ -1071,6 +1127,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_data_out = GPIO_NUM_13;
           spk_cfg.magnification = 4;
           spk_cfg.i2s_port = I2S_NUM_1;
+          spk_enable_cb = _speaker_enabled_cb_cores3;
         }
         break;
 
@@ -1079,8 +1136,8 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomS3R:
       case board_t::board_M5AtomS3RCam:
       case board_t::board_M5AtomS3RExt:
-        if (cfg.external_speaker.atomic_spk)
-        { // for ATOMIC SPK
+        if (cfg.external_speaker.atomic_spk || cfg.external_speaker.atomic_echo)
+        { // for ATOMIC SPK / ATOMIC ECHO BASE
           bool atomdisplay = false;
           for (int i = 0; i < getDisplayCount(); ++i) {
             if (Displays(i).getBoard() == board_t::board_M5AtomDisplay) {
@@ -1089,22 +1146,43 @@ for (int i = 0; i < 0x50; ++i)
             }
           }
           if (!atomdisplay) {
-            m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
-            m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
-            if (m5gfx::gpio_in(GPIO_NUM_6)
-              && m5gfx::gpio_in(GPIO_NUM_7))
-            {
-              ESP_LOGD("M5Unified", "ATOMIC SPK");
-              // atomic_spkのSDカード用ピンを割当
-              _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
-              _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
-              _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
-              cfg.internal_imu = false; /// avoid conflict with i2c
-              cfg.internal_rtc = false; /// avoid conflict with i2c
-              spk_cfg.pin_bck = GPIO_NUM_5;
-              spk_cfg.pin_ws = GPIO_NUM_39;
-              spk_cfg.pin_data_out = GPIO_NUM_38;
-              spk_cfg.magnification = 16;
+            bool flg_atomic_spk = false;
+            if (cfg.external_speaker.atomic_spk) {
+              m5gfx::pinMode(GPIO_NUM_6, m5gfx::pin_mode_t::input_pulldown); // MOSI
+              m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input_pulldown); // SCLK
+              if (m5gfx::gpio_in(GPIO_NUM_6)
+                && m5gfx::gpio_in(GPIO_NUM_7))
+              {
+                flg_atomic_spk = true;
+                ESP_LOGD("M5Unified", "ATOMIC SPK");
+                // atomic_spkのSDカード用ピンを割当
+                _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
+                _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
+                _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
+                cfg.internal_imu = false; /// avoid conflict with i2c
+                cfg.internal_rtc = false; /// avoid conflict with i2c
+                spk_cfg.pin_bck = GPIO_NUM_5;
+                spk_cfg.pin_ws = GPIO_NUM_39;
+                spk_cfg.pin_data_out = GPIO_NUM_38;
+                spk_cfg.magnification = 16;
+              }
+            }
+            if (cfg.external_speaker.atomic_echo && !flg_atomic_spk) {
+              spk_cfg.pin_bck = GPIO_NUM_8;
+              spk_cfg.pin_ws = GPIO_NUM_6;
+              spk_cfg.pin_data_out = GPIO_NUM_5;
+              spk_cfg.magnification = 1;
+              spk_enable_cb = _speaker_enabled_cb_atomic_echo;
+
+              mic_cfg.i2s_port = spk_cfg.i2s_port;
+              mic_cfg.pin_bck = GPIO_NUM_8;
+              mic_cfg.pin_ws = GPIO_NUM_6;
+              mic_cfg.pin_data_in = GPIO_NUM_7;
+              mic_cfg.magnification = 1;
+              mic_cfg.over_sampling = 1;
+              mic_cfg.pin_mck = GPIO_NUM_NC;
+              mic_cfg.stereo = false;
+              mic_enable_cb = _microphone_enabled_cb_atomic_echo;
             }
           }
         }
@@ -1216,6 +1294,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.use_dac = true;
           spk_cfg.buzzer = false;
           spk_cfg.magnification = 32;
+          spk_enable_cb = _speaker_enabled_cb_hat_spk;
         }
         break;
 
@@ -1229,6 +1308,7 @@ for (int i = 0; i < 0x50; ++i)
           spk_cfg.pin_bck = GPIO_NUM_12;
           spk_cfg.pin_ws = GPIO_NUM_0;
           spk_cfg.pin_data_out = GPIO_NUM_2;
+          spk_enable_cb = _speaker_enabled_cb_core2;
         }
         break;
 
@@ -1244,8 +1324,8 @@ for (int i = 0; i < 0x50; ++i)
       case board_t::board_M5AtomLite:
       case board_t::board_M5AtomMatrix:
       case board_t::board_M5AtomPsram:
-        if (cfg.external_speaker.atomic_spk)
-        { // for ATOMIC SPK
+        if (cfg.external_speaker.atomic_spk || cfg.external_speaker.atomic_echo)
+        { // for ATOMIC SPK / ATOMIC ECHO BASE
           bool atomdisplay = false;
           for (int i = 0; i < getDisplayCount(); ++i) {
             if (Displays(i).getBoard() == board_t::board_M5AtomDisplay) {
@@ -1254,28 +1334,49 @@ for (int i = 0; i < 0x50; ++i)
             }
           }
           if (!atomdisplay) {
-            // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
-            gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
-            m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
-            m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
-            if (m5gfx::gpio_in(GPIO_NUM_19)
-              && m5gfx::gpio_in(pin        ))
-            {
-              ESP_LOGD("M5Unified", "ATOMIC SPK");
-              // atomic_spkのSDカード用ピンを割当
-              _get_pin_table[sd_spi_sclk] = pin;
-              _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
-              _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
-              cfg.internal_imu = false; /// avoid conflict with i2c
-              cfg.internal_rtc = false; /// avoid conflict with i2c
-              spk_cfg.pin_bck = GPIO_NUM_22;
-              spk_cfg.pin_ws = GPIO_NUM_21;
-              spk_cfg.pin_data_out = GPIO_NUM_25;
-              spk_cfg.magnification = 16;
-              auto mic = Mic.config();
-              mic.pin_data_in = -1;   // disable mic for ECHO
-              Mic.config(mic);
-          }
+            bool flg_atomic_spk = false;
+            if (cfg.external_speaker.atomic_spk) {
+              // 19,23 pulldown read check ( all high = ATOMIC_SPK ? ) // MISO is not used for judgment as it changes depending on the state of the SD card.
+              gpio_num_t pin = (_board == board_t::board_M5AtomPsram) ? GPIO_NUM_5 : GPIO_NUM_23;
+              m5gfx::pinMode(GPIO_NUM_19, m5gfx::pin_mode_t::input_pulldown); // MOSI
+              m5gfx::pinMode(pin        , m5gfx::pin_mode_t::input_pulldown); // SCLK
+              if (m5gfx::gpio_in(GPIO_NUM_19)
+                && m5gfx::gpio_in(pin        ))
+              {
+                flg_atomic_spk = true;
+                ESP_LOGD("M5Unified", "ATOMIC SPK");
+                // atomic_spkのSDカード用ピンを割当
+                _get_pin_table[sd_spi_sclk] = pin;
+                _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
+                _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
+                cfg.internal_imu = false; /// avoid conflict with i2c
+                cfg.internal_rtc = false; /// avoid conflict with i2c
+                spk_cfg.pin_bck = GPIO_NUM_22;
+                spk_cfg.pin_ws = GPIO_NUM_21;
+                spk_cfg.pin_data_out = GPIO_NUM_25;
+                spk_cfg.magnification = 16;
+                auto mic = Mic.config();
+                mic.pin_data_in = -1;   // disable mic for ATOMECHO
+                Mic.config(mic);
+              }
+            }
+            if (cfg.external_speaker.atomic_echo && !flg_atomic_spk) {
+              spk_cfg.pin_bck = GPIO_NUM_33;
+              spk_cfg.pin_ws = GPIO_NUM_19;
+              spk_cfg.pin_data_out = GPIO_NUM_22;
+              spk_cfg.magnification = 1;
+              spk_enable_cb = _speaker_enabled_cb_atomic_echo;
+
+              mic_cfg.i2s_port = spk_cfg.i2s_port;
+              mic_cfg.pin_bck = GPIO_NUM_33;
+              mic_cfg.pin_ws = GPIO_NUM_19;
+              mic_cfg.pin_data_in = GPIO_NUM_23;
+              mic_cfg.magnification = 1;
+              mic_cfg.over_sampling = 1;
+              mic_cfg.pin_mck = GPIO_NUM_NC;
+              mic_cfg.stereo = false;
+              mic_enable_cb = _microphone_enabled_cb_atomic_echo;
+            }
           }
         }
         break;
@@ -1334,17 +1435,22 @@ for (int i = 0; i < 0x50; ++i)
             spk_cfg.buzzer = false;
             spk_cfg.use_dac = false;
             spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
+            spk_enable_cb = nullptr;
           }
  #undef ENABLE_M5MODULE
 #endif
         }
       }
-
-      if (spk_cfg.pin_data_out >= 0)
-      {
-        Speaker.setCallback(this, _speaker_enabled_cb);
-        Speaker.config(spk_cfg);
-      }
+    }
+    if (mic_cfg.pin_data_in >= 0)
+    {
+      Mic.setCallback(this, mic_enable_cb);
+      Mic.config(mic_cfg);
+    }
+    if (spk_cfg.pin_data_out >= 0)
+    {
+      Speaker.setCallback(this, spk_enable_cb);
+      Speaker.config(spk_cfg);
     }
   }
 
@@ -1395,17 +1501,38 @@ for (int i = 0; i < 0x50; ++i)
     if (Touch.isEnabled())
     {
       Touch.update(ms);
+
+      int tb_y = 0;
+      int tb_k = 0;
       switch (_board)
       {
       case board_t::board_M5StackCore2:
+      case board_t::board_M5Tough:
       case board_t::board_M5StackCoreS3SE:
-        {
+      case board_t::board_M5StackCoreS3:
+        tb_y = 240;
+        tb_k = 614; // (65536*3/320)
+        break;
+      case board_t::board_M5Paper:
+      case board_t::board_M5PaperS3:
+        tb_y = 960;
+        tb_k = 364; // (65536*3/540)
+        break;
+      default:
+        break;
+      }
+
+      if (tb_k)
+      {
+          tb_y -= _touch_button_height;
+          if (tb_y < 0) { tb_y = 0; }
+
           use_rawstate_bits = 0b00111;
           int i = Touch.getCount();
           while (--i >= 0)
           {
             auto raw = Touch.getTouchPointRaw(i);
-            if (raw.y > 240)
+            if (raw.y >= tb_y)
             {
               auto det = Touch.getDetail(i);
               if (det.state & touch_state_t::touch)
@@ -1415,16 +1542,11 @@ for (int i = 0; i < 0x50; ++i)
                 if (BtnC.isPressed()) { btn_rawstate_bits |= 1 << 2; }
                 if (btn_rawstate_bits || !(det.state & touch_state_t::mask_moving))
                 {
-                  btn_rawstate_bits |= 1 << ((raw.x - 2) / 107);
+                  btn_rawstate_bits |= 1 << ((raw.x * tb_k) >> 16);
                 }
               }
             }
           }
-        }
-        break;
-
-      default:
-        break;
       }
     }
 
@@ -1587,6 +1709,27 @@ for (int i = 0; i < 0x50; ++i)
       }
     }
 #endif
+  }
+
+  void M5Unified::setTouchButtonHeightByRatio(uint8_t ratio)
+  {
+    uint32_t height = 0;
+    switch (_board)
+    {
+    case board_t::board_M5StackCore2:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackCoreS3:
+      height = 240;
+      break;
+    case board_t::board_M5Paper:
+    case board_t::board_M5PaperS3:
+      height = 960;
+      break;
+    default:
+      break;
+    }
+    _touch_button_height = height * ratio / 255;
   }
 
   M5GFX& M5Unified::getDisplay(size_t index)
