@@ -747,7 +747,13 @@ namespace m5
     uint8_t pwrHoldPin = M5.getPin(pin_name_t::power_hold);
     if (pwrHoldPin < GPIO_NUM_MAX)
     {
-      m5gfx::gpio_lo( pwrHoldPin );
+      for (int i = 0; i < 5; ++i)
+      {
+        m5gfx::gpio_lo( pwrHoldPin );
+        m5gfx::delay(50);
+        m5gfx::gpio_hi( pwrHoldPin );
+        m5gfx::delay(50);
+      }
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }

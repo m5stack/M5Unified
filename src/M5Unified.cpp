@@ -182,6 +182,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 { board_t::board_M5Capsule     , GPIO_NUM_46 },
 { board_t::board_M5AirQ        , GPIO_NUM_46 },
 { board_t::board_M5DinMeter    , GPIO_NUM_46 },
+{ board_t::board_M5PaperS3     , GPIO_NUM_44 },
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
