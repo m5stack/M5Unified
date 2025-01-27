@@ -30,17 +30,21 @@
 namespace m5
 {
   static constexpr const uint32_t i2c_freq = 100000;
+
+#if !defined (M5UNIFIED_PC_BUILD)
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
+  static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
-  static constexpr int M5NanoC6_LED_PIN = 7;
+  static constexpr int M5NanoC6_LED_PIN = GPIO_NUM_7;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-  static constexpr int TimerCam_POWER_HOLD_PIN = 33;
-  static constexpr int TimerCam_LED_PIN = 2;
-  static constexpr int M5Paper_EXT5V_ENABLE_PIN = 5;
-  static constexpr int StickCPlus2_LED_PIN = 19;
+  static constexpr int TimerCam_POWER_HOLD_PIN = GPIO_NUM_33;
+  static constexpr int TimerCam_LED_PIN = GPIO_NUM_2;
+  static constexpr int M5Paper_EXT5V_ENABLE_PIN = GPIO_NUM_5;
+  static constexpr int StickCPlus2_LED_PIN = GPIO_NUM_19;
+#endif
 #endif
 
   bool Power_Class::begin(void)
@@ -76,6 +80,7 @@ namespace m5
       break;
 
     case board_t::board_M5PaperS3:
+      m5gfx::pinMode(M5PaperS3_CHG_STAT_PIN, m5gfx::pin_mode_t::input);
       _batAdcCh = ADC1_GPIO3_CHANNEL;
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
@@ -587,6 +592,36 @@ namespace m5
     }
     led->setBrightness(brightness);
 
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    static std::unique_ptr<m5gfx::Light_PWM> led;
+
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5PaperS3:
+      if (led.get() == nullptr)
+      {
+        led.reset(new m5gfx::Light_PWM());
+        auto cfg = led->config();
+        cfg.invert = false;
+        cfg.pwm_channel = 7;
+
+        /// M5PaperS3 : LED = GPIO0
+        switch (M5.getBoard()) {
+        case board_t::board_M5PaperS3:
+          cfg.pin_bl = GPIO_NUM_0;
+          break;
+
+        default:
+          break;
+        }
+        led->config(cfg);
+        led->init(brightness);
+      }
+      led->setBrightness(brightness);
+      break;
+    default: break;
+    }
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
@@ -712,7 +747,16 @@ namespace m5
     uint8_t pwrHoldPin = M5.getPin(pin_name_t::power_hold);
     if (pwrHoldPin < GPIO_NUM_MAX)
     {
-      m5gfx::gpio_lo( pwrHoldPin );
+      // This is a process for models that can be turned off by GPIO control.
+      // For PaperS3, the power cannot be turned off simply by setting the GPIO to LOW,
+      // so a loop is performed to ensure that the power is turned off by repeatedly outputting a pulse.
+      for (int i = 0; i < 5; ++i)
+      {
+        m5gfx::gpio_lo( pwrHoldPin );
+        m5gfx::delay(50);
+        m5gfx::gpio_hi( pwrHoldPin );
+        m5gfx::delay(50);
+      }
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }
@@ -1182,6 +1226,12 @@ namespace m5
 
   Power_Class::is_charging_t Power_Class::isCharging(void)
   {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      if (M5.getBoard() == board_t::board_M5PaperS3)
+      {
+        return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      }
+#endif
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)

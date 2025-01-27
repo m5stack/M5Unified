@@ -93,6 +93,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - SPK HAT (with M5StickC / CPlus / M5Stack CoreInk)
  - SPK HAT2 (with M5StickCPlus)
  - ATOMIC SPK (with M5ATOM Lite / PSRAM / S3 / S3Lite / S3R / S3RCam / S3RExt )
+ - ATOMIC ECHO BASE (with M5ATOM Lite / PSRAM / S3 / S3Lite / S3R / S3RCam / S3RExt )
  - Module Display adapter (Audio over HDMI for M5Stack Core / Core2 / Tough / CoreS3 / CoreS3SE )
  - Module RCA adapter (M5Stack Core / Core2 / Tough)
 

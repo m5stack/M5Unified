@@ -88,6 +88,7 @@ void setup(void)
   cfg.external_speaker.hat_spk        = true;  // default=false. use HAT SPK
   cfg.external_speaker.hat_spk2       = true;  // default=false. use HAT SPK2
   cfg.external_speaker.atomic_spk     = true;  // default=false. use ATOMIC SPK
+  cfg.external_speaker.atomic_echo    = true;  // default=false. use ATOMIC ECHO BASE
   cfg.external_speaker.module_rca     = false; // default=false. use ModuleRCA AudioOutput
 
   // external display setting. (Pre-include required)
@@ -285,6 +286,12 @@ void setup(void)
   case m5::board_t::board_M5AtomS3R:
     name = "ATOMS3R";
     break;
+  case m5::board_t::board_M5AtomS3RCam:
+    name = "ATOMS3R Camera";
+    break;
+  case m5::board_t::board_M5AtomS3RExt:
+    name = "ATOMS3R Ext";
+    break;
   case m5::board_t::board_M5Dial:
     name = "Dial";
     break;
@@ -399,6 +406,11 @@ void setup(void)
   M5.Display.println(name);
   M5.Display.endWrite();
   M5_LOGI("imu:%s", name);
+
+  // You can instruct the bottom edge of the touchscreen to be treated as BtnA ~ BtnC by pixel number.
+  M5.setTouchButtonHeight(32);
+  // You can also specify the ratio to the screen height. (25 = 10% , 255 = 100%)
+  // M5.setTouchButtonHeightByRatio(25);
 }
 
 void loop(void)
