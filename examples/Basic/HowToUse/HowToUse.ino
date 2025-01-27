@@ -88,6 +88,7 @@ void setup(void)
   cfg.external_speaker.hat_spk        = true;  // default=false. use HAT SPK
   cfg.external_speaker.hat_spk2       = true;  // default=false. use HAT SPK2
   cfg.external_speaker.atomic_spk     = true;  // default=false. use ATOMIC SPK
+  cfg.external_speaker.atomic_echo    = true;  // default=false. use ATOMIC ECHO BASE
   cfg.external_speaker.module_rca     = false; // default=false. use ModuleRCA AudioOutput
 
   // external display setting. (Pre-include required)
