@@ -286,6 +286,12 @@ void setup(void)
   case m5::board_t::board_M5AtomS3R:
     name = "ATOMS3R";
     break;
+  case m5::board_t::board_M5AtomS3RCam:
+    name = "ATOMS3R Camera";
+    break;
+  case m5::board_t::board_M5AtomS3RExt:
+    name = "ATOMS3R Ext";
+    break;
   case m5::board_t::board_M5Dial:
     name = "Dial";
     break;
@@ -400,6 +406,11 @@ void setup(void)
   M5.Display.println(name);
   M5.Display.endWrite();
   M5_LOGI("imu:%s", name);
+
+  // You can instruct the bottom edge of the touchscreen to be treated as BtnA ~ BtnC by pixel number.
+  M5.setTouchButtonHeight(32);
+  // You can also specify the ratio to the screen height. (25 = 10% , 255 = 100%)
+  // M5.setTouchButtonHeightByRatio(25);
 }
 
 void loop(void)
