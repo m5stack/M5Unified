@@ -747,6 +747,9 @@ namespace m5
     uint8_t pwrHoldPin = M5.getPin(pin_name_t::power_hold);
     if (pwrHoldPin < GPIO_NUM_MAX)
     {
+      // This is a process for models that can be turned off by GPIO control.
+      // For PaperS3, the power cannot be turned off simply by setting the GPIO to LOW,
+      // so a loop is performed to ensure that the power is turned off by repeatedly outputting a pulse.
       for (int i = 0; i < 5; ++i)
       {
         m5gfx::gpio_lo( pwrHoldPin );
