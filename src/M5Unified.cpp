@@ -334,7 +334,6 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   {
     (void)args;
     (void)enabled;
-    auto self = (M5Unified*)args;
     static constexpr const uint8_t enabled_bulk_data[] = {
       2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
@@ -436,7 +435,6 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   {
     (void)args;
     (void)enabled;
-    auto self = (M5Unified*)args;
     static constexpr const uint8_t enabled_bulk_data[] = {
       2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
