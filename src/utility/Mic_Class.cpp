@@ -439,12 +439,11 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
 #endif
-    if (!use_pdm) {
-      dev->rx_conf.rx_mono = 0;
-      dev->rx_conf.rx_mono_fst_vld = 0;
-      dev->rx_tdm_ctrl.rx_tdm_tot_chan_num = self->_cfg.stereo ? 1 : 0;
-      dev->rx_conf.rx_update = 1;
-    }
+
+    dev->rx_conf.rx_mono = self->_cfg.stereo ? 0 : 1;
+    dev->rx_conf.rx_mono_fst_vld = 0;
+    dev->rx_tdm_ctrl.rx_tdm_tot_chan_num = self->_cfg.stereo ? 1 : 0;
+    dev->rx_conf.rx_update = 1;
 
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
 
@@ -589,13 +588,14 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
           sv1 -= 2048 * oversampling;
         }
 
-        auto value_tmp = sv0 + sv1;
+        auto value_tmp = (sv0 + sv1) << 3;
         int32_t offset = self->_offset;
+        // Automatic zero level adjustment
+        offset -= (value_tmp + offset + 16) >> 5;
+        self->_offset = offset;
+        offset = (offset + 8) >> 4;
         sum_value[0] = sv0 + offset;
         sum_value[1] = sv1 + offset;
-        // Automatic zero level adjustment
-        offset = (32 + offset * 62 - value_tmp) >> 6;
-        self->_offset = offset;
 
         int32_t noise_filter = self->_cfg.noise_filter_level;
         if (noise_filter)

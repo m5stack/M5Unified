@@ -1018,7 +1018,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
           mic_cfg.pin_ws = GPIO_NUM_33;
           mic_cfg.pin_data_in = GPIO_NUM_14;
           mic_cfg.i2s_port = I2S_NUM_1;
-          mic_cfg.stereo = true;
+          mic_cfg.input_channel = input_channel_t::input_stereo;
           mic_enable_cb = _microphone_enabled_cb_cores3;
         }
         break;
@@ -1549,10 +1549,10 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 #if defined (M5UNIFIED_PC_BUILD)
     use_rawstate_bits = 0b10111;
-    btn_rawstate_bits = !m5gfx::gpio_in(39) ? 0b00001 : 0 // LEFT=BtnA
-                      | !m5gfx::gpio_in(38) ? 0b00010 : 0 // DOWN=BtnB
-                      | !m5gfx::gpio_in(37) ? 0b00100 : 0 // RIGHT=BtnC
-                      | !m5gfx::gpio_in(36) ? 0b10000 : 0 // UP=BtnPWR
+    btn_rawstate_bits = (!m5gfx::gpio_in(39) ? 0b00001 : 0) // LEFT=BtnA
+                      | (!m5gfx::gpio_in(38) ? 0b00010 : 0) // DOWN=BtnB
+                      | (!m5gfx::gpio_in(37) ? 0b00100 : 0) // RIGHT=BtnC
+                      | (!m5gfx::gpio_in(36) ? 0b10000 : 0) // UP=BtnPWR
                       ;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
