@@ -997,21 +997,28 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
     case board_t::board_M5StampPLC:
       _io_expander_a_init();
+
+      // lcd backlight
       _io_expander_a->setDirection(7, true);
       _io_expander_a->setPullMode(7, false);
       _io_expander_a->setHighImpedance(7, false);
 
+      // button c
       _io_expander_a->setDirection(0, false);
       _io_expander_a->setPullMode(0, true);
       _io_expander_a->setHighImpedance(0, false);
 
+      // button b
       _io_expander_a->setDirection(1, false);
       _io_expander_a->setPullMode(1, true);
       _io_expander_a->setHighImpedance(1, false);
 
+      // button a
       _io_expander_a->setDirection(2, false);
       _io_expander_a->setPullMode(2, true);
       _io_expander_a->setHighImpedance(2, false);
+
+      delay(100);
       break;
 
 #endif
@@ -1696,9 +1703,9 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     {
       use_rawstate_bits = 0b00111;
       auto value = _io_expander_a->readRegister8(0x0F);
-      btn_rawstate_bits = (value & 0b100 ? 0b00001 : 0) // BtnA
-                        | (value & 0b010 ? 0b00010 : 0) // BtnB
-                        | (value & 0b001 ? 0b00100 : 0) // BtnC
+      btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
+                        | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                        | (!(value & 0b001) ? 0b00100 : 0) // BtnC
                         ;
     }
       break;
