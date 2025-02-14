@@ -4,6 +4,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "M5Unified.hpp"
+#include "utility/PI4IOE5V6408_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
 #include <soc/efuse_reg.h>
@@ -79,6 +80,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomS3RExt , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -138,6 +140,7 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5Capsule    , GPIO_NUM_14, GPIO_NUM_12, GPIO_NUM_39, GPIO_NUM_11 },
 { board_t::board_M5Cardputer  , GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, GPIO_NUM_47 },
+{ board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  GPIO_NUM_10 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
@@ -218,6 +221,24 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     }
   }
 #endif
+
+  static PI4IOE5V6408_Class* _io_expander_a = nullptr;
+  PI4IOE5V6408_Class* __get_io_expander_a()
+  {
+    return _io_expander_a;
+  }
+
+  void _io_expander_a_init()
+  {
+    // Init
+    _io_expander_a = new PI4IOE5V6408_Class;
+    if (!_io_expander_a->begin()) {
+      delete _io_expander_a;
+      _io_expander_a = nullptr;
+    } else {
+      _io_expander_a->resetIrq();
+    }
+  }
 
   static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
   {
@@ -974,6 +995,32 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5StampPLC:
+      _io_expander_a_init();
+
+      // lcd backlight
+      _io_expander_a->setDirection(7, true);
+      _io_expander_a->setPullMode(7, false);
+      _io_expander_a->setHighImpedance(7, false);
+
+      // button c
+      _io_expander_a->setDirection(0, false);
+      _io_expander_a->setPullMode(0, true);
+      _io_expander_a->setHighImpedance(0, false);
+
+      // button b
+      _io_expander_a->setDirection(1, false);
+      _io_expander_a->setPullMode(1, true);
+      _io_expander_a->setHighImpedance(1, false);
+
+      // button a
+      _io_expander_a->setDirection(2, false);
+      _io_expander_a->setPullMode(2, true);
+      _io_expander_a->setHighImpedance(2, false);
+
+      delay(100);
+      break;
+
 #endif
 
     default:
@@ -1239,6 +1286,15 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
           spk_cfg.pin_data_out = GPIO_NUM_42;
           spk_cfg.magnification = 16;
           spk_cfg.i2s_port = I2S_NUM_1;
+        }
+        break;
+
+      case board_t::board_M5StampPLC:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_44;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
         }
         break;
 
@@ -1641,6 +1697,17 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     case board_t::board_M5DinMeter:
       use_rawstate_bits = 0b00001;
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_42)) & 1;
+      break;
+
+    case board_t::board_M5StampPLC:
+    {
+      use_rawstate_bits = 0b00111;
+      auto value = _io_expander_a->readRegister8(0x0F);
+      btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
+                        | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                        | (!(value & 0b001) ? 0b00100 : 0) // BtnC
+                        ;
+    }
       break;
 
     default:
