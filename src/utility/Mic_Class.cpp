@@ -309,7 +309,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
-    i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_BOTH : _cfg.left_channel ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_LEFT : i2s_pdm_slot_mask_t::I2S_PDM_SLOT_RIGHT;
+    i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_BOTH : (_cfg.left_channel ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_LEFT : i2s_pdm_slot_mask_t::I2S_PDM_SLOT_RIGHT);
     i2s_config.gpio_cfg.clk = (gpio_num_t)_cfg.pin_ws; 
     i2s_config.gpio_cfg.din = (gpio_num_t)_cfg.pin_data_in;
     err = i2s_channel_init_pdm_rx_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
@@ -324,7 +324,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
-    i2s_config.slot_cfg.slot_mask = i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH;
+    i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH : (_cfg.left_channel ? i2s_std_slot_mask_t::I2S_STD_SLOT_LEFT : i2s_std_slot_mask_t::I2S_STD_SLOT_RIGHT);
     i2s_config.slot_cfg.ws_width = 16;
     i2s_config.slot_cfg.bit_shift = true;
 #if SOC_I2S_HW_VERSION_1    // For esp32/esp32-s2
@@ -374,6 +374,10 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     pin_config.ws_io_num      = _cfg.pin_ws;
     pin_config.data_in_num    = _cfg.pin_data_in;
 
+    if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
+      i2s_config.mode                 = (i2s_mode_t)( I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM );
+      i2s_config.communication_format = i2s_comm_format_t::I2S_COMM_FORMAT_STAND_PCM_SHORT;
+    }
     esp_err_t err;
     if (ESP_OK != (err = i2s_driver_install(_cfg.i2s_port, &i2s_config, 0, nullptr)))
     {
@@ -440,9 +444,6 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
 #endif
 
-    dev->rx_conf.rx_mono = self->_cfg.stereo ? 0 : 1;
-    dev->rx_conf.rx_mono_fst_vld = 0;
-    dev->rx_tdm_ctrl.rx_tdm_tot_chan_num = self->_cfg.stereo ? 1 : 0;
     dev->rx_conf.rx_update = 1;
 
     dev->rx_conf1.rx_bck_div_num = div_m - 1;

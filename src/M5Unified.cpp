@@ -258,6 +258,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
+  static constexpr uint8_t pi4ioe_i2c_addr = 0x43;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t es7210_i2c_addr = 0x40;
@@ -356,7 +357,6 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     (void)args;
     (void)enabled;
     static constexpr const uint8_t enabled_bulk_data[] = {
-      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
       2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
@@ -368,7 +368,18 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
-      2, 0x00, 0x1F,
+      0
+    };
+
+    static constexpr const uint8_t enabled_pi4ioe_bulk_data[] = {
+      2, 0x03, 0xFF,  // PI4IOE direction:OUTPUT
+      2, 0x05, 0xFF,  // PI4IOE output HIGH
+      2, 0x07, 0x00,  // PI4IOE set push-pull
+      2, 0x0B, 0x00,  // Disable pull (up and down)
+      0
+    };
+    static constexpr const uint8_t disabled_pi4ioe_bulk_data[] = {
+      2, 0x05, 0x00,
       0
     };
 
@@ -376,6 +387,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
 #endif
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+    in_i2c_bulk_write(pi4ioe_i2c_addr, enabled ? enabled_pi4ioe_bulk_data : disabled_pi4ioe_bulk_data);
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     backup_i2c_setting.restore();
 #endif
@@ -457,19 +469,20 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     (void)args;
     (void)enabled;
     static constexpr const uint8_t enabled_bulk_data[] = {
-      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
       2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
       2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
       2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
       2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
-      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN)
+      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN) // (0xBF == ± 0 dB )
       2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
-      2, 0x00, 0x1F,
+      2, 0x0D, 0xFC,  // 0x0D SYSTEM/ Power down analog circuitry
+      2, 0x0E, 0x6A,  // 0x0E SYSTEM
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       0
     };
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -1003,20 +1016,12 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       _io_expander_a->setPullMode(7, false);
       _io_expander_a->setHighImpedance(7, false);
 
-      // button c
-      _io_expander_a->setDirection(0, false);
-      _io_expander_a->setPullMode(0, true);
-      _io_expander_a->setHighImpedance(0, false);
-
-      // button b
-      _io_expander_a->setDirection(1, false);
-      _io_expander_a->setPullMode(1, true);
-      _io_expander_a->setHighImpedance(1, false);
-
-      // button a
-      _io_expander_a->setDirection(2, false);
-      _io_expander_a->setPullMode(2, true);
-      _io_expander_a->setHighImpedance(2, false);
+      for (int i = 0; i < 3; ++i) {
+        // button a~c
+        _io_expander_a->setDirection(i, false);
+        _io_expander_a->setPullMode(i, true);
+        _io_expander_a->setHighImpedance(i, false);
+      }
 
       delay(100);
       break;
