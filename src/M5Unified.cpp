@@ -4,6 +4,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "M5Unified.hpp"
+#include "utility/PI4IOE5V6408_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
 #include <soc/efuse_reg.h>
@@ -79,6 +80,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomS3RExt , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -138,6 +140,7 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5Capsule    , GPIO_NUM_14, GPIO_NUM_12, GPIO_NUM_39, GPIO_NUM_11 },
 { board_t::board_M5Cardputer  , GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, GPIO_NUM_47 },
+{ board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  GPIO_NUM_10 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
@@ -219,6 +222,24 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   }
 #endif
 
+  static PI4IOE5V6408_Class* _io_expander_a = nullptr;
+  PI4IOE5V6408_Class* __get_io_expander_a()
+  {
+    return _io_expander_a;
+  }
+
+  void _io_expander_a_init()
+  {
+    // Init
+    _io_expander_a = new PI4IOE5V6408_Class;
+    if (!_io_expander_a->begin()) {
+      delete _io_expander_a;
+      _io_expander_a = nullptr;
+    } else {
+      _io_expander_a->resetIrq();
+    }
+  }
+
   static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
   {
     // bulk_data example..
@@ -237,6 +258,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
+  static constexpr uint8_t pi4ioe_i2c_addr = 0x43;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t es7210_i2c_addr = 0x40;
@@ -334,10 +356,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   {
     (void)args;
     (void)enabled;
-    auto self = (M5Unified*)args;
-    auto spk_cfg = self->Speaker.config();
     static constexpr const uint8_t enabled_bulk_data[] = {
-      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
       2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
@@ -349,7 +368,18 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
-      2, 0x00, 0x1F,
+      0
+    };
+
+    static constexpr const uint8_t enabled_pi4ioe_bulk_data[] = {
+      2, 0x03, 0xFF,  // PI4IOE direction:OUTPUT
+      2, 0x05, 0xFF,  // PI4IOE output HIGH
+      2, 0x07, 0x00,  // PI4IOE set push-pull
+      2, 0x0B, 0x00,  // Disable pull (up and down)
+      0
+    };
+    static constexpr const uint8_t disabled_pi4ioe_bulk_data[] = {
+      2, 0x05, 0x00,
       0
     };
 
@@ -357,6 +387,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
 #endif
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+    in_i2c_bulk_write(pi4ioe_i2c_addr, enabled ? enabled_pi4ioe_bulk_data : disabled_pi4ioe_bulk_data);
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     backup_i2c_setting.restore();
 #endif
@@ -437,22 +468,21 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   {
     (void)args;
     (void)enabled;
-    auto self = (M5Unified*)args;
-    auto spk_cfg = self->Speaker.config();
     static constexpr const uint8_t enabled_bulk_data[] = {
-      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
       2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
       2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
       2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
       2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
-      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN)
+      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN) // (0xBF == ± 0 dB )
       2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
-      2, 0x00, 0x1F,
+      2, 0x0D, 0xFC,  // 0x0D SYSTEM/ Power down analog circuitry
+      2, 0x0E, 0x6A,  // 0x0E SYSTEM
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
       0
     };
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -978,6 +1008,24 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5StampPLC:
+      _io_expander_a_init();
+
+      // lcd backlight
+      _io_expander_a->setDirection(7, true);
+      _io_expander_a->setPullMode(7, false);
+      _io_expander_a->setHighImpedance(7, false);
+
+      for (int i = 0; i < 3; ++i) {
+        // button a~c
+        _io_expander_a->setDirection(i, false);
+        _io_expander_a->setPullMode(i, true);
+        _io_expander_a->setHighImpedance(i, false);
+      }
+
+      delay(100);
+      break;
+
 #endif
 
     default:
@@ -1022,7 +1070,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
           mic_cfg.pin_ws = GPIO_NUM_33;
           mic_cfg.pin_data_in = GPIO_NUM_14;
           mic_cfg.i2s_port = I2S_NUM_1;
-          mic_cfg.stereo = true;
+          mic_cfg.input_channel = input_channel_t::input_stereo;
           mic_enable_cb = _microphone_enabled_cb_cores3;
         }
         break;
@@ -1243,6 +1291,15 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
           spk_cfg.pin_data_out = GPIO_NUM_42;
           spk_cfg.magnification = 16;
           spk_cfg.i2s_port = I2S_NUM_1;
+        }
+        break;
+
+      case board_t::board_M5StampPLC:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_44;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
         }
         break;
 
@@ -1553,10 +1610,10 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 #if defined (M5UNIFIED_PC_BUILD)
     use_rawstate_bits = 0b10111;
-    btn_rawstate_bits = !m5gfx::gpio_in(39) ? 0b00001 : 0 // LEFT=BtnA
-                      | !m5gfx::gpio_in(38) ? 0b00010 : 0 // DOWN=BtnB
-                      | !m5gfx::gpio_in(37) ? 0b00100 : 0 // RIGHT=BtnC
-                      | !m5gfx::gpio_in(36) ? 0b10000 : 0 // UP=BtnPWR
+    btn_rawstate_bits = (!m5gfx::gpio_in(39) ? 0b00001 : 0) // LEFT=BtnA
+                      | (!m5gfx::gpio_in(38) ? 0b00010 : 0) // DOWN=BtnB
+                      | (!m5gfx::gpio_in(37) ? 0b00100 : 0) // RIGHT=BtnC
+                      | (!m5gfx::gpio_in(36) ? 0b10000 : 0) // UP=BtnPWR
                       ;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1645,6 +1702,17 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     case board_t::board_M5DinMeter:
       use_rawstate_bits = 0b00001;
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_42)) & 1;
+      break;
+
+    case board_t::board_M5StampPLC:
+    {
+      use_rawstate_bits = 0b00111;
+      auto value = _io_expander_a->readRegister8(0x0F);
+      btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
+                        | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                        | (!(value & 0b001) ? 0b00100 : 0) // BtnC
+                        ;
+    }
       break;
 
     default:
