@@ -237,6 +237,10 @@ namespace m5
 
     static int8_t getPin(pin_name_t name) { return _get_pin_table[name]; }
 
+    Button_Class& getButton(size_t index) { return _buttons[index]; }
+
+    Button_Class& Buttons(size_t index) { return getButton(index); }
+
     M5GFX& getDisplay(size_t index);
 
     M5GFX& Displays(size_t index) { return getDisplay(index); }
