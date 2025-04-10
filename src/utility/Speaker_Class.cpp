@@ -195,7 +195,11 @@ namespace m5
 
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
+#else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+#endif
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     // i2s_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(16, I2S_SLOT_MODE_STEREO);
@@ -384,7 +388,7 @@ namespace m5
     auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {
@@ -392,7 +396,11 @@ namespace m5
       dev->tx_conf.tx_chan_equal = 1;
     }
 
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    dev->tx_conf.tx_bck_div_num = div_m - 1;
+#else
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
+#endif
 
     bool yn1 = (div_b > (div_a >> 1));
     if (yn1) {
@@ -425,6 +433,8 @@ namespace m5
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_en = 1;
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
 #else
+ #if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+ #else
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
     dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
@@ -433,6 +443,7 @@ namespace m5
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
+ #endif
     dev->tx_conf.tx_update = 1;
     dev->tx_conf.tx_update = 0;
 #endif

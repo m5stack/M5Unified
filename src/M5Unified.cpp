@@ -86,6 +86,9 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  }, // NanoC6
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31, GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
+{ board_t::board_unknown      , 255        ,255         , 255        ,255        },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
 { board_t::board_M5Paper      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_32,GPIO_NUM_25 },
@@ -818,8 +821,14 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     if (board == board_t::board_unknown)
-    { // NanoC6      {
+    { // NanoC6
       board = board_t::board_M5NanoC6;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (board == board_t::board_unknown)
+    {
+      board = board_t::board_M5Tab5;
     }
 
 #endif
@@ -1580,6 +1589,10 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
         tb_y = 960;
         tb_k = 364; // (65536*3/540)
         break;
+      case board_t::board_M5Tab5:
+        tb_y = 1280;
+        tb_k = 273; // (65536*3/540)
+        break;
       default:
         break;
       }
@@ -1798,6 +1811,9 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     case board_t::board_M5Paper:
     case board_t::board_M5PaperS3:
       height = 960;
+      break;
+    case board_t::board_M5Tab5:
+      height = 1280;
       break;
     default:
       break;
