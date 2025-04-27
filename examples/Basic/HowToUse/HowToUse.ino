@@ -321,6 +321,10 @@ void setup(void)
   case m5::board_t::board_M5NanoC6:
     name = "NanoC6";
     break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+  case m5::board_t::board_M5Tab5:
+    name = "Tab5";
+    break;
 #else
   case m5::board_t::board_M5Stack:
     name = "Stack";
@@ -638,7 +642,7 @@ void loop(void)
 
     M5.Display.startWrite();
     M5.Display.setClipRect(h, h, M5.Display.width(), M5.Display.height());
-    M5.Display.waitDisplay();
+    while (M5.Display.displayBusy()) { M5.delay(1); }
     for (int i = 0; i < 6; ++i)
     {
       if (xpos[i] == prev_xpos[i]) continue;

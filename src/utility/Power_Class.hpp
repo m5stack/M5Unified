@@ -13,6 +13,10 @@
 #include "INA3221_Class.hpp"
 #include "RTC8563_Class.hpp"
 
+#if __has_include (<sdkconfig.h>)
+#include <sdkconfig.h>
+#endif
+
 #if __has_include (<esp_adc/adc_oneshot.h>) // ESP-IDF v5 or later
 #include <esp_adc/adc_oneshot.h>
  #if __has_include(<esp_adc/adc_cali.h>)

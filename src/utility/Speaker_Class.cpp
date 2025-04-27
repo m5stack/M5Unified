@@ -946,6 +946,7 @@ label_continue_sample:
       chinfo->wavinfo[0].clear();
       chinfo->wavinfo[1].clear();
     }
+    _i2s_driver_uninstall(_cfg.i2s_port);
   }
 
   void Speaker_Class::stop(void)
