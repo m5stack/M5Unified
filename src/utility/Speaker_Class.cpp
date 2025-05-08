@@ -220,7 +220,7 @@ namespace m5
     i2s_config.gpio_cfg.bclk = (gpio_num_t)_cfg.pin_bck;
     i2s_config.gpio_cfg.ws   = (gpio_num_t)_cfg.pin_ws;
     i2s_config.gpio_cfg.dout = (gpio_num_t)_cfg.pin_data_out;
-    i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
+    i2s_config.gpio_cfg.mclk = (gpio_num_t)_cfg.pin_mck;
     i2s_config.gpio_cfg.din  = (gpio_num_t)I2S_PIN_NO_CHANGE;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
 
@@ -255,6 +255,11 @@ namespace m5
 #endif
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 1)
+    pin_config.mck_io_num     = _cfg.pin_mck;
+ #endif
+#endif
     pin_config.bck_io_num     = _cfg.pin_bck;
     pin_config.ws_io_num      = _cfg.pin_ws;
     pin_config.data_out_num   = _cfg.pin_data_out;
@@ -946,7 +951,9 @@ label_continue_sample:
       chinfo->wavinfo[0].clear();
       chinfo->wavinfo[1].clear();
     }
+#if !defined (SDL_h_)
     _i2s_driver_uninstall(_cfg.i2s_port);
+#endif
   }
 
   void Speaker_Class::stop(void)

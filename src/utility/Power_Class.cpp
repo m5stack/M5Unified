@@ -805,7 +805,7 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32P4)
 
 #else
 
@@ -847,7 +847,7 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","lightSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32P4)
 
 #else
 
