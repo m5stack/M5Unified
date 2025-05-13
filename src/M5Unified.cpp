@@ -111,6 +111,8 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 { board_t::board_M5DinMeter   , GPIO_NUM_1 ,GPIO_NUM_2 , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
@@ -146,6 +148,8 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  GPIO_NUM_10 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5Tab5       , GPIO_NUM_43,GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_42 },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, GPIO_NUM_4  },
@@ -265,7 +269,8 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
-  static constexpr uint8_t pi4ioe_i2c_addr = 0x43;
+  static constexpr uint8_t es8388_i2c_addr = 0x10;
+  static constexpr uint8_t pi4io1_i2c_addr = 0x43;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t es7210_i2c_addr = 0x40;
@@ -341,6 +346,63 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     return true;
   }
 
+  bool M5Unified::_speaker_enabled_cb_tab5(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    if (spk_cfg.pin_data_out != GPIO_NUM_26) { return false; }
+
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2,    0, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2,    0, 0x00,
+      2,    0, 0x0E,
+      2,    1, 0x00,
+      2,    2, 0x0A, //CHIP POWER: power up all
+      2,    3, 0xFF, //ADC POWER: power down all
+      2,    4, 0x3C, //DAC POWER: power up and LOUT1/ROUT1/LOUT2/ROUT2 enable
+      2,    5, 0x00, //ChipLowPower1
+      2,    6, 0x00, //ChipLowPower2
+      2,    7, 0x7C, //VSEL
+      2,    8, 0x00, //set I2S slave mode
+      // reg9-22 == adc
+      2,   23, 0x18, //I2S format (16bit)
+      2,   24, 0x00, //I2S MCLK ratio (128)
+      2,   25, 0x20, //DAC unmute
+      2,   26, 0x00, //LDACVOL 0x00~0xC0
+      2,   27, 0x00, //RDACVOL 0x00~0xC0
+      2,   28, 0x08, //enable digital click free power up and down
+      2,   29, 0x00,
+      2,   38, 0x00, //DAC CTRL16
+      2,   39, 0xB8, //LEFT Ch MIX
+      2,   42, 0xB8, //RIGHTCh MIX
+      2,   43, 0x08, //ADC and DAC separate
+      2,   45, 0x00, // 0x00=1.5k VREF analog output / 0x10=40kVREF analog output
+      2,   46, 0x21,
+      2,   47, 0x21,
+      2,   48, 0x21,
+      2,   49, 0x21,
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      0
+    };
+    in_i2c_bulk_write(es8388_i2c_addr, enabled ? enabled_bulk_data : disabled_bulk_data);
+
+    if (enabled)
+    { // AMP on
+      M5.In_I2C.bitOn(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
+    }
+    else
+    { // AMP off
+      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
+    }
+#endif
+    return true;
+  }
+
   bool M5Unified::_speaker_enabled_cb_hat_spk(void* args, bool enabled)
   {
     (void)args;
@@ -394,7 +456,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_38, GPIO_NUM_39);
 #endif
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
-    in_i2c_bulk_write(pi4ioe_i2c_addr, enabled ? enabled_pi4ioe_bulk_data : disabled_pi4ioe_bulk_data);
+    in_i2c_bulk_write(pi4io1_i2c_addr, enabled ? enabled_pi4ioe_bulk_data : disabled_pi4ioe_bulk_data);
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     backup_i2c_setting.restore();
 #endif
@@ -502,6 +564,15 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
     return true;
   }
+
+  bool M5Unified::_microphone_enabled_cb_tab5(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+    return true;
+  }
+
+
 
 #if defined (M5UNIFIED_PC_BUILD)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1071,6 +1142,21 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       switch (_board)
       {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_mck = GPIO_NUM_30;
+          mic_cfg.pin_bck = GPIO_NUM_27;
+          mic_cfg.pin_ws = GPIO_NUM_29;
+          mic_cfg.pin_data_in = GPIO_NUM_28;
+          // mic_cfg.pin_data_out = GPIO_NUM_26;
+          mic_cfg.magnification = 2;
+          mic_cfg.i2s_port = I2S_NUM_0;
+          mic_enable_cb = _microphone_enabled_cb_tab5;
+        }
+        break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackCoreS3SE:
@@ -1179,6 +1265,21 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       switch (_board)
       {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_mck = GPIO_NUM_30;
+          spk_cfg.pin_bck = GPIO_NUM_27;
+          spk_cfg.pin_ws = GPIO_NUM_29;
+//        spk_cfg.pin_data_in = GPIO_NUM_28;
+          spk_cfg.pin_data_out = GPIO_NUM_26;
+          spk_cfg.magnification = 4;
+          spk_cfg.i2s_port = I2S_NUM_0;
+          spk_enable_cb = _speaker_enabled_cb_tab5;
+        }
+        break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackCoreS3SE:

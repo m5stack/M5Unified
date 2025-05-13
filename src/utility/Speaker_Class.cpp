@@ -25,6 +25,10 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
+#if __has_include(<hal/i2s_ll.h>)
+ #include <hal/i2s_ll.h>
+#endif
+
 #if __has_include (<hal/dac_ll.h>)
 #include <hal/dac_types.h>
 #include <hal/dac_ll.h>
@@ -373,6 +377,8 @@ namespace m5
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
 #else
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
 #endif
@@ -380,6 +386,9 @@ namespace m5
     uint32_t div_a, div_b, div_n;
     uint32_t div_m = 32 / bits; /// MCLKを使用しない場合、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
     // MCLKを使用するデバイスに対応する場合には、div_mを使用してBCKとMCKの比率を調整する;
+    if ((uint_fast16_t)self->_cfg.pin_mck < GPIO_NUM_MAX) {
+      div_m = 8;
+    }
 
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK, div_m * bits * self->_cfg.sample_rate);
 
@@ -387,10 +396,15 @@ namespace m5
     const int32_t spk_sample_rate_x256 = (float)PLL_D2_CLK * SAMPLERATE_MUL / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
-#if SOC_I2S_NUM == 1
     auto dev = &I2S0;
-#else
-    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
+#if SOC_I2S_NUM >= 2
+    if (i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
+#if SOC_I2S_NUM >= 3
+    else if (i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
+#if SOC_I2S_NUM >= 4
+    else if (i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#endif
+#endif
 #endif
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
@@ -428,6 +442,8 @@ namespace m5
       }
     }
 
+    i2s_ll_tx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = div_x;
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_y = div_y;
@@ -437,9 +453,7 @@ namespace m5
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_en = 1;
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
-#else
- #if defined ( CONFIG_IDF_TARGET_ESP32P4 )
- #else
+#elif defined ( I2S_TX_CLKM_DIV_X )
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
     dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
@@ -448,7 +462,7 @@ namespace m5
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
- #endif
+
     dev->tx_conf.tx_update = 1;
     dev->tx_conf.tx_update = 0;
 #endif
