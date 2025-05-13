@@ -25,6 +25,10 @@
 #include <esp_log.h>
 #include <math.h>
 
+#if __has_include(<hal/i2s_ll.h>)
+ #include <hal/i2s_ll.h>
+#endif
+
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
@@ -423,6 +427,8 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
 #else
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
 #endif
@@ -437,10 +443,15 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     if (use_pdm) { bits = 64; div_m = 2; }
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
 
-#if defined ( I2S1I_BCK_OUT_IDX )
-    auto dev = (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
-#else
     auto dev = &I2S0;
+#if SOC_I2S_NUM >= 2
+    if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
+#if SOC_I2S_NUM >= 3
+    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
+#if SOC_I2S_NUM >= 4
+    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#endif
+#endif
 #endif
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
@@ -483,6 +494,8 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
       }
     }
 
+    i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = div_x;
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_y = div_y;
@@ -492,9 +505,7 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;   // PLL_240M_CLK
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_en = 1;
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
-#else
- #if defined ( CONFIG_IDF_TARGET_ESP32P4 )
- #else
+#elif defined ( I2S_RX_CLKM_DIV_X )
     dev->rx_clkm_div_conf.rx_clkm_div_x = div_x;
     dev->rx_clkm_div_conf.rx_clkm_div_y = div_y;
     dev->rx_clkm_div_conf.rx_clkm_div_z = div_b;
@@ -503,7 +514,7 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->rx_clkm_conf.rx_clk_active = 1;
- #endif
+
     dev->rx_conf.rx_update = 1;
     dev->rx_conf.rx_update = 0;
 #endif

@@ -267,13 +267,13 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
     }
   }
 
+  static constexpr uint8_t es7210_i2c_addr = 0x40;
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
   static constexpr uint8_t es8388_i2c_addr = 0x10;
   static constexpr uint8_t pi4io1_i2c_addr = 0x43;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
-  static constexpr uint8_t es7210_i2c_addr = 0x40;
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
   static void aw88298_write_reg(uint8_t reg, uint16_t value)
   {
@@ -569,6 +569,51 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
   {
     (void)args;
     (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    auto self = (M5Unified*)args;
+    auto cfg = self->Mic.config();
+    // if (cfg.pin_bck == GPIO_NUM_34)
+    {
+      M5.In_I2C.writeRegister8(es7210_i2c_addr, 0x00, 0xFF, 400000);
+      if (enabled)
+      {
+        static constexpr uint8_t data[] =
+        {
+          2, 0x00, 0x41, // RESET_CTL
+          2, 0x01, 0x1f, // CLK_ON_OFF
+          2, 0x06, 0x00, // DIGITAL_PDN
+          2, 0x07, 0x20, // ADC_OSR
+          2, 0x08, 0x10, // MODE_CFG
+          2, 0x09, 0x30, // TCT0_CHPINI
+          2, 0x0A, 0x30, // TCT1_CHPINI
+          2, 0x20, 0x0a, // ADC34_HPF2
+          2, 0x21, 0x2a, // ADC34_HPF1
+          2, 0x22, 0x0a, // ADC12_HPF2
+          2, 0x23, 0x2a, // ADC12_HPF1
+          2, 0x02, 0xC1,
+          2, 0x04, 0x01,
+          2, 0x05, 0x00,
+          2, 0x11, 0x60,
+          2, 0x40, 0x42, // ANALOG_SYS
+          2, 0x41, 0x70, // MICBIAS12
+          2, 0x42, 0x70, // MICBIAS34
+          2, 0x43, 0x1B, // MIC1_GAIN
+          2, 0x44, 0x1B, // MIC2_GAIN
+          2, 0x45, 0x00, // MIC3_GAIN
+          2, 0x46, 0x00, // MIC4_GAIN
+          2, 0x47, 0x00, // MIC1_LP
+          2, 0x48, 0x00, // MIC2_LP
+          2, 0x49, 0x00, // MIC3_LP
+          2, 0x4A, 0x00, // MIC4_LP
+          2, 0x4B, 0x00, // MIC12_PDN
+          2, 0x4C, 0xFF, // MIC34_PDN
+          2, 0x01, 0x14, // CLK_ON_OFF
+          0,
+        };
+        in_i2c_bulk_write(es7210_i2c_addr, data);
+      }
+    }
+#endif
     return true;
   }
 
