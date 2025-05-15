@@ -211,6 +211,101 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 { board_t::board_unknown      , 255         },
 };
 
+static constexpr const uint8_t _pin_table_mbus[][31] = {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5Tab5   ,
+  255        , GPIO_NUM_16,
+  255        , GPIO_NUM_17,
+  255        , 255        ,
+  GPIO_NUM_18, GPIO_NUM_45,
+  GPIO_NUM_19, GPIO_NUM_52,
+  GPIO_NUM_5 , 255        ,
+  GPIO_NUM_38, GPIO_NUM_37,
+  GPIO_NUM_7 , GPIO_NUM_6 ,
+  GPIO_NUM_31, GPIO_NUM_32,
+  GPIO_NUM_3 , GPIO_NUM_4 ,
+  GPIO_NUM_2 , GPIO_NUM_48,
+  GPIO_NUM_47, GPIO_NUM_35,
+  255        , GPIO_NUM_51,
+  255        , 255        ,
+  255        , 255        ,
+},
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+{ board_t::board_M5StackCoreS3,
+  255        , GPIO_NUM_10,
+  255        , GPIO_NUM_8 ,
+  255        , 255        ,
+  GPIO_NUM_37, GPIO_NUM_5 ,
+  GPIO_NUM_35, GPIO_NUM_9 ,
+  GPIO_NUM_36, 255        ,
+  GPIO_NUM_44, GPIO_NUM_43,
+  GPIO_NUM_18, GPIO_NUM_17,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_2 , GPIO_NUM_1 ,
+  GPIO_NUM_6 , GPIO_NUM_7 ,
+  GPIO_NUM_13, GPIO_NUM_0 ,
+  255        , GPIO_NUM_14,
+  255        , 255        ,
+  255        , 255        ,
+},
+{ board_t::board_M5StackCoreS3SE,
+  255        , GPIO_NUM_10,
+  255        , GPIO_NUM_8 ,
+  255        , 255        ,
+  GPIO_NUM_37, GPIO_NUM_5 ,
+  GPIO_NUM_35, GPIO_NUM_9 ,
+  GPIO_NUM_36, 255        ,
+  GPIO_NUM_44, GPIO_NUM_43,
+  GPIO_NUM_18, GPIO_NUM_17,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_2 , GPIO_NUM_1 ,
+  GPIO_NUM_6 , GPIO_NUM_7 ,
+  GPIO_NUM_13, GPIO_NUM_0 ,
+  255        , GPIO_NUM_14,
+  255        , 255        ,
+  255        , 255        ,
+},
+#elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#else
+{ board_t::board_M5Stack  ,
+  255        , GPIO_NUM_35,
+  255        , GPIO_NUM_36,
+  255        , 255        ,
+  GPIO_NUM_23, GPIO_NUM_25,
+  GPIO_NUM_19, GPIO_NUM_26,
+  GPIO_NUM_18, 255        ,
+  GPIO_NUM_3 , GPIO_NUM_1 ,
+  GPIO_NUM_16, GPIO_NUM_17,
+  GPIO_NUM_21, GPIO_NUM_22,
+  GPIO_NUM_2 , GPIO_NUM_5 ,
+  GPIO_NUM_12, GPIO_NUM_13,
+  GPIO_NUM_15, GPIO_NUM_0 ,
+  255        , GPIO_NUM_34,
+  255        , 255        ,
+  255        , 255        ,
+},
+{ board_t::board_M5StackCore2,
+  255        , GPIO_NUM_35,
+  255        , GPIO_NUM_36,
+  255        , 255        ,
+  GPIO_NUM_23, GPIO_NUM_25,
+  GPIO_NUM_38, GPIO_NUM_26,
+  GPIO_NUM_18, 255        ,
+  GPIO_NUM_3 , GPIO_NUM_1 ,
+  GPIO_NUM_13, GPIO_NUM_14,
+  GPIO_NUM_21, GPIO_NUM_22,
+  GPIO_NUM_32, GPIO_NUM_33,
+  GPIO_NUM_27, GPIO_NUM_19,
+  GPIO_NUM_2 , GPIO_NUM_0 ,
+  255        , GPIO_NUM_34,
+  255        , 255        ,
+  255        , 255        ,
+},
+#endif
+{ board_t::board_unknown  , 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 },
+};
+
   void M5Unified::_setup_pinmap(board_t id)
   {
     constexpr const std::pair<const void*, size_t> tbl[] = {
@@ -220,6 +315,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
       { _pin_table_spi_sd, sizeof(_pin_table_spi_sd[0]) },
       { _pin_table_other0, sizeof(_pin_table_other0[0]) },
       { _pin_table_other1, sizeof(_pin_table_other1[0]) },
+      { _pin_table_mbus, sizeof(_pin_table_mbus[0]) },
     };
 
     int8_t* dst = _get_pin_table;
@@ -572,7 +668,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     auto self = (M5Unified*)args;
     auto cfg = self->Mic.config();
-    // if (cfg.pin_bck == GPIO_NUM_34)
+    if (cfg.pin_data_in = GPIO_NUM_28)
     {
       M5.In_I2C.writeRegister8(es7210_i2c_addr, 0x00, 0xFF, 400000);
       if (enabled)

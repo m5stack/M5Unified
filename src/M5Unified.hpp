@@ -43,6 +43,12 @@ namespace m5
     sd_spi_cs,     sd_spi_ss  = sd_spi_cs,
     rgb_led,
     power_hold,
+    mbus_pin1, mbus_pin2, mbus_pin3, mbus_pin4, mbus_pin5,
+    mbus_pin6, mbus_pin7, mbus_pin8, mbus_pin9, mbus_pin10,
+    mbus_pin11, mbus_pin12, mbus_pin13, mbus_pin14, mbus_pin15,
+    mbus_pin16, mbus_pin17, mbus_pin18, mbus_pin19, mbus_pin20,
+    mbus_pin21, mbus_pin22, mbus_pin23, mbus_pin24, mbus_pin25,
+    mbus_pin26, mbus_pin27, mbus_pin28, mbus_pin29, mbus_pin30,
     pin_name_max,
   };
 };
