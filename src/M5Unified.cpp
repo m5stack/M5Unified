@@ -452,7 +452,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (spk_cfg.pin_data_out != GPIO_NUM_26) { return false; }
 
     static constexpr const uint8_t enabled_bulk_data[] = {
-      2,    0, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2,    0, 0x80,  // RESET/  CSM POWER ON
+      2,    0, 0x00,
       2,    0, 0x00,
       2,    0, 0x0E,
       2,    1, 0x00,
@@ -483,6 +484,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
+      2,    8, 0x00, //set I2S slave mode
       0
     };
     in_i2c_bulk_write(es8388_i2c_addr, enabled ? enabled_bulk_data : disabled_bulk_data);
@@ -668,46 +670,45 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     auto self = (M5Unified*)args;
     auto cfg = self->Mic.config();
-    if (cfg.pin_data_in = GPIO_NUM_28)
+    if (cfg.pin_data_in != GPIO_NUM_28) { return false; }
+
+    M5.In_I2C.writeRegister8(es7210_i2c_addr, 0x00, 0xFF, 400000);
+    if (enabled)
     {
-      M5.In_I2C.writeRegister8(es7210_i2c_addr, 0x00, 0xFF, 400000);
-      if (enabled)
+      static constexpr uint8_t data[] =
       {
-        static constexpr uint8_t data[] =
-        {
-          2, 0x00, 0x41, // RESET_CTL
-          2, 0x01, 0x1f, // CLK_ON_OFF
-          2, 0x06, 0x00, // DIGITAL_PDN
-          2, 0x07, 0x20, // ADC_OSR
-          2, 0x08, 0x10, // MODE_CFG
-          2, 0x09, 0x30, // TCT0_CHPINI
-          2, 0x0A, 0x30, // TCT1_CHPINI
-          2, 0x20, 0x0a, // ADC34_HPF2
-          2, 0x21, 0x2a, // ADC34_HPF1
-          2, 0x22, 0x0a, // ADC12_HPF2
-          2, 0x23, 0x2a, // ADC12_HPF1
-          2, 0x02, 0xC1,
-          2, 0x04, 0x01,
-          2, 0x05, 0x00,
-          2, 0x11, 0x60,
-          2, 0x40, 0x42, // ANALOG_SYS
-          2, 0x41, 0x70, // MICBIAS12
-          2, 0x42, 0x70, // MICBIAS34
-          2, 0x43, 0x1B, // MIC1_GAIN
-          2, 0x44, 0x1B, // MIC2_GAIN
-          2, 0x45, 0x00, // MIC3_GAIN
-          2, 0x46, 0x00, // MIC4_GAIN
-          2, 0x47, 0x00, // MIC1_LP
-          2, 0x48, 0x00, // MIC2_LP
-          2, 0x49, 0x00, // MIC3_LP
-          2, 0x4A, 0x00, // MIC4_LP
-          2, 0x4B, 0x00, // MIC12_PDN
-          2, 0x4C, 0xFF, // MIC34_PDN
-          2, 0x01, 0x14, // CLK_ON_OFF
-          0,
-        };
-        in_i2c_bulk_write(es7210_i2c_addr, data);
-      }
+        2, 0x00, 0x41, // RESET_CTL
+        2, 0x01, 0x1f, // CLK_ON_OFF
+        2, 0x06, 0x00, // DIGITAL_PDN
+        2, 0x07, 0x20, // ADC_OSR
+        2, 0x08, 0x10, // MODE_CFG
+        2, 0x09, 0x30, // TCT0_CHPINI
+        2, 0x0A, 0x30, // TCT1_CHPINI
+        2, 0x20, 0x0a, // ADC34_HPF2
+        2, 0x21, 0x2a, // ADC34_HPF1
+        2, 0x22, 0x0a, // ADC12_HPF2
+        2, 0x23, 0x2a, // ADC12_HPF1
+        2, 0x02, 0xC1,
+        2, 0x04, 0x01,
+        2, 0x05, 0x00,
+        2, 0x11, 0x60,
+        2, 0x40, 0x42, // ANALOG_SYS
+        2, 0x41, 0x70, // MICBIAS12
+        2, 0x42, 0x70, // MICBIAS34
+        2, 0x43, 0x1B, // MIC1_GAIN
+        2, 0x44, 0x1B, // MIC2_GAIN
+        2, 0x45, 0x00, // MIC3_GAIN
+        2, 0x46, 0x00, // MIC4_GAIN
+        2, 0x47, 0x00, // MIC1_LP
+        2, 0x48, 0x00, // MIC2_LP
+        2, 0x49, 0x00, // MIC3_LP
+        2, 0x4A, 0x00, // MIC4_LP
+        2, 0x4B, 0x00, // MIC12_PDN
+        2, 0x4C, 0xFF, // MIC34_PDN
+        2, 0x01, 0x14, // CLK_ON_OFF
+        0,
+      };
+      in_i2c_bulk_write(es7210_i2c_addr, data);
     }
 #endif
     return true;
@@ -1293,6 +1294,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.pin_data_in = GPIO_NUM_28;
           // mic_cfg.pin_data_out = GPIO_NUM_26;
           mic_cfg.magnification = 2;
+          mic_cfg.input_channel = input_channel_t::input_stereo;
           mic_cfg.i2s_port = I2S_NUM_0;
           mic_enable_cb = _microphone_enabled_cb_tab5;
         }

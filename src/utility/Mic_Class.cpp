@@ -315,7 +315,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+    i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
     i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_BOTH : (_cfg.left_channel ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_LEFT : i2s_pdm_slot_mask_t::I2S_PDM_SLOT_RIGHT);
     i2s_config.gpio_cfg.clk = (gpio_num_t)_cfg.pin_ws; 
@@ -334,7 +334,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+    i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
     i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH : (_cfg.left_channel ? i2s_std_slot_mask_t::I2S_STD_SLOT_LEFT : i2s_std_slot_mask_t::I2S_STD_SLOT_RIGHT);
     i2s_config.slot_cfg.ws_width = 16;

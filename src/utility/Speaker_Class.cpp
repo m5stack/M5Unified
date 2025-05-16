@@ -206,7 +206,6 @@ namespace m5
 #endif
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
-    // i2s_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(16, I2S_SLOT_MODE_STEREO);
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
