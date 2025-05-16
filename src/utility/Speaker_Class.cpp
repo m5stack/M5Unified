@@ -25,6 +25,10 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
+#if __has_include(<hal/i2s_ll.h>)
+ #include <hal/i2s_ll.h>
+#endif
+
 #if __has_include (<hal/dac_ll.h>)
 #include <hal/dac_types.h>
 #include <hal/dac_ll.h>
@@ -195,10 +199,13 @@ namespace m5
 
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
+#else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+#endif
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
-    // i2s_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(16, I2S_SLOT_MODE_STEREO);
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -216,7 +223,7 @@ namespace m5
     i2s_config.gpio_cfg.bclk = (gpio_num_t)_cfg.pin_bck;
     i2s_config.gpio_cfg.ws   = (gpio_num_t)_cfg.pin_ws;
     i2s_config.gpio_cfg.dout = (gpio_num_t)_cfg.pin_data_out;
-    i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
+    i2s_config.gpio_cfg.mclk = (gpio_num_t)_cfg.pin_mck;
     i2s_config.gpio_cfg.din  = (gpio_num_t)I2S_PIN_NO_CHANGE;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
 
@@ -251,6 +258,11 @@ namespace m5
 #endif
     i2s_pin_config_t pin_config;
     memset(&pin_config, ~0u, sizeof(i2s_pin_config_t)); /// all pin set to I2S_PIN_NO_CHANGE
+#if defined (ESP_IDF_VERSION_VAL)
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 1)
+    pin_config.mck_io_num     = _cfg.pin_mck;
+ #endif
+#endif
     pin_config.bck_io_num     = _cfg.pin_bck;
     pin_config.ws_io_num      = _cfg.pin_ws;
     pin_config.data_out_num   = _cfg.pin_data_out;
@@ -364,6 +376,8 @@ namespace m5
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
 #else
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
 #endif
@@ -371,6 +385,9 @@ namespace m5
     uint32_t div_a, div_b, div_n;
     uint32_t div_m = 32 / bits; /// MCLKを使用しない場合、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
     // MCLKを使用するデバイスに対応する場合には、div_mを使用してBCKとMCKの比率を調整する;
+    if ((uint_fast16_t)self->_cfg.pin_mck < GPIO_NUM_MAX) {
+      div_m = 8;
+    }
 
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK, div_m * bits * self->_cfg.sample_rate);
 
@@ -378,13 +395,18 @@ namespace m5
     const int32_t spk_sample_rate_x256 = (float)PLL_D2_CLK * SAMPLERATE_MUL / ((float)(div_b * div_m * bits) / (float)div_a + (div_n * div_m * bits));
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
-#if SOC_I2S_NUM == 1
     auto dev = &I2S0;
-#else
-    auto dev = (i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
+#if SOC_I2S_NUM >= 2
+    if (i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
+#if SOC_I2S_NUM >= 3
+    else if (i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
+#if SOC_I2S_NUM >= 4
+    else if (i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#endif
+#endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {
@@ -392,7 +414,11 @@ namespace m5
       dev->tx_conf.tx_chan_equal = 1;
     }
 
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    dev->tx_conf.tx_bck_div_num = div_m - 1;
+#else
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
+#endif
 
     bool yn1 = (div_b > (div_a >> 1));
     if (yn1) {
@@ -415,6 +441,8 @@ namespace m5
       }
     }
 
+    i2s_ll_tx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = div_x;
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_y = div_y;
@@ -424,7 +452,7 @@ namespace m5
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_en = 1;
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
-#else
+#elif defined ( I2S_TX_CLKM_DIV_X )
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;
     dev->tx_clkm_div_conf.tx_clkm_div_z = div_b;
@@ -433,6 +461,7 @@ namespace m5
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->tx_clkm_conf.tx_clk_active = 1;
+
     dev->tx_conf.tx_update = 1;
     dev->tx_conf.tx_update = 0;
 #endif
@@ -935,6 +964,9 @@ label_continue_sample:
       chinfo->wavinfo[0].clear();
       chinfo->wavinfo[1].clear();
     }
+#if !defined (SDL_h_)
+    _i2s_driver_uninstall(_cfg.i2s_port);
+#endif
   }
 
   void Speaker_Class::stop(void)

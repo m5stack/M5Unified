@@ -43,6 +43,12 @@ namespace m5
     sd_spi_cs,     sd_spi_ss  = sd_spi_cs,
     rgb_led,
     power_hold,
+    mbus_pin1, mbus_pin2, mbus_pin3, mbus_pin4, mbus_pin5,
+    mbus_pin6, mbus_pin7, mbus_pin8, mbus_pin9, mbus_pin10,
+    mbus_pin11, mbus_pin12, mbus_pin13, mbus_pin14, mbus_pin15,
+    mbus_pin16, mbus_pin17, mbus_pin18, mbus_pin19, mbus_pin20,
+    mbus_pin21, mbus_pin22, mbus_pin23, mbus_pin24, mbus_pin25,
+    mbus_pin26, mbus_pin27, mbus_pin28, mbus_pin29, mbus_pin30,
     pin_name_max,
   };
 };
@@ -151,6 +157,8 @@ namespace m5
                              = board_t::board_M5AtomS3Lite;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
                              = board_t::board_M5StampC3;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+                             = board_t::board_M5Tab5;
 #elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
                              = board_t::board_M5AtomLite;
 #else
@@ -360,10 +368,16 @@ namespace m5
 
       // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
       if (cfg.external_display.module_display) {
-        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough
-         || _board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+        if (_board == board_t::board_M5Tab5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+        if (_board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough)
+#else
+        if (false)
+#endif
         {
           M5ModuleDisplay dsp(cfg.module_display);
           if (dsp.init()) {
@@ -371,7 +385,6 @@ namespace m5
           }
         }
       }
-#endif
 #endif
 
       // Speaker selection is performed after the Module Display has been determined.
@@ -560,9 +573,11 @@ namespace m5
     static bool _speaker_enabled_cb_cores3(void* args, bool enabled);
     static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
     static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _speaker_enabled_cb_tab5(void* args, bool enabled);
     static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
     static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
     static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _microphone_enabled_cb_tab5(void* args, bool enabled);
 
     static int8_t _get_pin_table[pin_name_max];
   };

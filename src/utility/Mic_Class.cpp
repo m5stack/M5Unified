@@ -25,6 +25,10 @@
 #include <esp_log.h>
 #include <math.h>
 
+#if __has_include(<hal/i2s_ll.h>)
+ #include <hal/i2s_ll.h>
+#endif
+
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
@@ -303,11 +307,15 @@ namespace m5
 if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_pdm_rx_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_pdm_rx_config_t));
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
+#else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+#endif
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+    i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
     i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_BOTH : (_cfg.left_channel ? i2s_pdm_slot_mask_t::I2S_PDM_SLOT_LEFT : i2s_pdm_slot_mask_t::I2S_PDM_SLOT_RIGHT);
     i2s_config.gpio_cfg.clk = (gpio_num_t)_cfg.pin_ws; 
@@ -318,11 +326,15 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 {
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
+    #if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
+#else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+#endif
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_config.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+    i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
     i2s_config.slot_cfg.slot_mask = (_cfg.stereo) ? i2s_std_slot_mask_t::I2S_STD_SLOT_BOTH : (_cfg.left_channel ? i2s_std_slot_mask_t::I2S_STD_SLOT_LEFT : i2s_std_slot_mask_t::I2S_STD_SLOT_RIGHT);
     i2s_config.slot_cfg.ws_width = 16;
@@ -415,6 +427,8 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
 
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
+#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
 #else
     static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
 #endif
@@ -429,24 +443,35 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     if (use_pdm) { bits = 64; div_m = 2; }
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
 
-#if defined ( I2S1I_BCK_OUT_IDX )
-    auto dev = (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) ? &I2S1 : &I2S0;
-#else
     auto dev = &I2S0;
+#if SOC_I2S_NUM >= 2
+    if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
+#if SOC_I2S_NUM >= 3
+    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
+#if SOC_I2S_NUM >= 4
+    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#endif
+#endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
-#if defined (I2S_RX_PDM2PCM_EN)
+#if defined ( I2S_RX_PDM2PCM_CONF_REG )
+    dev->rx_pdm2pcm_conf.rx_pdm2pcm_en = use_pdm;
+    dev->rx_pdm2pcm_conf.rx_pdm_sinc_dsr_16_en = 0;
+#elif defined (I2S_RX_PDM2PCM_EN)
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
 #endif
-
     dev->rx_conf.rx_update = 1;
 
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    dev->rx_conf.rx_bck_div_num = div_m - 1;
+#else
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
+#endif
 
     bool yn1 = (div_b > (div_a >> 1));
     if (yn1) {
@@ -469,6 +494,8 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
       }
     }
 
+    i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = div_x;
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_y = div_y;
@@ -478,7 +505,7 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;   // PLL_240M_CLK
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_en = 1;
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
-#else
+#elif defined ( I2S_RX_CLKM_DIV_X )
     dev->rx_clkm_div_conf.rx_clkm_div_x = div_x;
     dev->rx_clkm_div_conf.rx_clkm_div_y = div_y;
     dev->rx_clkm_div_conf.rx_clkm_div_z = div_b;
@@ -487,6 +514,7 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
     dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
     dev->tx_clkm_conf.clk_en = 1;
     dev->rx_clkm_conf.rx_clk_active = 1;
+
     dev->rx_conf.rx_update = 1;
     dev->rx_conf.rx_update = 0;
 #endif

@@ -70,7 +70,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - M5Capsule
  - M5Cardputer
  - M5VAMeter
- - [M5PaperS3 (need EPDiy library) ](https://github.com/m5stack/M5GFX/blob/master/docs/M5PaperS3.md)
+ - [M5PaperS3](https://github.com/m5stack/M5GFX/blob/master/docs/M5PaperS3.md)
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
@@ -82,10 +82,10 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - Unit LCD
  - Unit OLED
  - Unit Mini OLED
- - Unit RCA (without ESP32S3 series)
- - Unit GLASS
+ - [Unit RCA](https://github.com/m5stack/M5GFX/blob/master/docs/UnitRCA.md) (without ESP32S3 series)
+ - [Unit GLASS](https://github.com/m5stack/M5GFX/blob/master/docs/UnitGLASS.md)
  - Unit GLASS2
- - ATOM Display adapter (HDMI output for M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite / S3R / S3RCam / S3RExt )
+ - [ATOM Display](https://github.com/m5stack/M5GFX/blob/master/docs/ATOMDisplay.md) adapter (HDMI output for M5ATOM Lite / Matrix / PSRAM / S3 / S3Lite / S3R / S3RCam / S3RExt )
  - Module Display adapter (HDMI output for M5Stack Core / Core2 / Tough / CoreS3 / CoreS3SE )
  - Module RCA adapter (composite NTSC/PAL output for M5Stack Core / Core2 / Tough / (without ESP32S3 series))
 

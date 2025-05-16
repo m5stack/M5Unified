@@ -38,6 +38,9 @@ namespace m5
     /// i2s_bck
     int pin_bck = I2S_PIN_NO_CHANGE;
 
+    /// i2s_mclk
+    int pin_mck = I2S_PIN_NO_CHANGE;
+
     /// i2s_ws (lrck)
     int pin_ws = I2S_PIN_NO_CHANGE;
 
