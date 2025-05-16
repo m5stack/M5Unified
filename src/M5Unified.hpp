@@ -368,10 +368,16 @@ namespace m5
 
       // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
       if (cfg.external_display.module_display) {
-        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough
-         || _board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+        if (_board == board_t::board_M5Tab5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+        if (_board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE)
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+        if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough)
+#else
+        if (false)
+#endif
         {
           M5ModuleDisplay dsp(cfg.module_display);
           if (dsp.init()) {
@@ -379,7 +385,6 @@ namespace m5
           }
         }
       }
-#endif
 #endif
 
       // Speaker selection is performed after the Module Display has been determined.

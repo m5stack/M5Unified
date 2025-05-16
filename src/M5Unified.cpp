@@ -1701,6 +1701,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       if (cfg.external_speaker_value)
       {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
+ #define ENABLE_M5MODULE
+        if (_board == board_t::board_M5Tab5)
 #elif defined ( CONFIG_IDF_TARGET_ESP32S3 )
  #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3
@@ -1720,34 +1723,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
             if (use_module_display) {
               spk_cfg.sample_rate = 48000; // Module Display audio output is fixed at 48 kHz
             }
-            uint32_t pins_index = use_module_display;
-  #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-            static constexpr const uint8_t pins[][2] =
-            {// DOUT       , BCK
-              { GPIO_NUM_13, GPIO_NUM_7 }, // CoreS3 + ModuleRCA
-              { GPIO_NUM_13, GPIO_NUM_6 }, // CoreS3 + ModuleDisplay
-            };
-  #else
-            static constexpr const uint8_t pins[][2] =
-            {// DOUT       , BCK
-              { GPIO_NUM_2 , GPIO_NUM_19 }, // Core2 and Tough + ModuleRCA
-              { GPIO_NUM_2 , GPIO_NUM_27 }, // Core2 and Tough + ModuleDisplay
-              { GPIO_NUM_15, GPIO_NUM_13 }, // Core + ModuleRCA
-              { GPIO_NUM_15, GPIO_NUM_12 }, // Core + ModuleDisplay
-            };
-            // !core is (Core2 + Tough)
-            if (_board == m5::board_t::board_M5Stack) {
-              pins_index += 2;            
-            }
-  #endif
-            spk_cfg.pin_data_out = pins[pins_index][0];
-            spk_cfg.pin_bck      = pins[pins_index][1];
+            // ModuleDisplay or Module RCA
+            spk_cfg.pin_bck      = getPin(use_module_display ? pin_name_t::mbus_pin21 : pin_name_t::mbus_pin22);
+            spk_cfg.pin_data_out = getPin(pin_name_t::mbus_pin23);
+            spk_cfg.pin_ws       = getPin(pin_name_t::mbus_pin24);     // LRCK
+
             spk_cfg.i2s_port = I2S_NUM_1;
             spk_cfg.magnification = 16;
             spk_cfg.stereo = true;
             spk_cfg.buzzer = false;
             spk_cfg.use_dac = false;
-            spk_cfg.pin_ws = GPIO_NUM_0;     // LRCK
             spk_enable_cb = nullptr;
           }
  #undef ENABLE_M5MODULE
