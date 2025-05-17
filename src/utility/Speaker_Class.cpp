@@ -25,8 +25,12 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
-#if __has_include(<hal/i2s_ll.h>)
- #include <hal/i2s_ll.h>
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+ #if __has_include(<driver/i2s_std.h>)
+  #if __has_include(<hal/i2s_ll.h>)
+   #include <hal/i2s_ll.h>
+  #endif
+ #endif
 #endif
 
 #if __has_include (<hal/dac_ll.h>)
@@ -441,7 +445,9 @@ namespace m5
       }
     }
 
+#if __has_include(<driver/i2s_std.h>)
     i2s_ll_tx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+#endif
 
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = div_x;

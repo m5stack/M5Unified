@@ -25,8 +25,12 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if __has_include(<hal/i2s_ll.h>)
- #include <hal/i2s_ll.h>
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+ #if __has_include(<driver/i2s_std.h>)
+  #if __has_include(<hal/i2s_ll.h>)
+   #include <hal/i2s_ll.h>
+  #endif
+ #endif
 #endif
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
@@ -353,11 +357,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.gpio_cfg.din  = (gpio_num_t)_cfg.pin_data_in;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
 }
-printf("i2s_channel_init_std_mode:%d\n", err);
+
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_adc)
     {
-printf("i2s_channel_init_std_mode 2:%d\n", err);
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
     }
 #endif
@@ -494,7 +497,9 @@ printf("i2s_channel_init_std_mode 2:%d\n", err);
       }
     }
 
+#if __has_include(<driver/i2s_std.h>)
     i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
+#endif
 
 #if __has_include (<soc/pcr_struct.h>) // for C6
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = div_x;
