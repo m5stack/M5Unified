@@ -1946,8 +1946,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5Capsule:
     case board_t::board_M5Dial:
     case board_t::board_M5DinMeter:
-      use_rawstate_bits = 0b00001;
-      btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_42)) & 1;
+      use_rawstate_bits = 0b00011;
+      btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_42)) & 1)
+                        | ((!m5gfx::gpio_in(GPIO_NUM_0)) & 1) << 1;
       break;
 
     case board_t::board_M5StampPLC:
