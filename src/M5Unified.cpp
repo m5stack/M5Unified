@@ -329,24 +329,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   }
 #endif
 
-  static PI4IOE5V6408_Class* _io_expander_a = nullptr;
-  PI4IOE5V6408_Class* __get_io_expander_a()
-  {
-    return _io_expander_a;
-  }
-
-  void _io_expander_a_init()
-  {
-    // Init
-    _io_expander_a = new PI4IOE5V6408_Class;
-    if (!_io_expander_a->begin()) {
-      delete _io_expander_a;
-      _io_expander_a = nullptr;
-    } else {
-      _io_expander_a->resetIrq();
-    }
-  }
-
   static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
   {
     // bulk_data example..
@@ -1082,8 +1064,30 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
     }
-#endif
 
+    switch (board) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      for (int i = 0; i < 2; ++i)
+      {
+        auto ioexp = new PI4IOE5V6408_Class(0x43 + i);
+        ioexp->begin();
+        _io_expander[i].reset(ioexp);
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StampPLC:
+      {
+        auto ioexp = new PI4IOE5V6408_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
+#endif
+    default:
+      break;
+    }
+#endif
   }
 
   void M5Unified::_begin(const config_t& cfg)
@@ -1099,7 +1103,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (pmic_type == Power_Class::pmic_t::pmic_axp2101
      || pmic_type == Power_Class::pmic_t::pmic_axp192)
     {
-      use_pmic_button = cfg.pmic_button;
+      _use_pmic_button = cfg.pmic_button;
       /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
       BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
     }
@@ -1235,21 +1239,21 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 
     case board_t::board_M5StampPLC:
-      _io_expander_a_init();
-
-      // lcd backlight
-      _io_expander_a->setDirection(7, true);
-      _io_expander_a->setPullMode(7, false);
-      _io_expander_a->setHighImpedance(7, false);
-
-      for (int i = 0; i < 3; ++i) {
-        // button a~c
-        _io_expander_a->setDirection(i, false);
-        _io_expander_a->setPullMode(i, true);
-        _io_expander_a->setHighImpedance(i, false);
+      {
+        auto& ioexp = getIOExpander(0);
+        // lcd backlight
+        ioexp.setDirection(7, true);
+        ioexp.setPullMode(7, false);
+        ioexp.setHighImpedance(7, false);
+  
+        for (int i = 0; i < 3; ++i) {
+          // button a~c
+          ioexp.setDirection(i, false);
+          ioexp.setPullMode(i, true);
+          ioexp.setHighImpedance(i, false);
+        }
+        delay(100);
       }
-
-      delay(100);
       break;
 
 #endif
@@ -1598,7 +1602,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         }
         else if (cfg.external_speaker.hat_spk)
         { /// for HAT SPK
-          use_hat_spk = true;
           gpio_num_t pin_en = _board == board_t::board_M5StackCoreInk ? GPIO_NUM_25 : GPIO_NUM_0;
           m5gfx::gpio_lo(pin_en);
           m5gfx::pinMode(pin_en, m5gfx::pin_mode_t::output);
@@ -1954,7 +1957,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5StampPLC:
     {
       use_rawstate_bits = 0b00111;
-      auto value = _io_expander_a->readRegister8(0x0F);
+      auto value = _io_expander[0]->readRegister8(0x0F);
       btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
                         | (!(value & 0b010) ? 0b00010 : 0) // BtnB
                         | (!(value & 0b001) ? 0b00100 : 0) // BtnC
@@ -2009,7 +2012,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
 
 #if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (use_pmic_button)
+    if (_use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
       bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;

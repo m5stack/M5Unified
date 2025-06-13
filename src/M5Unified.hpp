@@ -64,6 +64,7 @@ namespace m5
 #include "utility/Touch_Class.hpp"
 #include "utility/Log_Class.hpp"
 #include "utility/IMU_Class.hpp"
+#include "utility/IOExpander_Base.hpp"
 
 #include <memory>
 #include <vector>
@@ -547,19 +548,23 @@ namespace m5
     void setTouchButtonHeight(uint16_t pixel) { _touch_button_height = pixel; }
     uint16_t getTouchButtonHeight(void) const { return _touch_button_height; }
 
+    IOExpander_Base& getIOExpander(size_t idx) { return *_io_expander[idx & 1]; };
+
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
     Button_Class _buttons[5];
 
-    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
+     // Instances of all registered displays
+    std::vector<M5GFX> _displays;
+    std::unique_ptr<IOExpander_Base> _io_expander[2];
+
     std::uint32_t _updateMsec = 0;
     std::uint16_t _touch_button_height = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
     std::uint8_t _primary_display_index = -1;
-    bool use_pmic_button = false;
-    bool use_hat_spk = false;
+    bool _use_pmic_button = false;
 
     void _begin(const config_t& cfg);
     void _begin_spk(config_t& cfg);

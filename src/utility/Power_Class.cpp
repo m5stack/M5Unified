@@ -52,7 +52,54 @@ namespace m5
     _pmic = pmic_t::pmic_unknown;
 
 #if !defined (M5UNIFIED_PC_BUILD)
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    /// setup power management ic
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_M5Tab5:
+      {
+        static constexpr std::uint8_t reg_array_0x43[] =
+        { ///     +--------- HP_DET : Headphone detect
+          ///     |+-------- CAM_RST : Camera reset
+          ///     ||+------- TP_RST : Touch reset
+          ///     |||+------ LCD_RST : LCD reset
+          ///     ||||+----- NC
+          ///     |||||+---- EXT5V_EN : Ext5V enable
+          ///     ||||||+--- SPK_EN : Speaker enable
+          ///     |||||||+-- RF_PTH_L_INT_H_EXT : antenna  L=internal / H=external
+          ///     ||||||||
+          0x05, 0b01110000,   // OUT_SET
+          0x03, 0b01110011,   // IO_DIR
+          0x07, 0b00001000,   // OUT_H_IM
+          0x0D, 0b00000100,   // PULL_SEL
+          0x0B, 0b00000100,   // PULL_EN
+        };
+        static constexpr std::uint8_t reg_array_0x44[] =
+        { ///     +--------- CHG_EN
+          ///     |+-------- CHG_STAT
+          ///     ||+------- nCHG_QC_EN
+          ///     |||+------ PWROFF_PLUSE
+          ///     ||||+----- USB5V_EN
+          ///     |||||+---- NC
+          ///     ||||||+--- NC
+          ///     |||||||+-- WLAN_PWR_EN
+          ///     ||||||||
+          0x05, 0b10000001,   // OUT_SET
+          0x03, 0b10110001,   // IO_DIR
+          0x07, 0b00000110,   // OUT_H_IM
+          0x0D, 0b00001000,   // PULL_SEL
+          0x0B, 0b00001000,   // PULL_EN
+        };
+        M5.getIOExpander(0).writeRegister8Array(reg_array_0x43, sizeof(reg_array_0x43));
+        M5.getIOExpander(1).writeRegister8Array(reg_array_0x44, sizeof(reg_array_0x44));
+      }
+      break;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -422,7 +469,21 @@ namespace m5
 #else
     switch (M5.getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      if (port_mask & ext_port_mask_t::ext_PA)
+      {
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setPullMode(2, enable);
+      }
+      if (port_mask & ext_port_mask_t::ext_USB)
+      {
+        auto& ioe = M5.getIOExpander(1);
+        ioe.setPullMode(3, enable);
+      }
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
@@ -501,6 +562,13 @@ namespace m5
     switch (M5.getBoard())
     {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      {
+        return M5.getIOExpander(0).digitalRead(2);
+      }
+      break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -539,25 +607,25 @@ namespace m5
   void Power_Class::setUsbOutput(bool enable)
   {
     (void)enable;
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       _core_s3_output(_core_s3_usb_en, enable);
       break;
 
+#endif
     default:
       break;
     }
-#endif
   }
 
   bool Power_Class::getUsbOutput(void)
   {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
@@ -565,11 +633,11 @@ namespace m5
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & _core_s3_usb_en;
       }
       break;
+#endif
 
     default:
       break;
     }
-#endif
     return false;
   }
 

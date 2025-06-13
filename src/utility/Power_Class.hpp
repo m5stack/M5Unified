@@ -80,7 +80,7 @@ namespace m5
     /// Set power output of the main USB port.
     /// @param enable true=output / false=input
     /// @attention for M5Stack CoreS3 main USB port.
-    /// @attention ※ Not for M5Station external USB.
+    /// @attention ※ Not for M5Station/M5Tab external USB.
     void setUsbOutput(bool enable);
 
     /// Get power output of the main USB port.

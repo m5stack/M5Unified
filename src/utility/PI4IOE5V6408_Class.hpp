@@ -1,9 +1,9 @@
 /**
  * @file pi4ioe5v6408.h
- * @author Forairaaaaa
+ * @author Forairaaaaa, lovyan03
  * @brief
- * @version 0.1
- * @date 2024-06-26
+ * @version 0.2
+ * @date 2025-06-11
  *
  * @copyright Copyright (c) 2024
  *
@@ -13,39 +13,42 @@
 
 #include "m5unified_common.h"
 
+#include "IOExpander_Base.hpp"
 #include "I2C_Class.hpp"
 
 namespace m5
 {
   // https://www.diodes.com/assets/Datasheets/PI4IOE5V6408.pdf
-  class PI4IOE5V6408_Class : public m5::I2C_Device
+  class PI4IOE5V6408_Class : public IOExpander_Base
   {
   public:
-    PI4IOE5V6408_Class(std::uint8_t i2c_addr = 0x43, std::uint32_t freq = 400000, m5::I2C_Class* i2c = &m5::In_I2C)
-    : I2C_Device(i2c_addr, freq, i2c)
+    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x43;
+
+    PI4IOE5V6408_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, m5::I2C_Class* i2c = &m5::In_I2C)
+    : IOExpander_Base(i2c_addr, freq, i2c)
     {}
 
     bool begin();
 
     // false input, true output
-    void setDirection(uint8_t pin, bool direction);
+    void setDirection(uint8_t pin, bool direction) override;
 
-    void enablePull(uint8_t pin, bool enablePull);
+    void enablePull(uint8_t pin, bool enablePull) override;
 
     // false down, true up
-    void setPullMode(uint8_t pin, bool mode);
+    void setPullMode(uint8_t pin, bool mode) override;
 
-    void setHighImpedance(uint8_t pin, bool enable);
+    void setHighImpedance(uint8_t pin, bool enable) override;
 
-    void digitalWrite(uint8_t pin, bool level);
+    void digitalWrite(uint8_t pin, bool level) override;
 
-    bool digitalRead(uint8_t pin);
+    bool digitalRead(uint8_t pin) override;
 
-    void resetIrq();
+    void resetIrq() override;
 
-    void disableIrq();
+    void disableIrq() override;
 
-    void enableIrq();
+    void enableIrq() override;
   };
 }
 

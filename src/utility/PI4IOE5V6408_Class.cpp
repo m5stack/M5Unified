@@ -1,9 +1,9 @@
 /**
  * @file pi4ioe5v6408.cpp
- * @author Forairaaaaa
+ * @author Forairaaaaa, lovyan03
  * @brief
- * @version 0.1
- * @date 2024-06-26
+ * @version 0.2
+ * @date 2025-06-11
  *
  * @copyright Copyright (c) 2024
  *
@@ -22,56 +22,48 @@ bool PI4IOE5V6408_Class::begin()
 // false input, true output
 void PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
 {
-    // Input, set 0
-    if (!direction) {
-        auto data = readRegister8(0x03);
-        data &= ~(1 << pin);
-        writeRegister8(0x03, data);
-    }
-    // Output, set 1
-    else {
-        auto data = readRegister8(0x03);
+    auto data = readRegister8(0x03);
+    if (direction) {
+        // Output, set 1
         data |= (1 << pin);
-        writeRegister8(0x03, data);
+    } else {
+        // Input, set 0
+        data &= ~(1 << pin);
     }
+    writeRegister8(0x03, data);
 }
 
 void PI4IOE5V6408_Class::enablePull(uint8_t pin, bool enablePull)
 {
+    auto data = readRegister8(0x0B);
     if (enablePull) {
-        auto data = readRegister8(0x0B);
         data |= (1 << pin);
-        writeRegister8(0x0B, data);
     } else {
-        auto data = readRegister8(0x0B);
         data &= ~(1 << pin);
-        writeRegister8(0x0B, data);
     }
+    writeRegister8(0x0B, data);
 }
 
 // false down, true up
 void PI4IOE5V6408_Class::setPullMode(uint8_t pin, bool mode)
 {
+    auto data = readRegister8(0x0D);
     if (mode) {
-        auto data = readRegister8(0x0D);
         data |= (1 << pin);
-        writeRegister8(0x0D, data);
     } else {
-        auto data = readRegister8(0x0D);
         data &= ~(1 << pin);
-        writeRegister8(0x0D, data);
     }
+    writeRegister8(0x0D, data);
 }
 
 void PI4IOE5V6408_Class::setHighImpedance(uint8_t pin, bool enable)
 {
     auto data = readRegister8(0x07);
-
-    if (enable)
+    if (enable) {
         data |= (1 << pin);
-    else
+    } else {
         data &= ~(1 << pin);
-
+    }
     writeRegister8(0x07, data);
 }
 
@@ -79,12 +71,11 @@ void PI4IOE5V6408_Class::digitalWrite(uint8_t pin, bool level)
 {
     auto data = readRegister8(0x05);
     // spdlog::info("data: {}", data);
-
-    if (level)
+    if (level) {
         data |= (1 << pin);
-    else
+    } else {
         data &= ~(1 << pin);
-
+    }
     writeRegister8(0x05, data);
 }
 
