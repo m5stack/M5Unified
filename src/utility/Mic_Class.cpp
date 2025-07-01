@@ -463,10 +463,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_tdm_en = !use_pdm;
 #if defined ( I2S_RX_PDM2PCM_CONF_REG )
     dev->rx_pdm2pcm_conf.rx_pdm2pcm_en = use_pdm;
-    dev->rx_pdm2pcm_conf.rx_pdm_sinc_dsr_16_en = 0;
+    dev->rx_pdm2pcm_conf.rx_pdm_sinc_dsr_16_en = 1;
 #elif defined (I2S_RX_PDM2PCM_EN)
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
-    dev->rx_conf.rx_pdm_sinc_dsr_16_en = 0;
+    dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
     dev->rx_conf.rx_update = 1;
 
