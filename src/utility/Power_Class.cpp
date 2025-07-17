@@ -648,17 +648,24 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
-    if (led.get() == nullptr)
+    switch (M5.getBoard())
     {
-      led.reset(new m5gfx::Light_PWM());
-      auto cfg = led->config();
-      cfg.invert = false;
-      cfg.pwm_channel = 7;
-      cfg.pin_bl = M5NanoC6_LED_PIN;
-      led->config(cfg);
-      led->init(brightness);
+    case board_t::board_M5NanoC6:
+      if (led.get() == nullptr)
+      {
+        led.reset(new m5gfx::Light_PWM());
+        auto cfg = led->config();
+        cfg.invert = false;
+        cfg.pwm_channel = 7;
+        cfg.pin_bl = M5NanoC6_LED_PIN;
+        led->config(cfg);
+        led->init(brightness);
+      }
+      led->setBrightness(brightness);
+      break;
+    default:
+      break;
     }
-    led->setBrightness(brightness);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     static std::unique_ptr<m5gfx::Light_PWM> led;
