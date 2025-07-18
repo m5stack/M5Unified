@@ -475,11 +475,21 @@ namespace m5
       {
         auto& ioe = M5.getIOExpander(0);
         ioe.setPullMode(2, enable);
+        ioe.digitalWrite(2, enable);
       }
       if (port_mask & ext_port_mask_t::ext_USB)
       {
         auto& ioe = M5.getIOExpander(1);
         ioe.setPullMode(3, enable);
+        ioe.digitalWrite(3, enable);
+      }
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      {
+        auto& ioe = M5.getIOExpander(1);
+        ioe.digitalWrite(2, enable); // 2 = EXT_PWR_EN
       }
       break;
 
@@ -565,7 +575,14 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
       {
-        return M5.getIOExpander(0).digitalRead(2);
+        return M5.getIOExpander(0).getWriteValue(2);
+      }
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      {
+        return M5.getIOExpander(1).getWriteValue(2); // E1-> 2 = EXT_PWR_EN
       }
       break;
 

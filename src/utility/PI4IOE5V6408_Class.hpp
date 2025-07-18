@@ -40,6 +40,8 @@ namespace m5
 
     void setHighImpedance(uint8_t pin, bool enable) override;
 
+    bool getWriteValue(uint8_t pin) override;
+
     void digitalWrite(uint8_t pin, bool level) override;
 
     bool digitalRead(uint8_t pin) override;

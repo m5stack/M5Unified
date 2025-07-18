@@ -27,6 +27,8 @@ namespace m5
 
     virtual void setHighImpedance(uint8_t pin, bool enable) = 0;
 
+    virtual bool getWriteValue(uint8_t pin) = 0;
+
     virtual void digitalWrite(uint8_t pin, bool level) = 0;
 
     virtual bool digitalRead(uint8_t pin) = 0;

@@ -22,61 +22,54 @@ bool PI4IOE5V6408_Class::begin()
 // false input, true output
 void PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
 {
-    auto data = readRegister8(0x03);
     if (direction) {
-        // Output, set 1
-        data |= (1 << pin);
+        bitOn(0x03, 1 << pin); // Output, set 1
     } else {
-        // Input, set 0
-        data &= ~(1 << pin);
+        bitOff(0x03, 1 << pin); // Input, set 0
     }
-    writeRegister8(0x03, data);
 }
 
 void PI4IOE5V6408_Class::enablePull(uint8_t pin, bool enablePull)
 {
-    auto data = readRegister8(0x0B);
     if (enablePull) {
-        data |= (1 << pin);
+        bitOn(0x0B, 1 << pin);
     } else {
-        data &= ~(1 << pin);
+        bitOff(0x0B, 1 << pin);
     }
-    writeRegister8(0x0B, data);
 }
 
 // false down, true up
 void PI4IOE5V6408_Class::setPullMode(uint8_t pin, bool mode)
 {
-    auto data = readRegister8(0x0D);
     if (mode) {
-        data |= (1 << pin);
+        bitOn(0x0D, 1 << pin);
     } else {
-        data &= ~(1 << pin);
+        bitOff(0x0D, 1 << pin);
     }
-    writeRegister8(0x0D, data);
 }
 
 void PI4IOE5V6408_Class::setHighImpedance(uint8_t pin, bool enable)
 {
-    auto data = readRegister8(0x07);
     if (enable) {
-        data |= (1 << pin);
+        bitOn(0x07, 1 << pin);
     } else {
-        data &= ~(1 << pin);
+        bitOff(0x07, 1 << pin);
     }
-    writeRegister8(0x07, data);
+}
+
+bool PI4IOE5V6408_Class::getWriteValue(uint8_t pin)
+{
+    auto data = readRegister8(0x05);
+    return (data & (1 << pin)) != 0;
 }
 
 void PI4IOE5V6408_Class::digitalWrite(uint8_t pin, bool level)
 {
-    auto data = readRegister8(0x05);
-    // spdlog::info("data: {}", data);
     if (level) {
-        data |= (1 << pin);
+        bitOn(0x05, 1 << pin);
     } else {
-        data &= ~(1 << pin);
+        bitOff(0x05, 1 << pin);
     }
-    writeRegister8(0x05, data);
 }
 
 bool PI4IOE5V6408_Class::digitalRead(uint8_t pin)
