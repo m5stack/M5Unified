@@ -7,10 +7,11 @@
 #include "m5unified_common.h"
 
 #include "I2C_Class.hpp"
-#include "AXP192_Class.hpp"
-#include "AXP2101_Class.hpp"
-#include "IP5306_Class.hpp"
-#include "INA3221_Class.hpp"
+#include "power/AXP192_Class.hpp"
+#include "power/AXP2101_Class.hpp"
+#include "power/IP5306_Class.hpp"
+#include "power/INA3221_Class.hpp"
+#include "power/AW32001_Class.hpp"
 #include "RTC8563_Class.hpp"
 
 #if __has_include (<sdkconfig.h>)
@@ -54,6 +55,7 @@ namespace m5
     , pmic_axp192
     , pmic_ip5306
     , pmic_axp2101
+    , pmic_aw32001
     };
 
     enum is_charging_t
@@ -173,6 +175,9 @@ namespace m5
     AXP2101_Class Axp2101;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    AW32001_Class Aw32001;
 
 #else
 

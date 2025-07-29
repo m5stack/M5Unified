@@ -117,7 +117,7 @@ namespace m5
       , 0x92, 18 -5 // ALDO1 set to 1.8v // for AW88298
       , 0x93, 33 -5 // ALDO2 set to 3.3v // for ES7210
       , 0x94, 33 -5 // ALDO3 set to 3.3v // for camera
-      , 0x95, 33 -5 // ALDO3 set to 3.3v // for TF card slot
+      , 0x95, 33 -5 // ALDO4 set to 3.3v // for TF card slot
       , 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
       , 0x69, 0x11 // CHGLED setting
       , 0x10, 0x30 // PMU common config
@@ -487,10 +487,7 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
-      {
-        auto& ioe = M5.getIOExpander(1);
-        ioe.digitalWrite(2, enable); // 2 = EXT_PWR_EN
-      }
+      M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -574,17 +571,11 @@ namespace m5
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
-      {
-        return M5.getIOExpander(0).getWriteValue(2);
-      }
-      break;
+      return M5.getIOExpander(0).getWriteValue(2);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
-      {
-        return M5.getIOExpander(1).getWriteValue(2); // E1-> 2 = EXT_PWR_EN
-      }
-      break;
+      return M5.getIOExpander(1).getWriteValue(2); // E1-> 2 = EXT_PWR_EN
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:

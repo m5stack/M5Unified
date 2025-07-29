@@ -4,7 +4,7 @@
 #ifndef __M5_AXP2101_CLASS_H__
 #define __M5_AXP2101_CLASS_H__
 
-#include "I2C_Class.hpp"
+#include "../I2C_Class.hpp"
 
 //IRQ ENABLE REGISTER
 #define AXP2101_IRQEN0                           0x40

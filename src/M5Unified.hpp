@@ -55,8 +55,6 @@ namespace m5
 
 #include "gitTagVersion.h"
 #include "utility/RTC8563_Class.hpp"
-#include "utility/AXP192_Class.hpp"
-#include "utility/IP5306_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
 #include "utility/Speaker_Class.hpp"

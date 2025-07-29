@@ -4,7 +4,7 @@
 #ifndef __M5_IP5306_CLASS_H__
 #define __M5_IP5306_CLASS_H__
 
-#include "I2C_Class.hpp"
+#include "../I2C_Class.hpp"
 
 namespace m5
 {
