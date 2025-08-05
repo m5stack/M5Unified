@@ -75,6 +75,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5DinMeter   , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5AirQ       , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Cardputer  , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5CardputerADV,GPIO_NUM_9 ,GPIO_NUM_8  , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5VAMeter    , GPIO_NUM_6 ,GPIO_NUM_5  , GPIO_NUM_9 ,GPIO_NUM_8  },
 { board_t::board_M5AtomS3R    , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5AtomS3RExt , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
@@ -146,6 +147,7 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5StackCoreS3SE,GPIO_NUM_36,GPIO_NUM_37, GPIO_NUM_35, GPIO_NUM_4  },
 { board_t::board_M5Capsule    , GPIO_NUM_14, GPIO_NUM_12, GPIO_NUM_39, GPIO_NUM_11 },
 { board_t::board_M5Cardputer  , GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
+{ board_t::board_M5CardputerADV,GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, GPIO_NUM_47 },
 { board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  GPIO_NUM_10 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -172,6 +174,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5DinMeter   , GPIO_NUM_21 },
 { board_t::board_M5Capsule    , GPIO_NUM_21 },
 { board_t::board_M5Cardputer  , GPIO_NUM_21 },
+{ board_t::board_M5CardputerADV,GPIO_NUM_21 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_M5StampC3    , GPIO_NUM_2  },
 { board_t::board_M5StampC3U   , GPIO_NUM_2  },
@@ -1242,6 +1245,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case board_t::board_M5StampS3:
     case board_t::board_M5Cardputer:
+    case board_t::board_M5CardputerADV:
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       break;
 
@@ -1347,6 +1351,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         {
           mic_cfg.pin_data_in = GPIO_NUM_46;
           mic_cfg.pin_ws = GPIO_NUM_43;
+        }
+        break;
+
+      case board_t::board_M5CardputerADV:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_data_in = GPIO_NUM_46;
+          mic_cfg.pin_ws = GPIO_NUM_43;
+          mic_cfg.pin_bck = GPIO_NUM_41;
+          mic_cfg.i2s_port = I2S_NUM_1;
         }
         break;
 
@@ -1568,6 +1582,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         break;
 
       case board_t::board_M5Cardputer:
+      case board_t::board_M5CardputerADV:
         if (cfg.internal_spk)
         {
           spk_cfg.pin_bck = GPIO_NUM_41;
@@ -1957,6 +1972,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case board_t::board_M5StampS3:
     case board_t::board_M5Cardputer:
+    case board_t::board_M5CardputerADV:
       use_rawstate_bits = 0b00001;
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_0)) & 1;
       break;
