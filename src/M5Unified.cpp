@@ -618,6 +618,32 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+  bool M5Unified::_speaker_enabled_cb_cardputer_adv(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+      2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+      2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+      2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
+      2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
+      2, 0x32, 0xBF,  // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
+      2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      0
+    };
+
+    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#endif
+    return true;
+  }
+
+
   bool M5Unified::_microphone_enabled_cb_atomic_echo(void* args, bool enabled)
   {
     (void)args;
@@ -1590,6 +1616,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           spk_cfg.pin_data_out = GPIO_NUM_42;
           spk_cfg.magnification = 16;
           spk_cfg.i2s_port = I2S_NUM_1;
+          if (_board == board_t::board_M5CardputerADV) {
+            spk_enable_cb = _speaker_enabled_cb_cardputer_adv;
+          }
         }
         break;
 

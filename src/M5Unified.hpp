@@ -577,6 +577,7 @@ namespace m5
     static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
     static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
     static bool _speaker_enabled_cb_tab5(void* args, bool enabled);
+    static bool _speaker_enabled_cb_cardputer_adv(void* args, bool enabled);
     static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
     static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
     static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
