@@ -304,6 +304,9 @@ void setup(void)
   case m5::board_t::board_M5Cardputer:
     name = "Cardputer";
     break;
+  case m5::board_t::board_M5CardputerADV:
+    name = "CardputerADV";
+    break;
   case m5::board_t::board_M5VAMeter:
     name = "VAMeter";
     break;
@@ -320,6 +323,9 @@ void setup(void)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
   case m5::board_t::board_M5NanoC6:
     name = "NanoC6";
+    break;
+  case m5::board_t::board_ArduinoNessoN1:
+    name = "NessoN1";
     break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
   case m5::board_t::board_M5Tab5:

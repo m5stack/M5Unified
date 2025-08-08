@@ -15,6 +15,7 @@ namespace m5
   static constexpr const uint8_t AW32001_REG_PWR_CFG = 0x01; // Power Configuration
   static constexpr const uint8_t AW32001_REG_CHR_CUR = 0x02; // Charging current
   static constexpr const uint8_t AW32001_REG_CHR_VOL = 0x04; // Charge voltage
+  static constexpr const uint8_t AW32001_REG_CHR_TMR = 0x05; // Charge timer
   static constexpr const uint8_t AW32001_REG_SYS_STA = 0x08; // System status
   static constexpr const uint8_t AW32001_REG_CHIP_ID = 0x0A; // ChipID
 
@@ -27,6 +28,14 @@ namespace m5
     if (res)
     {
       res = (val == AW32001_CHIP_ID);
+      if (res) {
+        // disable wdt
+        if (readRegister(AW32001_REG_CHR_TMR, &val, 1))
+        {
+          val = val & 0x1F;
+          writeRegister8(AW32001_REG_CHR_TMR, val);
+        }
+      }
     }
     _init = res;
     return res;

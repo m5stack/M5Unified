@@ -99,6 +99,24 @@ namespace m5
       break;
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_ArduinoNessoN1:
+      _pmic = pmic_t::pmic_aw32001;
+      Aw32001.begin();
+      Aw32001.setBatteryCharge(true);
+      Aw32001.setChargeCurrent(100);
+      Aw32001.setChargeVoltage(4200);
+
+      Bq27220.begin();
+      break;
+    }
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
@@ -796,6 +814,7 @@ namespace m5
       switch (_pmic)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1116,7 +1135,10 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      return Bq27220.getVoltage_mV();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1151,7 +1173,14 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      mv = Bq27220.getVoltage_F() * 1000;
+      if (isnan(mv)) {
+        return -1; // Error
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1189,7 +1218,11 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      Aw32001.setBatteryCharge(enable);
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1217,7 +1250,11 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      Aw32001.setChargeCurrent(max_mA);
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
