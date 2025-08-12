@@ -676,6 +676,65 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32) && SOC_TOUCH_SENSOR_SUPPORTED
+  static void _read_touch_pad(uint32_t* results, const touch_pad_t* channel, const size_t channel_count)
+  {
+#if defined ( TOUCH_SENSOR_DEFAULT_FILTER_CONFIG )
+    /* Handles of touch sensor */
+    touch_sensor_handle_t sens_handle = nullptr;
+    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM];
+
+    /* Step 1: Create a new touch sensor controller handle with default sample configuration */
+    touch_sensor_sample_config_t sample_cfg;
+    sample_cfg.charge_duration_ms = 5.0f;
+    sample_cfg.charge_volt_lim_h = TOUCH_VOLT_LIM_H_1V7;
+    sample_cfg.charge_volt_lim_l = TOUCH_VOLT_LIM_L_0V5;
+
+    touch_sensor_config_t sens_cfg;
+    sens_cfg.power_on_wait_us = 256;
+    sens_cfg.meas_interval_us = 320.0;
+    sens_cfg.intr_trig_mode = TOUCH_INTR_TRIG_ON_BELOW_THRESH;
+    sens_cfg.intr_trig_group = TOUCH_INTR_TRIG_GROUP_BOTH;
+    sens_cfg.sample_cfg_num = 1;
+    sens_cfg.sample_cfg = &sample_cfg;
+    touch_sensor_new_controller(&sens_cfg, &sens_handle);
+
+    touch_channel_config_t chan_cfg;
+    chan_cfg.abs_active_thresh[0] = 1024;
+    chan_cfg.charge_speed = TOUCH_CHARGE_SPEED_7;
+    chan_cfg.init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT;
+    chan_cfg.group = TOUCH_CHAN_TRIG_GROUP_BOTH;
+    for (int i = 0; i < channel_count; i++) {
+      touch_sensor_new_channel(sens_handle, channel[i], &chan_cfg, &chan_handle[i]);
+    }
+    touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+    touch_sensor_config_filter(sens_handle, &filter_cfg);
+    touch_sensor_enable(sens_handle);
+    touch_sensor_trigger_oneshot_scanning(sens_handle, 64);
+    touch_sensor_disable(sens_handle);
+
+    for (int i = 0; i < channel_count; i++) {
+      touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]);
+    }
+    for (int i = 0; i < channel_count; i++) {
+      touch_sensor_del_channel(chan_handle[i]);
+    }
+    touch_sensor_del_controller(sens_handle);
+#else
+    touch_pad_init();
+    for (size_t i = 0; i < channel_count; i++) {
+      touch_pad_config(channel[i], TOUCH_PAD_THRESHOLD_MAX);
+    }
+    for (size_t i = 0; i < channel_count; i++) {
+      uint16_t tmp;
+      touch_pad_read(channel[i], &tmp);
+      results[i] = tmp;
+    }
+    touch_pad_deinit();
+#endif
+  }
+#endif
+
   bool M5Unified::_microphone_enabled_cb_tab5(void* args, bool enabled)
   {
     (void)args;
@@ -764,17 +823,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   G27に対してタッチセンサを使用すると、得られる値は Lite/ECHOの方が大きく、Matrixの方が小さい。
   なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
 */
-              uint16_t g13, g27;
-              touch_pad_init();
-              touch_pad_config(TOUCH_PAD_NUM4, TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM4 == GPIO13
-              touch_pad_config(TOUCH_PAD_NUM7, TOUCH_PAD_THRESHOLD_MAX);  // TOUCH_PAD_NUM7 == GPIO27
-              touch_pad_read(TOUCH_PAD_NUM4, &g13);
-              touch_pad_read(TOUCH_PAD_NUM7, &g27);
-              touch_pad_deinit();
-              int diff = (g27 * 3 - g13);
-              // M5_LOGV("G13 = %d / G27 = %d / diff = %d", g13, g27, diff);
+              uint32_t results[2] = { 0, 0 };
+              static constexpr touch_pad_t s_channel_id[] = {
+                  TOUCH_PAD_NUM4, //Touch pad channel 4 is GPIO13(ESP32)
+                  TOUCH_PAD_NUM7, //Touch pad channel 7 is GPIO27(ESP32)
+              };
+              _read_touch_pad(results, s_channel_id, 2);
 
-              // Branches other than AtomMatrix
+              int diff = (results[1] * 3 - results[0]);
+              // M5_LOGV("G13 = %d / G27 = %d / diff = %d", results[0], results[1], diff);
+   // true==(Lite/ECHO) / false==AtomMatrix
               if (diff >= 0)
 #else
 /*
