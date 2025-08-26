@@ -861,6 +861,20 @@ namespace m5
       }
     }
 
+    switch (M5.getBoard())
+    {
+    default: break;
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      for (int i = 0; i < 10; ++i)
+      {
+        M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.pin4 == PWROFF_PLUSE
+        m5gfx::delay(50);
+      }
+      break;
+#endif
+    }
+
     if (use_deepsleep) { esp_deep_sleep_start(); }
     esp_light_sleep_start();
     esp_restart();
