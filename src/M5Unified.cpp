@@ -786,7 +786,33 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+  bool M5Unified::_microphone_enabled_cb_cardputer_adv(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+      2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+      2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+      2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
+      2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
+      2, 0x17, 0xBF,  // ES8311_ADC_REG17 : ADC_VOLUME 0xBF == ± 0 dB
+      2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      2, 0x0D, 0xFC,  // 0x0D SYSTEM/ Power down analog circuitry
+      2, 0x0E, 0x6A,  // 0x0E SYSTEM
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
+      0
+    };
 
+    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
+#endif
+    return true;
+  }
 
 #if defined (M5UNIFIED_PC_BUILD)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1444,7 +1470,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.pin_data_in = GPIO_NUM_46;
           mic_cfg.pin_ws = GPIO_NUM_43;
           mic_cfg.pin_bck = GPIO_NUM_41;
-          mic_cfg.i2s_port = I2S_NUM_1;
+          mic_enable_cb = _microphone_enabled_cb_cardputer_adv;
         }
         break;
 
