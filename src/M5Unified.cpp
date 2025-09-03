@@ -681,6 +681,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   {
     (void)args;
     (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     static constexpr const uint8_t enabled_bulk_data[] = {
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
@@ -701,7 +702,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_45, GPIO_NUM_0);
     in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
     backup_i2c_setting.restore();
-
+#endif
     return true;
   }
 
@@ -709,6 +710,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   {
     (void)args;
     (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     static constexpr const uint8_t enabled_bulk_data[] = {
       2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
       2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
@@ -735,6 +737,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     else
     { m5gfx::gpio_lo(pin_en); }
     backup_i2c_setting.restore();
+#endif
     return true;
   }
 
