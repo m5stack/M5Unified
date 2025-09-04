@@ -121,9 +121,9 @@ namespace m5
 
     /// execute I2C scan. (for 7bit address)
     /// @param[out] result data array needs 120 Bytes.
-    void scanID(bool* result) const;
+    void scanID(bool* result, std::uint32_t freq = 100000) const;
 
-    bool scanID(uint8_t addr) const;
+    bool scanID(uint8_t addr, std::uint32_t freq = 100000) const;
 
     i2c_port_t getPort(void) const { return _port_num; }
     int8_t getSDA(void) const { return _pin_sda; }
