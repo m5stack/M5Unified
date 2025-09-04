@@ -321,7 +321,9 @@ namespace m5
     }
 
     /// Perform initialization process at startup.
-    virtual void begin(config_t cfg)
+    /// ※ This method must not be "virtual"
+    /// (the definition of config_t may differ between compilations, which could result in memory corruption).
+    void begin(config_t cfg)
     {
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
