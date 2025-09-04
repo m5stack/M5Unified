@@ -95,6 +95,15 @@ namespace m5
         };
         M5.getIOExpander(0).writeRegister8Array(reg_array_0x43, sizeof(reg_array_0x43));
         M5.getIOExpander(1).writeRegister8Array(reg_array_0x44, sizeof(reg_array_0x44));
+        Ina226.begin();
+        INA226_Class::config_t cfg;
+        cfg.sampling_rate = INA226_Class::Sampling::Rate16;
+        cfg.bus_conversion_time = INA226_Class::ConversionTime::US_1100;
+        cfg.shunt_conversion_time = INA226_Class::ConversionTime::US_1100;
+        cfg.mode = INA226_Class::Mode::ShuntAndBus;
+        cfg.shunt_res = 0.005f;
+        cfg.max_expected_current = 2.0f;
+        Ina226.config(cfg);
       }
       break;
     }
@@ -815,6 +824,7 @@ namespace m5
       {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1115,7 +1125,9 @@ namespace m5
 #if !defined (M5UNIFIED_PC_BUILD)
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1153,6 +1165,7 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case pmic_t::pmic_aw32001:
       return Bq27220.getVoltage_mV();
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1172,7 +1185,14 @@ namespace m5
       return _getBatteryAdcRaw() * _adc_ratio;
 
     default:
-      return 0;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return Ina226.getBusVoltage() * 1000;
+#endif
+      default:
+        return 0;
+      }
     }
 #endif
     return 0;
@@ -1195,6 +1215,7 @@ namespace m5
         return -1; // Error
       }
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1217,7 +1238,16 @@ namespace m5
       break;
 
     default:
-      return -2;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        // 2S Li-Po ( * 1000 / 2 == * 500)
+        mv = Ina226.getBusVoltage() * 500;
+        break;
+#endif
+      default:
+        return -2;
+      }
     }
 
     int level = (mv - 3300) * 100 / (float)(4150 - 3350);
@@ -1237,6 +1267,7 @@ namespace m5
     case pmic_t::pmic_aw32001:
       Aw32001.setBatteryCharge(enable);
       return;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1256,6 +1287,15 @@ namespace m5
 #endif
 
     default:
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        M5.getIOExpander(1).digitalWrite(7, enable);
+        break;
+#endif
+      default:
+        return;
+      }
       return;
     }
   }
@@ -1269,6 +1309,7 @@ namespace m5
     case pmic_t::pmic_aw32001:
       Aw32001.setChargeCurrent(max_mA);
       return;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1296,7 +1337,9 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1325,7 +1368,14 @@ namespace m5
 #endif
 
     default:
-      return 0;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return 1000.0f * Ina226.getShuntCurrent();
+#endif
+      default:
+        return 0;
+      }
     }
   }
 
@@ -1333,7 +1383,9 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1354,7 +1406,14 @@ namespace m5
 #endif
 
     default:
-      return;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        // TODO:implement
+#endif
+      default:
+        return;
+      }
     }
   }
 
@@ -1368,7 +1427,9 @@ namespace m5
 #endif
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1387,7 +1448,15 @@ namespace m5
 #endif
 
     default:
-      return is_charging_t::charge_unknown;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return M5.getIOExpander(1).digitalRead(6) // io1.pin6 == CHG_STAT
+          ? is_charging_t::is_charging : is_charging_t::is_discharging;
+#endif
+      default:
+        return is_charging_t::charge_unknown;
+      }
     }
   }
 
@@ -1395,8 +1464,9 @@ namespace m5
   {
     switch (_pmic)
     {
-
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 

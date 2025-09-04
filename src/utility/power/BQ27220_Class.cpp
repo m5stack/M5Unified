@@ -3,6 +3,8 @@
 
 #include "BQ27220_Class.hpp"
 
+#include <M5Unified.h>
+
 #if __has_include(<esp_log.h>)
 #include <esp_log.h>
 #endif
@@ -25,36 +27,13 @@ namespace m5
       if (length == 0) {
         return true;
       }
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      M5.delay(10);
       if (_i2c->readRegister(_addr, 0x3E, regData, length, _freq)) {
         return true;
       }
     }
     return false;
   } 
-
-  bool BQ27220_Class::opration_status_check(void)
-  {
-    uint8_t buf[4] = {0};
-    if (_i2c->readRegister(_addr, 0x3A, buf, 2, _freq)) {
-      uint16_t value = (buf[0] | (buf[1] << 8));
-      uint8_t sec = (value & 0x0006) >> 1;
-      if (sec == 0b10) {
-        ESP_LOGV(TAG, "Opration Status [unseal access]: 0x%04X\n", value);
-        return true;
-      } else if (sec == 0b11) {
-        ESP_LOGV(TAG, "Opration Status [sealed access]: 0x%04X\n", value);
-        return true;
-      } else if (sec == 0b01) {
-        ESP_LOGV(TAG, "Opration Status [full access]: 0x%04X\n", value);
-        return true;
-      } else if (sec == 0b00) {
-        ESP_LOGV(TAG, "Opration Status [reserved access]: 0x%04X\n", value);
-        return true;
-      }
-    }
-    return false;
-  }
 
   bool BQ27220_Class::begin(void)
   {
@@ -75,8 +54,6 @@ namespace m5
       // full_access
       read_MuxAddrdata(0x00, 0xFFFF);
       read_MuxAddrdata(0x00, 0xFFFF);
-  
-      opration_status_check();
     }
 
     return _init;

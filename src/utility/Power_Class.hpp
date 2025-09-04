@@ -11,6 +11,7 @@
 #include "power/AXP2101_Class.hpp"
 #include "power/IP5306_Class.hpp"
 #include "power/INA3221_Class.hpp"
+#include "power/INA226_Class.hpp"
 #include "power/AW32001_Class.hpp"
 #include "power/BQ27220_Class.hpp"
 #include "RTC8563_Class.hpp"
@@ -180,6 +181,9 @@ namespace m5
 
     AW32001_Class Aw32001;
     BQ27220_Class Bq27220;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    INA226_Class Ina226 = { 0x41 };
 
 #else
 
