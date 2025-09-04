@@ -52,7 +52,81 @@ namespace m5
     _pmic = pmic_t::pmic_unknown;
 
 #if !defined (M5UNIFIED_PC_BUILD)
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    /// setup power management ic
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_M5Tab5:
+      {
+        static constexpr std::uint8_t reg_array_0x43[] =
+        { ///     +--------- HP_DET : Headphone detect
+          ///     |+-------- CAM_RST : Camera reset
+          ///     ||+------- TP_RST : Touch reset
+          ///     |||+------ LCD_RST : LCD reset
+          ///     ||||+----- NC
+          ///     |||||+---- EXT5V_EN : Ext5V enable
+          ///     ||||||+--- SPK_EN : Speaker enable
+          ///     |||||||+-- RF_PTH_L_INT_H_EXT : antenna  L=internal / H=external
+          ///     ||||||||
+          0x05, 0b01110000,   // OUT_SET
+          0x03, 0b01110011,   // IO_DIR
+          0x07, 0b00001000,   // OUT_H_IM
+          0x0D, 0b00000100,   // PULL_SEL
+          0x0B, 0b00000100,   // PULL_EN
+        };
+        static constexpr std::uint8_t reg_array_0x44[] =
+        { ///     +--------- CHG_EN
+          ///     |+-------- CHG_STAT
+          ///     ||+------- nCHG_QC_EN
+          ///     |||+------ PWROFF_PLUSE
+          ///     ||||+----- USB5V_EN
+          ///     |||||+---- NC
+          ///     ||||||+--- NC
+          ///     |||||||+-- WLAN_PWR_EN
+          ///     ||||||||
+          0x05, 0b10000001,   // OUT_SET
+          0x03, 0b10110001,   // IO_DIR
+          0x07, 0b00000110,   // OUT_H_IM
+          0x0D, 0b00001000,   // PULL_SEL
+          0x0B, 0b00001000,   // PULL_EN
+        };
+        M5.getIOExpander(0).writeRegister8Array(reg_array_0x43, sizeof(reg_array_0x43));
+        M5.getIOExpander(1).writeRegister8Array(reg_array_0x44, sizeof(reg_array_0x44));
+        Ina226.begin();
+        INA226_Class::config_t cfg;
+        cfg.sampling_rate = INA226_Class::Sampling::Rate16;
+        cfg.bus_conversion_time = INA226_Class::ConversionTime::US_1100;
+        cfg.shunt_conversion_time = INA226_Class::ConversionTime::US_1100;
+        cfg.mode = INA226_Class::Mode::ShuntAndBus;
+        cfg.shunt_res = 0.005f;
+        cfg.max_expected_current = 2.0f;
+        Ina226.config(cfg);
+      }
+      break;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_ArduinoNessoN1:
+      _pmic = pmic_t::pmic_aw32001;
+      Aw32001.begin();
+      Aw32001.setBatteryCharge(true);
+      Aw32001.setChargeCurrent(100);
+      Aw32001.setChargeVoltage(4200);
+
+      Bq27220.begin();
+      break;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
     switch (M5.getBoard())
@@ -70,7 +144,7 @@ namespace m5
       , 0x92, 18 -5 // ALDO1 set to 1.8v // for AW88298
       , 0x93, 33 -5 // ALDO2 set to 3.3v // for ES7210
       , 0x94, 33 -5 // ALDO3 set to 3.3v // for camera
-      , 0x95, 33 -5 // ALDO3 set to 3.3v // for TF card slot
+      , 0x95, 33 -5 // ALDO4 set to 3.3v // for TF card slot
       , 0x27, 0x00 // PowerKey Hold=1sec / PowerOff=4sec
       , 0x69, 0x11 // CHGLED setting
       , 0x10, 0x30 // PMU common config
@@ -422,7 +496,28 @@ namespace m5
 #else
     switch (M5.getBoard())
     {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      if (port_mask & ext_port_mask_t::ext_PA)
+      {
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setPullMode(2, enable);
+        ioe.digitalWrite(2, enable);
+      }
+      if (port_mask & ext_port_mask_t::ext_USB)
+      {
+        auto& ioe = M5.getIOExpander(1);
+        ioe.setPullMode(3, enable);
+        ioe.digitalWrite(3, enable);
+      }
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
@@ -501,6 +596,14 @@ namespace m5
     switch (M5.getBoard())
     {
 #if defined (M5UNIFIED_PC_BUILD)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      return M5.getIOExpander(0).getWriteValue(2);
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      return M5.getIOExpander(1).getWriteValue(2); // E1-> 2 = EXT_PWR_EN
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -539,25 +642,25 @@ namespace m5
   void Power_Class::setUsbOutput(bool enable)
   {
     (void)enable;
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       _core_s3_output(_core_s3_usb_en, enable);
       break;
 
+#endif
     default:
       break;
     }
-#endif
   }
 
   bool Power_Class::getUsbOutput(void)
   {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
       {
@@ -565,11 +668,11 @@ namespace m5
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, reg, i2c_freq) & _core_s3_usb_en;
       }
       break;
+#endif
 
     default:
       break;
     }
-#endif
     return false;
   }
 
@@ -580,17 +683,24 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     static std::unique_ptr<m5gfx::Light_PWM> led;
 
-    if (led.get() == nullptr)
+    switch (M5.getBoard())
     {
-      led.reset(new m5gfx::Light_PWM());
-      auto cfg = led->config();
-      cfg.invert = false;
-      cfg.pwm_channel = 7;
-      cfg.pin_bl = M5NanoC6_LED_PIN;
-      led->config(cfg);
-      led->init(brightness);
+    case board_t::board_M5NanoC6:
+      if (led.get() == nullptr)
+      {
+        led.reset(new m5gfx::Light_PWM());
+        auto cfg = led->config();
+        cfg.invert = false;
+        cfg.pwm_channel = 7;
+        cfg.pin_bl = M5NanoC6_LED_PIN;
+        led->config(cfg);
+        led->init(brightness);
+      }
+      led->setBrightness(brightness);
+      break;
+    default:
+      break;
     }
-    led->setBrightness(brightness);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
     static std::unique_ptr<m5gfx::Light_PWM> led;
@@ -713,6 +823,8 @@ namespace m5
       switch (_pmic)
       {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -757,6 +869,20 @@ namespace m5
         m5gfx::gpio_hi( pwrHoldPin );
         m5gfx::delay(50);
       }
+    }
+
+    switch (M5.getBoard())
+    {
+    default: break;
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+      for (int i = 0; i < 10; ++i)
+      {
+        M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.pin4 == PWROFF_PLUSE
+        m5gfx::delay(50);
+      }
+      break;
+#endif
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }
@@ -999,7 +1125,9 @@ namespace m5
 #if !defined (M5UNIFIED_PC_BUILD)
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1033,7 +1161,11 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      return Bq27220.getVoltage_mV();
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1053,7 +1185,14 @@ namespace m5
       return _getBatteryAdcRaw() * _adc_ratio;
 
     default:
-      return 0;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return Ina226.getBusVoltage() * 1000;
+#endif
+      default:
+        return 0;
+      }
     }
 #endif
     return 0;
@@ -1068,7 +1207,15 @@ namespace m5
     switch (_pmic)
     {
 
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      mv = Bq27220.getVoltage_F() * 1000;
+      if (isnan(mv)) {
+        return -1; // Error
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1091,7 +1238,16 @@ namespace m5
       break;
 
     default:
-      return -2;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        // 2S Li-Po ( * 1000 / 2 == * 500)
+        mv = Ina226.getBusVoltage() * 500;
+        break;
+#endif
+      default:
+        return -2;
+      }
     }
 
     int level = (mv - 3300) * 100 / (float)(4150 - 3350);
@@ -1106,7 +1262,12 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      Aw32001.setBatteryCharge(enable);
+      return;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1126,6 +1287,15 @@ namespace m5
 #endif
 
     default:
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        M5.getIOExpander(1).digitalWrite(7, enable);
+        break;
+#endif
+      default:
+        return;
+      }
       return;
     }
   }
@@ -1134,7 +1304,12 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case pmic_t::pmic_aw32001:
+      Aw32001.setChargeCurrent(max_mA);
+      return;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -1162,7 +1337,9 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1191,7 +1368,14 @@ namespace m5
 #endif
 
     default:
-      return 0;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return 1000.0f * Ina226.getShuntCurrent();
+#endif
+      default:
+        return 0;
+      }
     }
   }
 
@@ -1199,7 +1383,9 @@ namespace m5
   {
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1220,7 +1406,14 @@ namespace m5
 #endif
 
     default:
-      return;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        // TODO:implement
+#endif
+      default:
+        return;
+      }
     }
   }
 
@@ -1234,7 +1427,9 @@ namespace m5
 #endif
     switch (_pmic)
     {
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -1253,7 +1448,15 @@ namespace m5
 #endif
 
     default:
-      return is_charging_t::charge_unknown;
+      switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:
+        return M5.getIOExpander(1).digitalRead(6) // io1.pin6 == CHG_STAT
+          ? is_charging_t::is_charging : is_charging_t::is_discharging;
+#endif
+      default:
+        return is_charging_t::charge_unknown;
+      }
     }
   }
 
@@ -1261,8 +1464,9 @@ namespace m5
   {
     switch (_pmic)
     {
-
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 

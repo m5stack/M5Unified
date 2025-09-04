@@ -55,8 +55,6 @@ namespace m5
 
 #include "gitTagVersion.h"
 #include "utility/RTC8563_Class.hpp"
-#include "utility/AXP192_Class.hpp"
-#include "utility/IP5306_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
 #include "utility/Speaker_Class.hpp"
@@ -64,6 +62,7 @@ namespace m5
 #include "utility/Touch_Class.hpp"
 #include "utility/Log_Class.hpp"
 #include "utility/IMU_Class.hpp"
+#include "utility/IOExpander_Base.hpp"
 
 #include <memory>
 #include <vector>
@@ -322,7 +321,9 @@ namespace m5
     }
 
     /// Perform initialization process at startup.
-    virtual void begin(config_t cfg)
+    /// ※ This method must not be "virtual"
+    /// (the definition of config_t may differ between compilations, which could result in memory corruption).
+    void begin(config_t cfg)
     {
       // Allow begin execution only once.
       if (_board != m5gfx::board_t::board_unknown) { return; }
@@ -348,7 +349,7 @@ namespace m5
 #if defined ( __M5GFX_M5ATOMDISPLAY__ )
       if (cfg.external_display.atom_display) {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-        if (_board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R || _board == board_t::board_M5AtomS3RCam || _board == board_t::board_M5AtomS3RExt)
+        if (_board == board_t::board_M5AtomS3 || _board == board_t::board_M5AtomS3Lite || _board == board_t::board_M5AtomS3R || _board == board_t::board_M5AtomS3RCam || _board == board_t::board_M5AtomS3RExt || _board == board_t::board_M5AtomEchoS3R)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
         if (_board == board_t::board_M5AtomLite || _board == board_t::board_M5AtomMatrix || _board == board_t::board_M5AtomEcho || _board == board_t::board_M5AtomPsram)
 #else
@@ -547,19 +548,23 @@ namespace m5
     void setTouchButtonHeight(uint16_t pixel) { _touch_button_height = pixel; }
     uint16_t getTouchButtonHeight(void) const { return _touch_button_height; }
 
+    IOExpander_Base& getIOExpander(size_t idx) { return *_io_expander[idx & 1]; };
+
   private:
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
     Button_Class _buttons[5];
 
-    std::vector<M5GFX> _displays; // 登録された全ディスプレイのインスタンス
+     // Instances of all registered displays
+    std::vector<M5GFX> _displays;
+    std::unique_ptr<IOExpander_Base> _io_expander[2];
+
     std::uint32_t _updateMsec = 0;
     std::uint16_t _touch_button_height = 0;
     m5gfx::board_t _board = m5gfx::board_t::board_unknown;
 
     std::uint8_t _primary_display_index = -1;
-    bool use_pmic_button = false;
-    bool use_hat_spk = false;
+    bool _use_pmic_button = false;
 
     void _begin(const config_t& cfg);
     void _begin_spk(config_t& cfg);
@@ -574,10 +579,14 @@ namespace m5
     static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
     static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
     static bool _speaker_enabled_cb_tab5(void* args, bool enabled);
+    static bool _speaker_enabled_cb_cardputer_adv(void* args, bool enabled);
     static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
     static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
     static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _microphone_enabled_cb_atom_echos3r(void* args, bool enabled);
+    static bool _speaker_enabled_cb_atom_echos3r(void* args, bool enabled);
     static bool _microphone_enabled_cb_tab5(void* args, bool enabled);
+    static bool _microphone_enabled_cb_cardputer_adv(void* args, bool enabled);
 
     static int8_t _get_pin_table[pin_name_max];
   };
