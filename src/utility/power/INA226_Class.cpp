@@ -11,11 +11,6 @@
 
 namespace m5
 {
-  static uint16_t caluculate_calibration(const float shuntRes, const float maxCur, const float curLSB)
-  {
-    return (0.00512f / (curLSB * shuntRes));
-  }
-
   bool INA226_Class::begin(void)
   {
     uint16_t id = readRegister16(0xFF);
@@ -28,10 +23,10 @@ namespace m5
 
   void INA226_Class::config(const config_t& cfg)
   {
-    uint16_t value = ((uint16_t)cfg.sampling_rate << 9
+    uint16_t value = (uint16_t)cfg.sampling_rate << 9
                    | (uint16_t)cfg.bus_conversion_time << 6
                    | (uint16_t)cfg.shunt_conversion_time << 3
-                   | (uint16_t)cfg.mode);
+                   | (uint16_t)cfg.mode;
 
     writeRegister16(INA226_CONFIG, value);
 
