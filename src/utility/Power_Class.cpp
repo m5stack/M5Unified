@@ -177,6 +177,7 @@ namespace m5
 
     case board_t::board_M5DinMeter:
     case board_t::board_M5Cardputer:
+    case board_t::board_M5CardputerADV:
       _batAdcCh = ADC1_GPIO10_CHANNEL;
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
