@@ -87,6 +87,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+{ board_t::board_M5UnitC6L     ,GPIO_NUM_8 ,GPIO_NUM_10 , 255        ,255         },
 { board_t::board_ArduinoNessoN1,GPIO_NUM_8 ,GPIO_NUM_10 , GPIO_NUM_8 ,GPIO_NUM_10 },
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  }, // NanoC6
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
@@ -114,7 +115,8 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 { board_t::board_M5DinMeter   , GPIO_NUM_1 ,GPIO_NUM_2 , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
-{ board_t::board_ArduinoNessoN1,GPIO_NUM_4 ,GPIO_NUM_5 , 255        ,255         },
+{ board_t::board_M5UnitC6L     ,GPIO_NUM_4 ,GPIO_NUM_5 , GPIO_NUM_4 ,GPIO_NUM_5  },
+{ board_t::board_ArduinoNessoN1,GPIO_NUM_4 ,GPIO_NUM_5 , GPIO_NUM_4 ,GPIO_NUM_5  },
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
 #else
@@ -181,6 +183,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5StampC3U   , GPIO_NUM_2  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 { board_t::board_M5NanoC6     , GPIO_NUM_20 },
+{ board_t::board_M5UnitC6L    , GPIO_NUM_2  },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
@@ -1285,7 +1288,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       in_port = ex_port;
     }
 #endif
-    if ((int)in_scl >= 0)
+    if ((uint_fast8_t)in_scl < GPIO_NUM_MAX)
     {
       In_I2C.begin(in_port, in_sda, in_scl);
     }
@@ -1294,9 +1297,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       In_I2C.setPort(I2C_NUM_MAX, in_sda, in_scl);
     }
 
-    if ((int)ex_scl >= 0)
+    if ((uint_fast8_t)ex_scl < GPIO_NUM_MAX)
     {
-      if ((in_port != ex_port) || (in_sda == ex_sda && in_scl == ex_scl)) {
+      if ((in_port != ex_port) || (in_sda == ex_sda && in_scl == ex_scl) || ((uint_fast8_t)in_scl >= GPIO_NUM_MAX)) {
         Ex_I2C.setPort(ex_port, ex_sda, ex_scl);
       }
     }
@@ -1312,6 +1315,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_M5UnitC6L:
+      {
+        auto ioexp = new PI4IOE5V6408_Class(0x43);
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
     case board_t::board_ArduinoNessoN1:
       for (int i = 0; i < 2; ++i)
       {
@@ -1670,6 +1680,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+      case board_t::board_M5UnitC6L:
       case board_t::board_ArduinoNessoN1:
         if (cfg.internal_spk)
         {
@@ -2062,9 +2073,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     if (cfg.internal_rtc && In_I2C.isEnabled())
     {
-      M5.Rtc.begin();
+      M5.Rtc.begin(&M5.In_I2C, M5.getBoard());
     }
-    if (!M5.Rtc.isEnabled() && cfg.external_rtc)
+    if (!M5.Rtc.isEnabled() && cfg.external_rtc && Ex_I2C.isEnabled())
     {
       port_a_used = M5.Rtc.begin(&M5.Ex_I2C);
     }
@@ -2080,7 +2091,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       M5.Imu.begin(&M5.In_I2C, M5.getBoard());
     }
-    if (!M5.Imu.isEnabled() && cfg.external_imu)
+    if (!M5.Imu.isEnabled() && cfg.external_imu && Ex_I2C.isEnabled())
     {
       port_a_used = M5.Imu.begin(&M5.Ex_I2C) || port_a_used;
     }
@@ -2294,15 +2305,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_9) ? 0b00001 : 0);
       break;
 
-    case board_t::board_ArduinoNessoN1:
-    {
-      use_rawstate_bits = 0b00011;
-      auto value = _io_expander[0]->readRegister8(0x0F);
-      btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0) // BtnA
-                        | (!(value & 0b010) ? 0b00010 : 0) // BtnB
-                        ;
+    case board_t::board_M5UnitC6L:
+      {
+        use_rawstate_bits = 0b00001;
+        auto value = _io_expander[0]->readRegister8(0x0F);
+        btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0); // BtnA
+      }
       break;
-    }
+
+    case board_t::board_ArduinoNessoN1:
+      {
+        use_rawstate_bits = 0b00011;
+        auto value = _io_expander[0]->readRegister8(0x0F);
+        btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0) // BtnA
+                          | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                          ;
+      }
+      break;
 
     default:
       break;

@@ -6,6 +6,7 @@ file(GLOB SRCS
      src/utility/*.cpp
      src/utility/imu/*.cpp
      src/utility/power/*.cpp
+     src/utility/rtc/*.cpp
      )
 set(COMPONENT_SRCS ${SRCS})
 

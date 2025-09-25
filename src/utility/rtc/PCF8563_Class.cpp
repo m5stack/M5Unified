@@ -1,34 +1,12 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#include "RTC8563_Class.hpp"
+#include "PCF8563_Class.hpp"
 
 #include <stdlib.h>
 
 namespace m5
 {
-  tm rtc_datetime_t::get_tm(void) const
-  {
-    tm t_st = {
-      time.seconds,
-      time.minutes,
-      time.hours,
-      date.date,
-      date.month - 1,
-      date.year - 1900,
-      date.weekDay,
-      0,
-      0,
-    };
-    return t_st;
-  }
-
-  void rtc_datetime_t::set_tm(tm& datetime)
-  {
-    date = rtc_date_t { datetime };
-    time = rtc_time_t { datetime };
-  }
-
   static std::uint8_t bcd2ToByte(std::uint8_t value)
   {
     return ((value >> 4) * 10) + (value & 0x0F);
@@ -40,7 +18,7 @@ namespace m5
     return (bcdhigh << 4) | (value - (bcdhigh * 10));
   }
 
-  bool RTC8563_Class::begin(I2C_Class* i2c)
+  bool PCF8563_Class::begin(I2C_Class* i2c)
   {
     if (i2c)
     {
@@ -53,12 +31,12 @@ namespace m5
     return _init;
   }
 
-  bool RTC8563_Class::getVoltLow(void)
+  bool PCF8563_Class::getVoltLow(void)
   {
     return readRegister8(0x02) & 0x80; // RTCC_VLSEC_MASK
   }
 
-  bool RTC8563_Class::getDateTime(rtc_datetime_t* datetime) const
+  bool PCF8563_Class::getDateTime(rtc_datetime_t* datetime) const
   {
     std::uint8_t buf[7] = { 0 };
 
@@ -77,7 +55,7 @@ namespace m5
   }
 
 
-  bool RTC8563_Class::getTime(rtc_time_t* time) const
+  bool PCF8563_Class::getTime(rtc_time_t* time) const
   {
     std::uint8_t buf[3] = { 0 };
 
@@ -89,7 +67,7 @@ namespace m5
     return true;
   }
 
-  void RTC8563_Class::setTime(const rtc_time_t& time)
+  void PCF8563_Class::setTime(const rtc_time_t& time)
   {
     std::uint8_t buf[] =
       { byteToBcd2(time.seconds)
@@ -99,7 +77,7 @@ namespace m5
     writeRegister(0x02, buf, sizeof(buf));
   }
 
-  bool RTC8563_Class::getDate(rtc_date_t* date) const
+  bool PCF8563_Class::getDate(rtc_date_t* date) const
   {
     std::uint8_t buf[4] = {0};
 
@@ -113,32 +91,18 @@ namespace m5
     return true;
   }
 
-  void RTC8563_Class::setDate(const rtc_date_t& date)
+  void PCF8563_Class::setDate(const rtc_date_t& date)
   {
-    std::uint8_t w = date.weekDay;
-    if (w > 6 && date.year >= 1900 && ((std::size_t)(date.month - 1)) < 12)
-    { /// weekDay auto adjust
-      int32_t year = date.year;
-      int32_t month = date.month;
-      int32_t day = date.date;
-      if (month < 3) {
-        year--;
-        month += 12;
-      }
-      int32_t ydiv100 = year / 100;
-      w = (year + (year >> 2) - ydiv100 + (ydiv100 >> 2) + (13 * month + 8) / 5 + day) % 7;
-    }
-
     std::uint8_t buf[] =
       { byteToBcd2(date.date)
-      , w
+      , (uint8_t)(0x07u & date.weekDay)
       , (std::uint8_t)(byteToBcd2(date.month) + (date.year < 2000 ? 0x80 : 0))
       , byteToBcd2(date.year % 100)
       };
     writeRegister(0x05, buf, sizeof(buf));
   }
 
-  int RTC8563_Class::setAlarmIRQ(int afterSeconds)
+  int PCF8563_Class::setAlarmIRQ(int afterSeconds)
   {
     std::uint8_t reg_value = readRegister8(0x01) & ~0x0C;
 
@@ -170,7 +134,7 @@ namespace m5
     return afterSeconds * div;
   }
 
-  int RTC8563_Class::setAlarmIRQ(const rtc_time_t &time)
+  int PCF8563_Class::setAlarmIRQ(const rtc_time_t &time)
   {
     union
     {
@@ -203,7 +167,7 @@ namespace m5
     return irq_enable;
   }
 
-  int RTC8563_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
+  int PCF8563_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
   {
     union
     {
@@ -250,18 +214,18 @@ namespace m5
     return irq_enable;
   }
 
-  bool RTC8563_Class::getIRQstatus(void)
+  bool PCF8563_Class::getIRQstatus(void)
   {
     return _init && (0x0C & readRegister8(0x01));
   }
 
-  void RTC8563_Class::clearIRQ(void)
+  void PCF8563_Class::clearIRQ(void)
   {
     if (!_init) { return; }
     bitOff(0x01, 0x0C);
   }
 
-  void RTC8563_Class::disableIRQ(void)
+  void PCF8563_Class::disableIRQ(void)
   {
     if (!_init) { return; }
     // disable alerm (bit7:1=disabled)
@@ -273,39 +237,5 @@ namespace m5
 
     // clear flag and INT enable bits
     writeRegister8(0x01, 0x00);
-  }
-
-  void RTC8563_Class::setSystemTimeFromRtc(struct timezone* tz)
-  {
-#if defined (M5UNIFIED_PC_BUILD)
-    (void)tz;
-#else
-    rtc_datetime_t dt;
-    if (getDateTime(&dt))
-    {
-      tm t_st;
-      t_st.tm_isdst = -1;
-      t_st.tm_year = dt.date.year - 1900;
-      t_st.tm_mon  = dt.date.month - 1;
-      t_st.tm_mday = dt.date.date;
-      t_st.tm_hour = dt.time.hours;
-      t_st.tm_min  = dt.time.minutes;
-      t_st.tm_sec  = dt.time.seconds;
-      timeval now;
-      // mktime(3) uses localtime, force UTC
-      char *oldtz = getenv("TZ");
-      setenv("TZ", "GMT0", 1);
-      tzset(); // Workaround for https://github.com/espressif/esp-idf/issues/11455
-      now.tv_sec = mktime(&t_st);
-      if (oldtz)
-      {
-        setenv("TZ", oldtz, 1);
-      } else {
-        unsetenv("TZ");
-      }
-      now.tv_usec = 0;
-      settimeofday(&now, tz);
-    }
-#endif
   }
 }

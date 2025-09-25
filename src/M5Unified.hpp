@@ -54,7 +54,7 @@ namespace m5
 };
 
 #include "gitTagVersion.h"
-#include "utility/RTC8563_Class.hpp"
+#include "utility/RTC_Class.hpp"
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
 #include "utility/Speaker_Class.hpp"
@@ -212,7 +212,7 @@ namespace m5
     IMU_Class Imu;
     Log_Class Log;
     Power_Class Power;
-    RTC8563_Class Rtc;
+    RTC_Class Rtc;
     Touch_Class Touch;
 
 /*
@@ -396,21 +396,38 @@ namespace m5
       bool port_a_used = _begin_rtc_imu(cfg);
       (void)port_a_used;
 
+#if defined (ESP_PLATFORM)
+      const uint_fast8_t ex_i2c_sda = Ex_I2C.getSDA();
+      const uint_fast8_t ex_i2c_scl = Ex_I2C.getSCL();
+      const int_fast8_t ex_i2c_port = Ex_I2C.getPort();
+      const bool ex_i2c_enabled = (ex_i2c_sda < GPIO_NUM_MAX && ex_i2c_scl < GPIO_NUM_MAX && ex_i2c_port >= 0);
+#else
+      const bool ex_i2c_enabled = true;
+#endif
+      (void)ex_i2c_enabled;
+
       if (cfg.external_display_value)
       {
 #if defined ( __M5GFX_M5UNITOLED__ )
         if (cfg.external_display.unit_oled)
         {
 #if defined (ESP_PLATFORM)
-          if (cfg.unit_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
-          if (cfg.unit_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
-          if (cfg.unit_oled.i2c_port < 0) { cfg.unit_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+          if (ex_i2c_enabled)
+          {
+            if (cfg.unit_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_oled.pin_sda = ex_i2c_sda; }
+            if (cfg.unit_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_oled.pin_scl = ex_i2c_scl; }
+            if (cfg.unit_oled.i2c_port < 0) { cfg.unit_oled.i2c_port = ex_i2c_port; }
+          }
+          if (cfg.unit_oled.pin_sda < GPIO_NUM_MAX
+           && cfg.unit_oled.pin_scl < GPIO_NUM_MAX
+           && cfg.unit_oled.i2c_port >= 0)
 #endif
-
-          M5UnitOLED dsp(cfg.unit_oled);
-          if (dsp.init()) {
-            addDisplay(dsp);
-            port_a_used = true;
+          {
+            M5UnitOLED dsp(cfg.unit_oled);
+            if (dsp.init()) {
+              addDisplay(dsp);
+              port_a_used = true;
+            }
           }
         }
 #endif
@@ -419,15 +436,22 @@ namespace m5
         if (cfg.external_display.unit_mini_oled)
         {
 #if defined (ESP_PLATFORM)
-          if (cfg.unit_mini_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
-          if (cfg.unit_mini_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
-          if (cfg.unit_mini_oled.i2c_port < 0) { cfg.unit_mini_oled.i2c_port = (int8_t)Ex_I2C.getPort(); }
+          if (ex_i2c_enabled)
+          {
+            if (cfg.unit_mini_oled.pin_sda >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_sda = ex_i2c_sda; }
+            if (cfg.unit_mini_oled.pin_scl >= GPIO_NUM_MAX) { cfg.unit_mini_oled.pin_scl = ex_i2c_scl; }
+            if (cfg.unit_mini_oled.i2c_port < 0) { cfg.unit_mini_oled.i2c_port = ex_i2c_port; }
+          }
+          if (cfg.unit_mini_oled.pin_sda < GPIO_NUM_MAX
+           && cfg.unit_mini_oled.pin_scl < GPIO_NUM_MAX
+           && cfg.unit_mini_oled.i2c_port >= 0)
 #endif
-
-          M5UnitMiniOLED dsp(cfg.unit_mini_oled);
-          if (dsp.init()) {
-            addDisplay(dsp);
-            port_a_used = true;
+          {
+            M5UnitMiniOLED dsp(cfg.unit_mini_oled);
+            if (dsp.init()) {
+              addDisplay(dsp);
+              port_a_used = true;
+            }
           }
         }
 #endif
@@ -436,15 +460,22 @@ namespace m5
         if (cfg.external_display.unit_glass)
         {
 #if defined (ESP_PLATFORM)
-          if (cfg.unit_glass.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
-          if (cfg.unit_glass.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
-          if (cfg.unit_glass.i2c_port < 0) { cfg.unit_glass.i2c_port = (int8_t)Ex_I2C.getPort(); }
+          if (ex_i2c_enabled)
+          {
+            if (cfg.unit_glass.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass.pin_sda = ex_i2c_sda; }
+            if (cfg.unit_glass.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass.pin_scl = ex_i2c_scl; }
+            if (cfg.unit_glass.i2c_port < 0) { cfg.unit_glass.i2c_port = ex_i2c_port; }
+          }
+          if (cfg.unit_glass.pin_sda < GPIO_NUM_MAX
+           && cfg.unit_glass.pin_scl < GPIO_NUM_MAX
+           && cfg.unit_glass.i2c_port >= 0)
 #endif
-
-          M5UnitGLASS dsp(cfg.unit_glass);
-          if (dsp.init()) {
-            addDisplay(dsp);
-            port_a_used = true;
+          {
+            M5UnitGLASS dsp(cfg.unit_glass);
+            if (dsp.init()) {
+              addDisplay(dsp);
+              port_a_used = true;
+            }
           }
         }
 #endif
@@ -453,15 +484,22 @@ namespace m5
         if (cfg.external_display.unit_glass2)
         {
 #if defined (ESP_PLATFORM)
-          if (cfg.unit_glass2.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
-          if (cfg.unit_glass2.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
-          if (cfg.unit_glass2.i2c_port < 0) { cfg.unit_glass2.i2c_port = (int8_t)Ex_I2C.getPort(); }
+          if (ex_i2c_enabled)
+          {
+            if (cfg.unit_glass2.pin_sda >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_sda = ex_i2c_sda; }
+            if (cfg.unit_glass2.pin_scl >= GPIO_NUM_MAX) { cfg.unit_glass2.pin_scl = ex_i2c_scl; }
+            if (cfg.unit_glass2.i2c_port < 0) { cfg.unit_glass2.i2c_port = ex_i2c_port; }
+          }
+          if (cfg.unit_glass2.pin_sda < GPIO_NUM_MAX
+           && cfg.unit_glass2.pin_scl < GPIO_NUM_MAX
+           && cfg.unit_glass2.i2c_port >= 0)
 #endif
-
-          M5UnitGLASS2 dsp(cfg.unit_glass2);
-          if (dsp.init()) {
-            addDisplay(dsp);
-            port_a_used = true;
+          {
+            M5UnitGLASS2 dsp(cfg.unit_glass2);
+            if (dsp.init()) {
+              addDisplay(dsp);
+              port_a_used = true;
+            }
           }
         }
 #endif
@@ -470,21 +508,28 @@ namespace m5
         if (cfg.external_display.unit_lcd)
         {
 #if defined (ESP_PLATFORM)
-          if (cfg.unit_lcd.pin_sda >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_sda = (uint8_t)Ex_I2C.getSDA(); }
-          if (cfg.unit_lcd.pin_scl >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_scl = (uint8_t)Ex_I2C.getSCL(); }
-          if (cfg.unit_lcd.i2c_port < 0) { cfg.unit_lcd.i2c_port = (int8_t)Ex_I2C.getPort(); }
+          if (ex_i2c_enabled)
+          {
+            if (cfg.unit_lcd.pin_sda >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_sda = ex_i2c_sda; }
+            if (cfg.unit_lcd.pin_scl >= GPIO_NUM_MAX) { cfg.unit_lcd.pin_scl = ex_i2c_scl; }
+            if (cfg.unit_lcd.i2c_port < 0) { cfg.unit_lcd.i2c_port = ex_i2c_port; }
+          }
+          if (cfg.unit_lcd.pin_sda < GPIO_NUM_MAX
+           && cfg.unit_lcd.pin_scl < GPIO_NUM_MAX
+           && cfg.unit_lcd.i2c_port >= 0)
 #endif
-
-          M5UnitLCD dsp(cfg.unit_lcd);
-          int retry = 8;
-          do {
-            m5gfx::delay(32);
-            if (dsp.init()) {
-              addDisplay(dsp);
-              port_a_used = true;
-              break;
-            }
-          } while (--retry);
+          {
+            M5UnitLCD dsp(cfg.unit_lcd);
+            int retry = 8;
+            do {
+              m5gfx::delay(32);
+              if (dsp.init()) {
+                addDisplay(dsp);
+                port_a_used = true;
+                break;
+              }
+            } while (--retry);
+          }
         }
 #endif
 
