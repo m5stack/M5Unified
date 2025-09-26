@@ -1,19 +1,19 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef __M5_PCF8563_CLASS_H__
-#define __M5_PCF8563_CLASS_H__
+#ifndef __M5_RX8130_CLASS_H__
+#define __M5_RX8130_CLASS_H__
 
 #include "RTC_Base.hpp"
 
 namespace m5
 {
-  class PCF8563_Class : public RTC_Base
+  class RX8130_Class : public RTC_Base
   {
   public:
-    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x51;
+    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x32;
 
-    PCF8563_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+    RX8130_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
     : RTC_Base ( i2c_addr, freq, i2c )
     {}
 
@@ -23,8 +23,6 @@ namespace m5
     bool setDateTime(const rtc_date_t* date, const rtc_time_t* time) override;
 
     /// Set timer IRQ
-    /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
-    /// @return the set number of seconds.
     int setAlarmIRQ(int afterSeconds);
 
     /// Set alarm by time

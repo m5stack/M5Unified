@@ -13,6 +13,7 @@
 #endif
 
 #include "rtc/PCF8563_Class.hpp"
+#include "rtc/RX8130_Class.hpp"
 
 namespace m5
 {
@@ -25,11 +26,22 @@ namespace m5
 
     bool result = false;
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (result == false && board == board_t::board_M5Tab5)
+    {
+      auto instance = new RX8130_Class( RX8130_Class::DEFAULT_ADDRESS, 400000, i2c );
+      result = instance->begin();
+      _rtc_instance.reset(instance);
+    }
+#endif
+
+    if (result == false)
     {
       auto instance = new PCF8563_Class( PCF8563_Class::DEFAULT_ADDRESS, 400000, i2c );
       result = instance->begin();
       _rtc_instance.reset(instance);
     }
+
     if (result == false)
     {
       _rtc_instance.reset();
@@ -42,45 +54,35 @@ namespace m5
     return _rtc_instance ? _rtc_instance->getVoltLow() : false;
   }
 
-  bool RTC_Class::getDateTime(rtc_datetime_t* datetime) const
+  bool RTC_Class::getDateTime(rtc_date_t* date, rtc_time_t* time) const
   {
-    return (_rtc_instance && datetime) ? _rtc_instance->getDateTime(datetime) : false;
-  }
-  
-  bool RTC_Class::getTime(rtc_time_t* time) const
-  {
-    return (_rtc_instance && time) ? _rtc_instance->getTime(time) : false;
+    return _rtc_instance ? _rtc_instance->getDateTime(date, time) : false;
   }
 
-  void RTC_Class::setTime(const rtc_time_t& time)
-  {
-    if (!_rtc_instance) { return; }
-    _rtc_instance->setTime(time);
-  }
-
-  bool RTC_Class::getDate(rtc_date_t* date) const
-  {
-    return (_rtc_instance && date) ? _rtc_instance->getDate(date) : false;
-  }
-
-  void RTC_Class::setDate(rtc_date_t date)
+  void RTC_Class::setDateTime(const rtc_date_t* date, const rtc_time_t* time)
   {
     if (!_rtc_instance) { return; }
 
-    std::uint8_t w = date.weekDay;
-    if (w > 6 && date.year >= 1900 && ((std::size_t)(date.month - 1)) < 12)
-    { /// weekDay auto adjust
-      int32_t year = date.year;
-      int32_t month = date.month;
-      int32_t day = date.date;
-      if (month < 3) {
-        year--;
-        month += 12;
+    rtc_date_t date_local;
+    if (date)
+    {
+      std::uint8_t w = date->weekDay;
+      if (w > 6 && date->year >= 1900 && ((std::size_t)(date->month - 1)) < 12)
+      { /// weekDay auto adjust
+        date_local = *date;
+        date = &date_local;
+        int32_t year = date_local.year;
+        int32_t month = date_local.month;
+        int32_t day = date_local.date;
+        if (month < 3) {
+          year--;
+          month += 12;
+        }
+        int32_t ydiv100 = year / 100;
+        date_local.weekDay = (year + (year >> 2) - ydiv100 + (ydiv100 >> 2) + (13 * month + 8) / 5 + day) % 7;
       }
-      int32_t ydiv100 = year / 100;
-      date.weekDay = (year + (year >> 2) - ydiv100 + (ydiv100 >> 2) + (13 * month + 8) / 5 + day) % 7;
     }
-    _rtc_instance->setDate(date);
+    _rtc_instance->setDateTime(date, time);
   }
 
   int RTC_Class::setAlarmIRQ(int afterSeconds)

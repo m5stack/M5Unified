@@ -36,70 +36,59 @@ namespace m5
     return readRegister8(0x02) & 0x80; // RTCC_VLSEC_MASK
   }
 
-  bool PCF8563_Class::getDateTime(rtc_datetime_t* datetime) const
+  bool PCF8563_Class::getDateTime(rtc_date_t* date, rtc_time_t* time) const
+  {
+    std::uint8_t buf[7] = { 0 };
+    int start_reg = (time != nullptr) ? 0x02 : 0x05;
+    int len = ((date != nullptr) ? 4 : 0)
+            + ((time != nullptr) ? 3 : 0);
+    if (!isEnabled() || len == 0 || !readRegister(start_reg, buf, len))
+    {
+      return false;
+    }
+
+    int idx = 0;
+    if (time)
+    {
+      time->seconds = bcd2ToByte(buf[idx++] & 0x7f);
+      time->minutes = bcd2ToByte(buf[idx++] & 0x7f);
+      time->hours   = bcd2ToByte(buf[idx++] & 0x3f);
+    }
+
+    if (date)
+    {
+      date->date    = bcd2ToByte(buf[idx++] & 0x3f);
+      date->weekDay = bcd2ToByte(buf[idx++] & 0x07);
+      date->month   = bcd2ToByte(buf[idx++] & 0x1f);
+      date->year    = bcd2ToByte(buf[idx] & 0xff)
+                    + ((0x80 & buf[idx - 1]) ? 1900 : 2000);
+    }
+    return true;
+  }
+
+  bool PCF8563_Class::setDateTime(const rtc_date_t* date, const rtc_time_t* time)
   {
     std::uint8_t buf[7] = { 0 };
 
-    if (!isEnabled() || !readRegister(0x02, buf, 7)) { return false; }
+    int idx = 0;
+    int reg_start = 0x05;
+    if (time)
+    {
+      reg_start = 0x02;
+      buf[idx++] = byteToBcd2(time->seconds);
+      buf[idx++] = byteToBcd2(time->minutes);
+      buf[idx++] = byteToBcd2(time->hours);
+    }
 
-    datetime->time.seconds = bcd2ToByte(buf[0] & 0x7f);
-    datetime->time.minutes = bcd2ToByte(buf[1] & 0x7f);
-    datetime->time.hours   = bcd2ToByte(buf[2] & 0x3f);
-
-    datetime->date.date    = bcd2ToByte(buf[3] & 0x3f);
-    datetime->date.weekDay = bcd2ToByte(buf[4] & 0x07);
-    datetime->date.month   = bcd2ToByte(buf[5] & 0x1f);
-    datetime->date.year    = bcd2ToByte(buf[6] & 0xff)
-                  + ((0x80 & buf[5]) ? 1900 : 2000);
-    return true;
-  }
-
-
-  bool PCF8563_Class::getTime(rtc_time_t* time) const
-  {
-    std::uint8_t buf[3] = { 0 };
-
-    if (!isEnabled() || !readRegister(0x02, buf, 3)) { return false; }
-
-    time->seconds = bcd2ToByte(buf[0] & 0x7f);
-    time->minutes = bcd2ToByte(buf[1] & 0x7f);
-    time->hours   = bcd2ToByte(buf[2] & 0x3f);
-    return true;
-  }
-
-  void PCF8563_Class::setTime(const rtc_time_t& time)
-  {
-    std::uint8_t buf[] =
-      { byteToBcd2(time.seconds)
-      , byteToBcd2(time.minutes)
-      , byteToBcd2(time.hours)
-      };
-    writeRegister(0x02, buf, sizeof(buf));
-  }
-
-  bool PCF8563_Class::getDate(rtc_date_t* date) const
-  {
-    std::uint8_t buf[4] = {0};
-
-    if (!readRegister(0x05, buf, 4)) { return false; }
-
-    date->date    = bcd2ToByte(buf[0] & 0x3f);
-    date->weekDay = bcd2ToByte(buf[1] & 0x07);
-    date->month   = bcd2ToByte(buf[2] & 0x1f);
-    date->year    = bcd2ToByte(buf[3] & 0xff)
-                  + ((0x80 & buf[2]) ? 1900 : 2000);
-    return true;
-  }
-
-  void PCF8563_Class::setDate(const rtc_date_t& date)
-  {
-    std::uint8_t buf[] =
-      { byteToBcd2(date.date)
-      , (uint8_t)(0x07u & date.weekDay)
-      , (std::uint8_t)(byteToBcd2(date.month) + (date.year < 2000 ? 0x80 : 0))
-      , byteToBcd2(date.year % 100)
-      };
-    writeRegister(0x05, buf, sizeof(buf));
+    if (date)
+    {
+      buf[idx++] = byteToBcd2(date->date);
+      buf[idx++] = (uint8_t)(0x07u & date->weekDay);
+      buf[idx++] = (std::uint8_t)(byteToBcd2(date->month) + (date->year < 2000 ? 0x80 : 0));
+      buf[idx++] = byteToBcd2(date->year % 100);
+    }
+    if (idx == 0) { return false; }
+    return writeRegister(reg_start, buf, idx);
   }
 
   int PCF8563_Class::setAlarmIRQ(int afterSeconds)

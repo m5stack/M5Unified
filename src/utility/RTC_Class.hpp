@@ -23,28 +23,29 @@ namespace m5
 
     bool isEnabled(void) const { return _rtc_instance.get() != nullptr; }
 
-    bool getVoltLow(void);
+    bool getDateTime(rtc_date_t* date, rtc_time_t* time) const;
+    bool getDateTime(rtc_datetime_t* datetime) const { return datetime ? getDateTime(&datetime->date, &datetime->time) : false; }
+    bool getDate(rtc_date_t* date) const { return getDateTime(date, nullptr); }
+    bool getTime(rtc_time_t* time) const { return getDateTime(nullptr, time); }
 
-    bool getTime(rtc_time_t* time) const;
-    bool getDate(rtc_date_t* date) const;
-    bool getDateTime(rtc_datetime_t* datetime) const;
-
-    void setTime(const rtc_time_t &time);
-    void setTime(const rtc_time_t* const time) { if (time) { setTime(*time); } }
-
-    void setDate(rtc_date_t date);
-    void setDate(const rtc_date_t* const date) { if (date) { setDate(*date); } }
-
-    void setDateTime(const rtc_datetime_t &datetime) { setDate(datetime.date); setTime(datetime.time); }
-    void setDateTime(const rtc_datetime_t* const datetime) { if (datetime) { setDateTime(*datetime); } }
-    void setDateTime(const tm* const datetime)
+    void setDateTime(const rtc_date_t* date, const rtc_time_t* time);
+    void setDateTime(const rtc_datetime_t* datetime) { setDateTime(&datetime->date, &datetime->time); };
+    void setDateTime(const rtc_datetime_t& datetime) { setDateTime(&datetime.date, &datetime.time); }
+    void setDateTime(const tm* datetime)
     {
       if (datetime)
       {
         rtc_datetime_t dt { *datetime };
-        setDateTime(dt);
+        setDateTime(&dt.date, &dt.time);
       }
     }
+
+    void setDate(const rtc_date_t* date) { setDateTime(date, nullptr); }
+    void setDate(const rtc_date_t& date) { setDateTime(&date, nullptr); }
+    void setTime(const rtc_time_t* time) { setDateTime(nullptr, time); }
+    void setTime(const rtc_time_t& time) { setDateTime(nullptr, &time); }
+    
+    bool getVoltLow(void);
 
     /// Set timer IRQ
     /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)

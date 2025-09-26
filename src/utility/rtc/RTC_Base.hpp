@@ -84,12 +84,8 @@ namespace m5
 
     virtual bool begin(I2C_Class* i2c = nullptr) = 0;
 
-    virtual bool getTime(rtc_time_t* time) const = 0;
-    virtual bool getDate(rtc_date_t* date) const = 0;
-    virtual bool getDateTime(rtc_datetime_t* datetime) const = 0;
-
-    virtual void setTime(const rtc_time_t &time) = 0;
-    virtual void setDate(const rtc_date_t &date) = 0;
+    virtual bool getDateTime(rtc_date_t* date = nullptr, rtc_time_t* time = nullptr) const = 0;
+    virtual bool setDateTime(const rtc_date_t* const date = nullptr, const rtc_time_t* const time = nullptr) = 0;
 
     /// Set timer IRQ
     /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
