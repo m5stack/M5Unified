@@ -59,6 +59,15 @@ namespace m5
     return _rtc_instance ? _rtc_instance->getDateTime(date, time) : false;
   }
 
+  void RTC_Class::setDateTime(const tm* datetime)
+  {
+    if (datetime)
+    {
+      rtc_datetime_t dt { *datetime };
+      setDateTime(&dt.date, &dt.time);
+    }
+  }
+
   void RTC_Class::setDateTime(const rtc_date_t* date, const rtc_time_t* time)
   {
     if (!_rtc_instance) { return; }
@@ -90,14 +99,19 @@ namespace m5
     return _rtc_instance ? _rtc_instance->setTimerIRQ(timer_msec) : 0;
   }
 
-  int RTC_Class::setAlarmIRQ(const rtc_time_t &time)
+  int RTC_Class::setAlarmIRQ(const tm* datetime)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(nullptr, &time) : -1;
+    if (datetime)
+    {
+      rtc_datetime_t dt { *datetime };
+      return setAlarmIRQ(&dt.date, &dt.time);
+    }
+    return -1;
   }
 
-  int RTC_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
+  int RTC_Class::setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(&date, &time) : -1;
+    return _rtc_instance ? _rtc_instance->setAlarmIRQ(date, time) : -1;
   }
 
   bool RTC_Class::getIRQstatus(void)

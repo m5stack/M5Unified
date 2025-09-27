@@ -26,11 +26,9 @@ namespace m5
       i2c->begin();
     }
 
-    bool res = true;
+    bool res = bitOn(0x1F, 0x30);
     res &= writeRegister8(0x30, 0x00);
     res &= writeRegister8(0x1E, 0x00);
-    res &= writeRegister8(0x1F, 0x00);
-    res &= writeRegister8(0x1D, 0x00);
 
     _init = res;
     return _init;
@@ -85,11 +83,6 @@ namespace m5
 
     if (!isEnabled() || idx == 0) { return false; }
     return writeRegister(reg_start, buf, idx);
-  }
-
-  bool RX8130_Class::getVoltLow(void)
-  {
-    return false;
   }
 
   std::uint32_t RX8130_Class::setTimerIRQ(std::uint32_t msec)
@@ -224,5 +217,12 @@ namespace m5
     if (isEnabled()) {
       bitOff(0x1E, 0x18);
     }
+  }
+
+  bool RX8130_Class::getVoltLow(void)
+  {
+    if (!isEnabled()) { return 0; }
+    // 0x80: VBLF
+    return readRegister8(0x1D) & 0x80;
   }
 }

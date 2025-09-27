@@ -29,17 +29,10 @@ namespace m5
     bool getDate(rtc_date_t* date) const { return getDateTime(date, nullptr); }
     bool getTime(rtc_time_t* time) const { return getDateTime(nullptr, time); }
 
+    void setDateTime(const tm* datetime);
     void setDateTime(const rtc_date_t* date, const rtc_time_t* time);
     void setDateTime(const rtc_datetime_t* datetime) { setDateTime(&datetime->date, &datetime->time); };
     void setDateTime(const rtc_datetime_t& datetime) { setDateTime(&datetime.date, &datetime.time); }
-    void setDateTime(const tm* datetime)
-    {
-      if (datetime)
-      {
-        rtc_datetime_t dt { *datetime };
-        setDateTime(&dt.date, &dt.time);
-      }
-    }
 
     void setDate(const rtc_date_t* date) { setDateTime(date, nullptr); }
     void setDate(const rtc_date_t& date) { setDateTime(&date, nullptr); }
@@ -59,8 +52,10 @@ namespace m5
     int setAlarmIRQ(int afterSeconds) { return setTimerIRQ(afterSeconds * 1000) / 1000; }
 
     /// Set alarm by time
-    int setAlarmIRQ(const rtc_time_t &time);
-    int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time);
+    int setAlarmIRQ(const tm* datetime);
+    int setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time);
+    int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time) { return setAlarmIRQ(&date, &time); }
+    int setAlarmIRQ(const rtc_time_t &time) { return setAlarmIRQ(nullptr, &time); }
 
     void setSystemTimeFromRtc(struct timezone* tz = nullptr);
 
