@@ -85,19 +85,19 @@ namespace m5
     _rtc_instance->setDateTime(date, time);
   }
 
-  int RTC_Class::setAlarmIRQ(int afterSeconds)
+  std::uint32_t RTC_Class::setTimerIRQ(std::uint32_t timer_msec)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(afterSeconds) : -1;
+    return _rtc_instance ? _rtc_instance->setTimerIRQ(timer_msec) : 0;
   }
 
   int RTC_Class::setAlarmIRQ(const rtc_time_t &time)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(time) : -1;
+    return _rtc_instance ? _rtc_instance->setAlarmIRQ(nullptr, &time) : -1;
   }
 
   int RTC_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(date, time) : -1;
+    return _rtc_instance ? _rtc_instance->setAlarmIRQ(&date, &time) : -1;
   }
 
   bool RTC_Class::getIRQstatus(void)

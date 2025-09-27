@@ -91,15 +91,16 @@ namespace m5
     return writeRegister(reg_start, buf, idx);
   }
 
-  int PCF8563_Class::setAlarmIRQ(int afterSeconds)
+  std::uint32_t PCF8563_Class::setTimerIRQ(std::uint32_t msec)
   {
     std::uint8_t reg_value = readRegister8(0x01) & ~0x0C;
 
+    std::uint32_t afterSeconds = msec / 1000;
     if (afterSeconds < 0)
     { // disable timer
       writeRegister8(0x01, reg_value & ~0x01);
       writeRegister8(0x0E, 0x03);
-      return -1;
+      return 0;
     }
 
     std::size_t div = 1;
@@ -120,73 +121,43 @@ namespace m5
     writeRegister8(0x0F, afterSeconds);
 
     writeRegister8(0x01, (reg_value | 0x01) & ~0x80);
-    return afterSeconds * div;
+    return afterSeconds * div * 1000;
   }
 
-  int PCF8563_Class::setAlarmIRQ(const rtc_time_t &time)
+  int PCF8563_Class::setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time)
   {
     union
     {
       std::uint32_t raw = ~0;
       std::uint8_t buf[4];
     };
+
     bool irq_enable = false;
+    if (time) {
+      if (time->minutes >= 0)
+      {
+        irq_enable = true;
+        buf[0] = byteToBcd2(time->minutes) & 0x7f;
+      }
 
-    if (time.minutes >= 0)
-    {
-      irq_enable = true;
-      buf[0] = byteToBcd2(time.minutes) & 0x7f;
+      if (time->hours >= 0)
+      {
+        irq_enable = true;
+        buf[1] = byteToBcd2(time->hours) & 0x3f;
+      }
     }
-
-    if (time.hours >= 0)
-    {
-      irq_enable = true;
-      buf[1] = byteToBcd2(time.hours) & 0x3f;
-    }
-
-    writeRegister(0x09, buf, 4);
-
-    if (irq_enable)
-    {
-      bitOn(0x01, 0x02);
-    } else {
-      bitOff(0x01, 0x02);
-    }
-
-    return irq_enable;
-  }
-
-  int PCF8563_Class::setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time)
-  {
-    union
-    {
-      std::uint32_t raw = ~0;
-      std::uint8_t buf[4];
-    };
-    bool irq_enable = false;
-
-    if (time.minutes >= 0)
-    {
-      irq_enable = true;
-      buf[0] = byteToBcd2(time.minutes) & 0x7f;
-    }
-
-    if (time.hours >= 0)
-    {
-      irq_enable = true;
-      buf[1] = byteToBcd2(time.hours) & 0x3f;
-    }
-
-    if (date.date >= 0)
-    {
-      irq_enable = true;
-      buf[2] = byteToBcd2(date.date) & 0x3f;
-    }
-
-    if (date.weekDay >= 0)
-    {
-      irq_enable = true;
-      buf[3] = byteToBcd2(date.weekDay) & 0x07;
+    if (date) {
+      if (date->date >= 0)
+      {
+        irq_enable = true;
+        buf[2] = byteToBcd2(date->date) & 0x3f;
+      }
+  
+      if (date->weekDay >= 0)
+      {
+        irq_enable = true;
+        buf[3] = byteToBcd2(date->weekDay) & 0x07;
+      }
     }
 
     writeRegister(0x09, buf, 4);

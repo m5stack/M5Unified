@@ -47,7 +47,7 @@ namespace m5
 
     /// weekDay 0:sun / 1:mon / 2:tue / 3:wed / 4:thu / 5:fri / 6:sat
     std::int8_t weekDay;
-  
+
     rtc_date_t(std::int16_t year_ = 2000, std::int8_t month_ = 1, std::int8_t date_ = -1, std::int8_t weekDay_ = -1)
     : year    { year_    }
     , month   { month_   }
@@ -88,13 +88,12 @@ namespace m5
     virtual bool setDateTime(const rtc_date_t* const date = nullptr, const rtc_time_t* const time = nullptr) = 0;
 
     /// Set timer IRQ
-    /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
-    /// @return the set number of seconds.
-    virtual int setAlarmIRQ(int afterSeconds) { return 0; };
+    /// @param milliseconds (0 == disable)
+    /// @return the set number of milliseconds. (0 == disable)
+    virtual std::uint32_t setTimerIRQ(std::uint32_t timer_msec) { return 0; };
 
     /// Set alarm by time
-    virtual int setAlarmIRQ(const rtc_time_t &time) {  return 0; };
-    virtual int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time) { return 0; };
+    virtual int setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time) { return 0; }
 
     virtual bool getIRQstatus(void) { return false; }
     virtual void clearIRQ(void) {};

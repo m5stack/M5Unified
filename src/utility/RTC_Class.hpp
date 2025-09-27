@@ -22,6 +22,7 @@ namespace m5
     bool init(I2C_Class* i2c = nullptr) { return begin(i2c); }
 
     bool isEnabled(void) const { return _rtc_instance.get() != nullptr; }
+    RTC_Base* getRtcInstancePtr(void) const { return _rtc_instance.get(); }
 
     bool getDateTime(rtc_date_t* date, rtc_time_t* time) const;
     bool getDateTime(rtc_datetime_t* datetime) const { return datetime ? getDateTime(&datetime->date, &datetime->time) : false; }
@@ -48,9 +49,14 @@ namespace m5
     bool getVoltLow(void);
 
     /// Set timer IRQ
+    /// @param timer_msec
+    /// @return the set number of msec. (0 == disable)
+    std::uint32_t setTimerIRQ(std::uint32_t timer_msec);
+
+    // deprecated
     /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
     /// @return the set number of seconds.
-    int setAlarmIRQ(int afterSeconds);
+    int setAlarmIRQ(int afterSeconds) { return setTimerIRQ(afterSeconds * 1000) / 1000; }
 
     /// Set alarm by time
     int setAlarmIRQ(const rtc_time_t &time);
@@ -82,7 +88,6 @@ namespace m5
       getDateTime(&res);
       return res;
     }
-
   };
 }
 

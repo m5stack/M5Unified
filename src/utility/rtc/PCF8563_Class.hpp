@@ -22,14 +22,13 @@ namespace m5
     bool getDateTime(rtc_date_t* date, rtc_time_t* time) const override;
     bool setDateTime(const rtc_date_t* date, const rtc_time_t* time) override;
 
-    /// Set timer IRQ
-    /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
-    /// @return the set number of seconds.
-    int setAlarmIRQ(int afterSeconds);
+    // /// Set timer IRQ
+    // /// @param timer_msec 1 - 15,300,000. If 256,000 or more, 1-minute cycle.  (max 255 minute. / 0 == disable) 
+    // /// @return the set number of milliseconds. (0 == disable)
+    std::uint32_t setTimerIRQ(std::uint32_t timer_msec) override;
 
     /// Set alarm by time
-    int setAlarmIRQ(const rtc_time_t &time) override;
-    int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time) override;
+    int setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time) override;
 
     bool getIRQstatus(void) override;
     void clearIRQ(void) override;
