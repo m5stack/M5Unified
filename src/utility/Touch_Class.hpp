@@ -37,7 +37,7 @@ namespace m5
   class Touch_Class
   {
   public:
-    static constexpr std::size_t TOUCH_MAX_POINTS = 3;
+    static constexpr std::size_t TOUCH_MAX_POINTS = 5;
     static constexpr std::size_t TOUCH_MIN_UPDATE_MSEC = 4;
 
     struct point_t

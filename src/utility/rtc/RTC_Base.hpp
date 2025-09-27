@@ -1,12 +1,10 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef __M5_RTC8563_CLASS_H__
-#define __M5_RTC8563_CLASS_H__
+#ifndef __M5_RTC_BASE_H__
+#define __M5_RTC_BASE_H__
 
-#include "m5unified_common.h"
-
-#include "I2C_Class.hpp"
+#include "../I2C_Class.hpp"
 
 #if __has_include(<sys/time.h>)
 #include <sys/time.h>
@@ -49,7 +47,7 @@ namespace m5
 
     /// weekDay 0:sun / 1:mon / 2:tue / 3:wed / 4:thu / 5:fri / 6:sat
     std::int8_t weekDay;
-  
+
     rtc_date_t(std::int16_t year_ = 2000, std::int8_t month_ = 1, std::int8_t date_ = -1, std::int8_t weekDay_ = -1)
     : year    { year_    }
     , month   { month_   }
@@ -77,76 +75,31 @@ namespace m5
     void set_tm(tm* t) { if (t) set_tm(*t); }
   };
 
-  class RTC8563_Class : public I2C_Device
+  class RTC_Base : public I2C_Device
   {
   public:
-    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x51;
-
-    RTC8563_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+    RTC_Base(std::uint8_t i2c_addr, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
     : I2C_Device ( i2c_addr, freq, i2c )
     {}
 
-    bool begin(I2C_Class* i2c = nullptr);
+    virtual bool begin(I2C_Class* i2c = nullptr) = 0;
 
-    bool getVoltLow(void);
-
-    bool getTime(rtc_time_t* time) const;
-    bool getDate(rtc_date_t* date) const;
-    bool getDateTime(rtc_datetime_t* datetime) const;
-
-    void setTime(const rtc_time_t &time);
-    void setTime(const rtc_time_t* const time) { if (time) { setTime(*time); } }
-
-    void setDate(const rtc_date_t &date);
-    void setDate(const rtc_date_t* const date) { if (date) { setDate(*date); } }
-
-    void setDateTime(const rtc_datetime_t &datetime) { setDate(datetime.date); setTime(datetime.time); }
-    void setDateTime(const rtc_datetime_t* const datetime) { if (datetime) { setDateTime(*datetime); } }
-    void setDateTime(const tm* const datetime)
-    {
-      if (datetime)
-      {
-        rtc_datetime_t dt { *datetime };
-        setDateTime(dt);
-      }
-    }
+    virtual bool getDateTime(rtc_date_t* date = nullptr, rtc_time_t* time = nullptr) const = 0;
+    virtual bool setDateTime(const rtc_date_t* const date = nullptr, const rtc_time_t* const time = nullptr) = 0;
 
     /// Set timer IRQ
-    /// @param afterSeconds 1 - 15,300. If 256 or more, 1-minute cycle.  (max 255 minute.)
-    /// @return the set number of seconds.
-    int setAlarmIRQ(int afterSeconds);
+    /// @param milliseconds (0 == disable)
+    /// @return the set number of milliseconds. (0 == disable)
+    virtual std::uint32_t setTimerIRQ(std::uint32_t timer_msec) { return 0; };
 
     /// Set alarm by time
-    int setAlarmIRQ(const rtc_time_t &time);
-    int setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time);
+    virtual int setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time) { return 0; }
 
-    void setSystemTimeFromRtc(struct timezone* tz = nullptr);
+    virtual bool getIRQstatus(void) { return false; }
+    virtual void clearIRQ(void) {};
+    virtual void disableIRQ(void) {};
 
-    bool getIRQstatus(void);
-    void clearIRQ(void);
-    void disableIRQ(void);
-
-    rtc_time_t getTime(void) const
-    {
-      rtc_time_t time;
-      getTime(&time);
-      return time;
-    }
-
-    rtc_date_t getDate(void) const
-    {
-      rtc_date_t date;
-      getDate(&date);
-      return date;
-    }
-
-    rtc_datetime_t getDateTime(void) const
-    {
-      rtc_datetime_t res;
-      getDateTime(&res);
-      return res;
-    }
-
+    virtual bool getVoltLow(void) { return false; }
   };
 }
 

@@ -7,7 +7,9 @@
  #define NTP_SERVER2   "1.pool.ntp.org"
  #define NTP_SERVER3   "2.pool.ntp.org"
 
+#if __has_include(<WiFi.h>)
  #include <WiFi.h>
+#endif
 
 // Different versions of the framework have different SNTP header file names and availability.
  #if __has_include (<esp_sntp.h>)
@@ -56,8 +58,15 @@ void setup(void)
 
 /// setup RTC ( NTP auto setting )
   configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
-#ifdef WiFi_h
+#if __has_include(<WiFi.h>)
   M5.Log.print("WiFi:");
+
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+  if (M5.getBoard() == m5::board_t::board_M5Tab5) {
+    WiFi.setPins(GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8, GPIO_NUM_15);
+  }
+#endif
+
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
 
   for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)

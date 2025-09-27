@@ -14,7 +14,7 @@
 #include "power/INA226_Class.hpp"
 #include "power/AW32001_Class.hpp"
 #include "power/BQ27220_Class.hpp"
-#include "RTC8563_Class.hpp"
+#include "RTC_Class.hpp"
 
 #if __has_include (<sdkconfig.h>)
 #include <sdkconfig.h>

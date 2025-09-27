@@ -5,14 +5,8 @@
 
 #include <M5Unified.h>
 
-#if __has_include(<esp_log.h>)
-#include <esp_log.h>
-#endif
-
 #include <algorithm>
 #include <math.h>
-
-#define TAG "BQ27220"
 
 namespace m5
 {
@@ -42,10 +36,9 @@ namespace m5
     if (_init) {
       uint8_t read_data[4] = {0};
       read_MuxAddrdata(0x00, 0x0001, read_data, 4);
-      printf("BQ27220 W:0x00->0x0001 R:0x%02X %02X %02X %02X\r\n", read_data[0], read_data[1], read_data[2],
-             read_data[3]);
+  // printf("BQ27220 W:0x00->0x0001 R:0x%02X %02X %02X %02X\r\n", read_data[0], read_data[1], read_data[2], read_data[3]);
 
-      vTaskDelay(200 / portTICK_PERIOD_MS);
+      M5.delay(200);
 
       //  exit_sealed
       read_MuxAddrdata(0x00, 0x8000);

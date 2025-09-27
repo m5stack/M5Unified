@@ -62,21 +62,26 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 
 ## Supported devices (ESP32-S3)
  - M5Stack CoreS3 / CoreS3SE
- - M5ATOMS3 / S3Lite / S3U / S3R
- - M5ATOMS3R / S3RExt / S3RCam
- - M5STAMPS3
+ - M5ATOMS3 / S3Lite / S3U
+ - M5ATOMS3R / S3RExt / S3RCam / ECHO S3R
+ - M5STAMPS3 (S3 / S3A)
  - M5Dial
  - M5DinMeter
  - M5Capsule
- - M5Cardputer
+ - M5Cardputer / M5CardputerADV
  - M5VAMeter
- - [M5PaperS3](https://github.com/m5stack/M5GFX/blob/master/docs/M5PaperS3.md)
+ - M5PaperS3
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
 
 ## Supported devices (ESP32-C6)
  - M5NanoC6
+ - M5UnitC6L
+ - ArduinoNessoN1
+
+## Supported devices (ESP32-P4)
+ - M5Tab5
 
 ## Supported external displays and video adapters
  - Unit LCD

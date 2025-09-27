@@ -1,9 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#include "Power_Class.hpp"
-
 #include "../M5Unified.hpp"
+#include "Power_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
 
@@ -110,12 +109,35 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 
+    // PI4IO E0
+    //  P0 (UnitC6L + NessoN1:BTN1)
+    //  P1 (UnitC6L:NC / NessoN1:BTN2)
+    //  P2-P5 NC
+    //  P5 LNA Enable
+    //  P6 RF Switch
+    //  P7 LoRa Reset
+    // for LoraC6 internal IOEXP
+    static constexpr const uint8_t reg_data_array_for_lorac6[] = {
+      0x03, 0b11100000,   // PI4IO_REG_IO_DIR
+      0x05, 0b10000000,   // PI4IO_REG_OUT_SET
+      0x07, 0b00011100,   // PI4IO_REG_OUT_H_IM
+      0x0D, 0b11000011,   // PI4IO_REG_PULL_SEL
+      0x0B, 0b11000011,   // PI4IO_REG_PULL_EN
+      0x09, 0b00000011,   // PI4IO_REG_IN_DEF_STA
+      0x11, 0b11111100,   // PI4IO_REG_INT_MASK
+    };
+
     switch (M5.getBoard())
     {
     default:
       break;
 
+    case board_t::board_M5UnitC6L:
+      M5.getIOExpander(0).writeRegister8Array(reg_data_array_for_lorac6, sizeof(reg_data_array_for_lorac6));
+      break;
+
     case board_t::board_ArduinoNessoN1:
+      M5.getIOExpander(0).writeRegister8Array(reg_data_array_for_lorac6, sizeof(reg_data_array_for_lorac6));
       _pmic = pmic_t::pmic_aw32001;
       Aw32001.begin();
       Aw32001.setBatteryCharge(true);
@@ -177,6 +199,7 @@ namespace m5
 
     case board_t::board_M5DinMeter:
     case board_t::board_M5Cardputer:
+    case board_t::board_M5CardputerADV:
       _batAdcCh = ADC1_GPIO10_CHANNEL;
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
