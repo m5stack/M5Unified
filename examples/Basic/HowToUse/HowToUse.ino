@@ -327,6 +327,9 @@ void setup(void)
   case m5::board_t::board_M5NanoC6:
     name = "NanoC6";
     break;
+  case m5::board_t::board_M5UnitC6L:
+    name = "UnitC6L";
+    break;
   case m5::board_t::board_ArduinoNessoN1:
     name = "NessoN1";
     break;

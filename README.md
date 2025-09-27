@@ -77,7 +77,11 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 
 ## Supported devices (ESP32-C6)
  - M5NanoC6
+ - M5UnitC6L
  - ArduinoNessoN1
+
+## Supported devices (ESP32-P4)
+ - M5Tab5
 
 ## Supported external displays and video adapters
  - Unit LCD
