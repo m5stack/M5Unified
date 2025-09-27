@@ -106,7 +106,7 @@ namespace m5
   bool IP5306_Class::isCharging(void)
   {
     std::uint8_t val = 0;
-    return (readRegister(0x71, &val, 1)) && (val & 0x0C);
+    return (readRegister(REG_READ0, &val, 1)) && (val & 0x08);
   }
 
   bool IP5306_Class::setPowerBoostKeepOn(bool en) {
