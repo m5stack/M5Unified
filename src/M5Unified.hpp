@@ -71,6 +71,11 @@ namespace m5
 {
   using touch_detail_t = Touch_Class::touch_detail_t;
 
+  // RTC8563_Class has been discontinued and replaced with RTC_Class.
+  // This is a temporary measure for derived libraries. (e.g.M5DinMeter)
+  // deprecated but kept for backward compatibility.
+  using RTC8563_Class = RTC_Class;
+
   class M5Unified
   {
   public:
