@@ -95,8 +95,8 @@ namespace m5
   {
     std::uint8_t reg_value = readRegister8(0x01) & ~0x0C;
 
-    std::uint32_t afterSeconds = msec / 1000;
-    if (afterSeconds < 0)
+    std::uint32_t afterSeconds = (msec + 500) / 1000;
+    if (afterSeconds <= 0)
     { // disable timer
       writeRegister8(0x01, reg_value & ~0x01);
       writeRegister8(0x0E, 0x03);
