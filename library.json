@@ -13,10 +13,10 @@
   "dependencies": [
     {
       "name": "M5GFX",
-      "version": ">=0.2.14"
+      "version": ">=0.2.15"
     }
   ],
-  "version": "0.2.9",
+  "version": "0.2.10",
   "frameworks": ["arduino", "espidf", "*"],
   "platforms": ["espressif32", "native"],
   "headers": "M5Unified.h"
