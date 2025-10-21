@@ -61,6 +61,7 @@ namespace m5
 #include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
 #include "utility/Log_Class.hpp"
+#include "utility/LED_Class.hpp"
 #include "utility/IMU_Class.hpp"
 #include "utility/IOExpander_Base.hpp"
 
@@ -219,6 +220,9 @@ namespace m5
     Power_Class Power;
     RTC_Class Rtc;
     Touch_Class Touch;
+    Speaker_Class Speaker;
+    Mic_Class Mic;
+    LED_Class Led;
 
 /*
   /// List of available buttons:
@@ -243,9 +247,6 @@ namespace m5
     /// for external I2C device (Port.A)
     I2C_Class& Ex_I2C = m5::Ex_I2C;
 
-    Speaker_Class Speaker;
-
-    Mic_Class Mic;
 
     static int8_t getPin(pin_name_t name) { return _get_pin_table[name]; }
 
@@ -347,6 +348,7 @@ namespace m5
       _board = board;
       _setup_pinmap(board);
       _setup_i2c(board);
+      _setup_led(board);
       if (res && getDisplayCount() == 0) {
         addDisplay(Display);
       }
@@ -622,6 +624,7 @@ namespace m5
 
     board_t _check_boardtype(board_t);
     void _setup_i2c(board_t);
+    void _setup_led(board_t);
 
     static void _setup_pinmap(board_t);
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);

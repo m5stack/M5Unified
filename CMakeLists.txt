@@ -5,6 +5,7 @@ file(GLOB SRCS
      src/*.cpp
      src/utility/*.cpp
      src/utility/imu/*.cpp
+     src/utility/led/*.cpp
      src/utility/power/*.cpp
      src/utility/rtc/*.cpp
      )
