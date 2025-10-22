@@ -2,8 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "LED_PowerHub.hpp"
-#include "esp_log.h"
-#include "Arduino.h"
 
 namespace m5
 {
