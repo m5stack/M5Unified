@@ -12,6 +12,8 @@
 
 #endif
 
+#include "rtc/RTC_Base.hpp"
+#include "rtc/RTC_PowerHub_Class.hpp"
 #include "rtc/PCF8563_Class.hpp"
 #include "rtc/RX8130_Class.hpp"
 
@@ -37,7 +39,21 @@ namespace m5
 
     if (result == false)
     {
-      auto instance = new PCF8563_Class( PCF8563_Class::DEFAULT_ADDRESS, 400000, i2c );
+    RTC_Base* instance = nullptr;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      switch (M5.getBoard())
+        {
+          default:
+            break;
+
+          case board_t::board_M5PowerHub:
+            instance = new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000);
+            break;
+        }
+#endif
+      if (instance ==nullptr ){
+        instance = new PCF8563_Class( PCF8563_Class::DEFAULT_ADDRESS, 400000);
+      }
       result = instance->begin();
       _rtc_instance.reset(instance);
     }
