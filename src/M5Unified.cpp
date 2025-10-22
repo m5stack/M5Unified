@@ -1441,11 +1441,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         led_strip->setConfig(ledcfg);
         Led.setLedInstance(led_strip);
       }
-    }else{
-        M5.Ex_I2C.begin();
-        auto led_powerhub = std::make_shared<m5::LED_PowerHub>();
-        led_powerhub->setBus(&M5.Ex_I2C);
-        Led.setLedInstance(led_powerhub);
+    } else {
+      auto led_powerhub = std::make_shared<m5::LED_PowerHub>();
+      Led.setLedInstance(led_powerhub);
     }
   }
 

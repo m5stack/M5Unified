@@ -19,8 +19,6 @@ namespace m5
     LED_PowerHub(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
       : I2C_Device(i2c_addr, freq, i2c) {}
 
-    void setBus(I2C_Class* bus) { _bus = bus; }
-
     bool begin(void) override;
     led_type_t getLedType(size_t index) const override { return led_type_t::led_type_fullcolor; }
     size_t getCount(void) const override { return 8; }
@@ -29,7 +27,6 @@ namespace m5
     void display(void) override;
 
   private:
-    I2C_Class* _bus;
     std::vector<m5gfx::rgb888_t> _rgb_buffer;
     uint8_t _brightness = 63;
   };
