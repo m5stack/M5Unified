@@ -31,8 +31,8 @@
 
 #endif
 
-#include "utility/led/LED_Strip.hpp"
-#include "utility/led/LED_PowerHub.hpp"
+#include "utility/led/LED_Strip_Class.hpp"
+#include "utility/led/LED_PowerHub_Class.hpp"
 
 #endif
 
@@ -1433,7 +1433,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           led_count = 1;
           break;
         }
-        auto led_strip = std::make_shared<m5::LED_Strip>();
+        auto led_strip = std::make_shared<m5::LED_Strip_Class>();
         auto ledcfg = led_strip->getConfig();
         ledcfg.led_count = led_count;
         ledcfg.byte_per_led = byte_per_led;
@@ -1442,7 +1442,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         Led.setLedInstance(led_strip);
       }
     } else {
-      auto led_powerhub = std::make_shared<m5::LED_PowerHub>();
+      auto led_powerhub = std::make_shared<m5::LED_PowerHub_Class>();
       Led.setLedInstance(led_powerhub);
     }
   }

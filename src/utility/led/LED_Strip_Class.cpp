@@ -1,7 +1,7 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#include "LED_Strip.hpp"
+#include "LED_Strip_Class.hpp"
 
 #if M5UNIFIED_RMT_VERSION == 2
 
@@ -196,7 +196,7 @@ namespace m5
 
 //----------------------------------------------------------------------------
 
-  bool LED_Strip::begin(void)
+  bool LED_Strip_Class::begin(void)
   {
     if (!_bus)
     {
@@ -212,7 +212,7 @@ namespace m5
     return true;
   }
 
-  void LED_Strip::setColors(const m5gfx::rgb888_t* values, size_t index, size_t length)
+  void LED_Strip_Class::setColors(const m5gfx::rgb888_t* values, size_t index, size_t length)
   {
     if (index + length > _config.led_count)
     {
@@ -220,11 +220,11 @@ namespace m5
     }
     std::copy(values, values + length, _rgb_buffer.begin() + index);
   }
-  void LED_Strip::setBrightness(const uint8_t brightness)
+  void LED_Strip_Class::setBrightness(const uint8_t brightness)
   {
     _brightness = brightness;
   }
-  void LED_Strip::display(void)
+  void LED_Strip_Class::display(void)
   {
     int g_idx = 0;
     int b_idx = 1;

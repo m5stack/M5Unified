@@ -1,8 +1,8 @@
 // Copyright (c) M5Stack. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef M5_LED_RGB_H__
-#define M5_LED_RGB_H__
+#ifndef M5_LED_STRIP_CLASS_H__
+#define M5_LED_STRIP_CLASS_H__
 
 #include "LED_Base.hpp"
 
@@ -33,10 +33,10 @@ namespace m5
 
 //----------------------------------------------------------------------------
 
-  class LED_Strip : public LED_Base
+  class LED_Strip_Class : public LED_Base
   {
   public:
-    LED_Strip() {}
+    LED_Strip_Class() {}
 
     struct config_t {
       enum color_order_t {
