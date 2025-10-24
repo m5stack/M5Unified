@@ -126,11 +126,11 @@ namespace m5
     if (_config.pin_data < 0) {
       return false;
     }
+#if M5UNIFIED_RMT_VERSION == 2
     if (_led_encoder && _rmt_ch_handle) {
       return true;
     }
 
-#if M5UNIFIED_RMT_VERSION == 2
     rmt_tx_channel_config_t rmt_tx;
     memset(&rmt_tx, 0, sizeof(rmt_tx));
     rmt_tx.resolution_hz = _config.frequency;
