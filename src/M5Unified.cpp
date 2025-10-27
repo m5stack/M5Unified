@@ -1412,39 +1412,40 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   }
   void M5Unified::_setup_led(board_t board)
   {
-    if (board != board_t::board_M5PowerHub){
-      auto pin_rgb_led = M5.getPin(m5::pin_name_t::rgb_led);
-      if (pin_rgb_led >= 0)
-      {
-        auto busled = std::make_shared<m5::LedBus_RMT>();
-        auto buscfg = busled->getConfig();
-        buscfg.pin_data = pin_rgb_led;
-        busled->setConfig(buscfg);
-
-        int led_count = 1;
-        int byte_per_led = 3;
-        switch (board)
-        {
-        case board_t::board_M5AtomMatrix:
-          led_count = 25;
-          break;
-
-        default:
-          led_count = 1;
-          break;
-        }
-        auto led_strip = std::make_shared<m5::LED_Strip_Class>();
-        auto ledcfg = led_strip->getConfig();
-        ledcfg.led_count = led_count;
-        ledcfg.byte_per_led = byte_per_led;
-        led_strip->setBus(busled);
-        led_strip->setConfig(ledcfg);
-        Led.setLedInstance(led_strip);
-      }
-    } else {
-      auto led_powerhub = std::make_shared<m5::LED_PowerHub_Class>();
-      Led.setLedInstance(led_powerhub);
+#if !defined (M5UNIFIED_PC_BUILD)
+    int led_count = 1;
+    int byte_per_led = 3;
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5PowerHub:
+      Led.setLedInstance(std::make_shared<m5::LED_PowerHub_Class>());
+      return;
+#else
+    case board_t::board_M5AtomMatrix:
+      led_count = 25;
+      break;
+#endif
+    default:
+      break;
     }
+
+    auto pin_rgb_led = M5.getPin(m5::pin_name_t::rgb_led);
+    if (pin_rgb_led >= 0)
+    {
+      auto busled = std::make_shared<m5::LedBus_RMT>();
+      auto buscfg = busled->getConfig();
+      buscfg.pin_data = pin_rgb_led;
+      busled->setConfig(buscfg);
+      auto led_strip = std::make_shared<m5::LED_Strip_Class>();
+      auto ledcfg = led_strip->getConfig();
+      ledcfg.led_count = led_count;
+      ledcfg.byte_per_led = byte_per_led;
+      led_strip->setBus(busled);
+      led_strip->setConfig(ledcfg);
+      Led.setLedInstance(led_strip);
+    }
+#endif
   }
 
   void M5Unified::_begin(const config_t& cfg)

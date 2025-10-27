@@ -3,6 +3,8 @@
 
 #include "LED_PowerHub_Class.hpp"
 
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
 namespace m5
 {
   constexpr size_t led_count = 8;
@@ -49,3 +51,5 @@ namespace m5
     writeRegister(0x60, send_buffer.data(), send_buffer.size());
   }
 }
+
+#endif
