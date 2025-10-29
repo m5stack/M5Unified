@@ -1368,6 +1368,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub:
         M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x06, enable, i2c_freq);
+        break;
 #endif
       default:
         return;

@@ -19,7 +19,7 @@ namespace m5
     return false;
   }
 
-  void LED_PowerHub_Class::setColors(const m5gfx::rgb888_t* values, size_t index, size_t length)
+  void LED_PowerHub_Class::setColors(const RGBColor* values, size_t index, size_t length)
   {
     if (index + length > led_count) {
       length = led_count - index;

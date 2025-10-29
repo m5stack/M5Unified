@@ -24,6 +24,7 @@
  #include <driver/rmt_types.h>
  #include <driver/rmt_tx.h>
 #elif M5UNIFIED_RMT_VERSION == 1
+ #include <driver/rmt.h>
  #include <soc/rmt_struct.h>
 #endif
 
@@ -62,13 +63,14 @@ namespace m5
     bool begin(void) override;
     led_type_t getLedType(size_t index) const override { return led_type_t::led_type_fullcolor; }
     size_t getCount(void) const override { return _config.led_count; }
-    void setColors(const m5gfx::rgb888_t* values, size_t index, size_t length) override;
+    void setColors(const RGBColor* values, size_t index, size_t length) override;
     void setBrightness(const uint8_t brightness) override;
     void display(void) override;
+    RGBColor* getBuffer(void) override { return _rgb_buffer.data(); }
 
   private:
     std::shared_ptr<LedBus_Base> _bus;
-    std::vector<m5gfx::rgb888_t> _rgb_buffer;
+    std::vector<RGBColor> _rgb_buffer;
     std::vector<uint8_t> _send_buffer;
     config_t _config;
     uint8_t _brightness = 63;

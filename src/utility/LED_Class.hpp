@@ -18,24 +18,31 @@ namespace m5
     void display(void);
 
     size_t getCount(void) const;
+    RGBColor* getBuffer(void);
+
     void setBrightness(uint8_t brightness);
 
-    void setAllColor(const m5gfx::rgb888_t& rgb888);
-    void setAllColor(uint8_t red, uint8_t green, uint8_t blue) { setAllColor((m5gfx::rgb888_t){ red, green, blue }); }
-    void setAllColor(uint32_t rgb888) { setAllColor((m5gfx::rgb888_t){ rgb888 }); }
-    void setAllColor(uint16_t rgb565) { setAllColor(m5gfx::convert_to_rgb888(rgb565)); }
-    void setAllColor(int rgb565) { setAllColor(m5gfx::convert_to_rgb888(rgb565)); }
-    void setAllColor(uint8_t rgb332) { setAllColor(m5gfx::convert_to_rgb888(rgb332)); }
+    void setAutoDisplay(bool enable) { _auto_display = enable; }
 
-    void setColor(size_t index, const m5gfx::rgb888_t& rgb888);
-    void setColor(size_t index, uint8_t red, uint8_t green, uint8_t blue) { setColor(index, (m5gfx::rgb888_t){ red, green, blue }); }
-    void setColor(size_t index, uint32_t rgb888) { setColor(index, (m5gfx::rgb888_t){ rgb888 }); }
-    void setColor(size_t index, uint16_t rgb565) { setColor(index, m5gfx::convert_to_rgb888(rgb565)); }
-    void setColor(size_t index, int rgb565) { setColor(index, m5gfx::convert_to_rgb888(rgb565)); }
-    void setColor(size_t index, uint8_t rgb332) { setColor(index, m5gfx::convert_to_rgb888(rgb332)); }
+    void setAllColor(const RGBColor& color);
+    void setAllColor(uint8_t red, uint8_t green, uint8_t blue) { setAllColor((RGBColor){ red, green, blue }); }
 
-    void setLedColors(const m5gfx::rgb888_t* values, size_t index, size_t length);
-    
+    template <typename T>
+    void setAllColor(T c) { const RGBColor color = m5gfx::convert_to_bgr888(c); setAllColor(color); }
+
+    void setColor(size_t index, const RGBColor& color);
+    void setColor(size_t index, uint8_t red, uint8_t green, uint8_t blue) { setColor(index, (RGBColor){ red, green, blue }); }
+
+    template <typename T>
+    void setColor(size_t index, T c) { const RGBColor color = m5gfx::convert_to_bgr888(c); setColor(index, color); }
+
+    template <typename T>
+    void setColors(const T* values, size_t index = 0, size_t length = INT32_MAX)
+    {
+      auto pc = create_pc_fast(values);
+      _set_colors(index, length, &pc);
+    }
+
     LED_Base::led_type_t getLedType(size_t index) const;
     bool isEnabled(void) const { return _led_instance.get() != nullptr; }
     LED_Base* getLedInstancePtr(void) const { return _led_instance.get(); }
@@ -45,6 +52,32 @@ namespace m5
     // instance holder
     std::shared_ptr<LED_Base> _led_instance;
     bool _initialized = false;
+    bool _auto_display = true;
+    bool _swapBytes = false;
+    void _set_colors(size_t index, size_t length, lgfx::pixelcopy_t* pc);
+
+    template<typename T>
+    lgfx::pixelcopy_t create_pc_fast(const T *data)
+    {
+      lgfx::pixelcopy_t pc(data, RGBColor::depth, lgfx::get_depth<T>::value, false);
+      pc.fp_copy = lgfx::pixelcopy_t::copy_rgb_fast<RGBColor, T>;
+      return pc;
+    }
+    lgfx::pixelcopy_t create_pc_fast(const uint8_t*  data) { return create_pc_fast(reinterpret_cast<const lgfx::rgb332_t*>(data)); }
+    lgfx::pixelcopy_t create_pc_fast(const uint16_t* data) { return create_pc_fast(data, _swapBytes); }
+    lgfx::pixelcopy_t create_pc_fast(const void*     data) { return create_pc_fast(data, _swapBytes); }
+    lgfx::pixelcopy_t create_pc_fast(const uint16_t* data, bool swap)
+    {
+      return swap
+           ? create_pc_fast(reinterpret_cast<const lgfx::rgb565_t* >(data))
+           : create_pc_fast(reinterpret_cast<const lgfx::swap565_t*>(data));
+    }
+    lgfx::pixelcopy_t create_pc_fast(const void *data, bool swap)
+    {
+      return swap
+           ? create_pc_fast(reinterpret_cast<const lgfx::rgb888_t*>(data))
+           : create_pc_fast(reinterpret_cast<const lgfx::bgr888_t*>(data));
+    }
   };
 }
 

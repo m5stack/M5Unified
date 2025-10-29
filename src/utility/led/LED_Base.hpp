@@ -24,9 +24,10 @@ namespace m5
     virtual bool begin(void) = 0;
     virtual led_type_t getLedType(size_t index) const { return led_type_unknown; }
     virtual size_t getCount(void) const = 0;
-    virtual void setColors(const m5gfx::rgb888_t* colors, size_t index, size_t length) = 0;
+    virtual void setColors(const RGBColor* colors, size_t index, size_t length) = 0;
     virtual void setBrightness(const uint8_t brightness) = 0;
     virtual void display(void) = 0;
+    virtual RGBColor* getBuffer(void) { return nullptr; }
   };
 }
 

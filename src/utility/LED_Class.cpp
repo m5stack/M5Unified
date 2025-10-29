@@ -32,39 +32,62 @@ namespace m5
     return count;
   }
 
+  RGBColor* LED_Class::getBuffer(void)
+  {
+    if (!begin()) { return nullptr; }
+    return _led_instance->getBuffer();
+  }
+
   void LED_Class::setBrightness(uint8_t brightness)
   {
-    if (begin())
-    {
-      _led_instance->setBrightness(brightness);
-    }
+    if (!begin()) { return; }
+
+    _led_instance->setBrightness(brightness);
+    if (_auto_display) { _led_instance->display(); }
   }
 
-  void LED_Class::setAllColor(const m5gfx::rgb888_t& rgb888)
+  void LED_Class::setAllColor(const RGBColor& rgb888)
   {
-    if (begin())
+    if (!begin()) { return; }
+
+    auto count = _led_instance->getCount(); 
+    for (size_t i = 0; i < count; i++)
     {
-      auto count = _led_instance->getCount(); 
-      for (size_t i = 0; i < count; i++)
-      {
-        _led_instance->setColors(&rgb888, i, 1);
-      }
+      _led_instance->setColors(&rgb888, i, 1);
     }
+    if (_auto_display) { _led_instance->display(); }
   }
 
-  void LED_Class::setColor(size_t index, const m5gfx::rgb888_t& rgb888)
+  void LED_Class::setColor(size_t index, const RGBColor& rgb888)
   {
-    if (begin())
-    {
-      _led_instance->setColors(&rgb888, index, 1);
-    }
+    if (!begin()) { return; }
+
+    _led_instance->setColors(&rgb888, index, 1);
+    if (_auto_display) { _led_instance->display(); }
   }
+
+  void LED_Class::_set_colors(size_t index, size_t length, lgfx::pixelcopy_t* pc)
+  {
+    if (!begin()) { return; }
+
+    int32_t len = static_cast<int32_t>(length);
+    int32_t count = _led_instance->getCount();
+    if (len > count - (int32_t)index)
+    {
+      len = count - index;
+    }
+
+    std::vector<RGBColor> rgb_buffer(len);
+    pc->fp_copy(rgb_buffer.data(), 0, len, pc);
+    _led_instance->setColors(rgb_buffer.data(), index, len);
+
+    if (_auto_display) { _led_instance->display(); }
+  }
+
 
   void LED_Class::display(void)
   {
-    if (begin())
-    {
-      _led_instance->display();
-    }
+    if (!begin()) { return; }
+    _led_instance->display();
   }
 }

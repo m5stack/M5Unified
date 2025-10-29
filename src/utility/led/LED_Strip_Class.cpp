@@ -157,7 +157,7 @@ namespace m5
       rmt_del_channel(_rmt_ch_handle);
       _rmt_ch_handle = nullptr;
     }
-#else
+#elif M5UNIFIED_RMT_VERSION == 1
 #endif
     return false;
   }
@@ -212,7 +212,7 @@ namespace m5
     return true;
   }
 
-  void LED_Strip_Class::setColors(const m5gfx::rgb888_t* values, size_t index, size_t length)
+  void LED_Strip_Class::setColors(const RGBColor* values, size_t index, size_t length)
   {
     if (index + length > _config.led_count)
     {
