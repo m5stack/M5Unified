@@ -40,6 +40,9 @@ namespace m5
     /// @param max_mV milli volt. (3600 - 4545).
     bool setChargeVoltage(std::uint16_t max_mV);
 
+    /// Get whether the battery is currently charging or not.
+    bool isCharging(void);
+
     // get setting value of battery charge current
     /// @return milli ampere. (8 - 512). 0=unknown
     std::uint16_t getChargeCurrent(void);

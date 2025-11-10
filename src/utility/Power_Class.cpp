@@ -1508,6 +1508,10 @@ namespace m5
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    case pmic_t::pmic_aw32001:
+      return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
