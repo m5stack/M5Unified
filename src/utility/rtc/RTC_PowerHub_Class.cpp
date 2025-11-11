@@ -7,6 +7,11 @@
 
 namespace m5
 {
+  static std::uint8_t byteToBcd2(std::uint8_t value)
+  {
+    std::uint_fast8_t bcdhigh = value / 10;
+    return (bcdhigh << 4) | (value - (bcdhigh * 10));
+  }
 
   bool RTC_PowerHub_Class::begin(I2C_Class* i2c)
   {
@@ -47,7 +52,7 @@ namespace m5
       date->date    = buf[idx++] & 0x1f;
       date->month   = buf[idx++] & 0x0f;
       date->year    = (buf[idx++] & 0x7f) + 2000;
-      date->weekDay = __builtin_ctz(buf[idx++]);
+      date->weekDay = __builtin_ctz(byteToBcd2(buf[idx++]));
     }
     return true;
   }
