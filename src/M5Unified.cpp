@@ -1050,7 +1050,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     default:
     case 0: // EFUSE_PKG_VERSION_ESP32S3:     // QFN56
       if (board == board_t::board_unknown)
-      { /// StampS3 or AtomS3Lite,S3U ?
+      { 
+        #if defined (BOARD_ID) && BOARD_ID == 147
+          board = board_t::board_M5DualKey;
+          // !!!NOTE: Set to input mode to prevent the device from failing to shut down.
+          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input);
+          m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input);
+          break;
+        #endif
+        /// StampS3 or AtomS3Lite,S3U ?
         ///   After setting GPIO38 to INPUT PULL-UP, change to INPUT and read it.
         ///   In the case of STAMPS3: Returns 0. Charge is sucked by SGM2578.
         ///   In the case of ATOMS3Lite/S3U : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
@@ -1620,6 +1628,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5DualKey:
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_17, m5gfx::pin_mode_t::input);
+      break;
 #endif
 
     default:
@@ -2388,6 +2400,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_11) & 1) // BtnA
                         | (!(value & 0b001) ? 0b00010 : 0) // BtnB
                         ;
+      break;
+    }
+
+    case board_t::board_M5DualKey:
+    {
+      use_rawstate_bits = 0b00011;
+      btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_17)) & 1)
+                        | ((!m5gfx::gpio_in(GPIO_NUM_0)) & 1) << 1;
       break;
     }
     default:
