@@ -33,6 +33,7 @@ namespace m5
 #if !defined (M5UNIFIED_PC_BUILD)
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
+  static constexpr uint8_t powerhub_i2c_addr = 0x50;
   static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
@@ -204,6 +205,10 @@ namespace m5
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
+      break;
+
+    case board_t::board_M5PowerHub:
+      M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq); // Enabel VAMeter
       break;
     }
 
@@ -553,7 +558,23 @@ namespace m5
         }
       }
       break;
-
+    case board_t::board_M5PowerHub:
+      if (port_mask & ext_port_mask_t::ext_USB)
+      {
+        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x01, enable, i2c_freq);
+      }
+      if (port_mask & ext_port_mask_t::ext_PA)
+      {
+        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x02, enable, i2c_freq);
+      }
+      if (port_mask & ext_port_mask_t::ext_PC1)
+      {
+        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x03, enable, i2c_freq);
+      }
+      if (port_mask & ext_port_mask_t::ext_PWR485 || port_mask & ext_port_mask_t::ext_PWRCAN) {
+          M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x04, enable, i2c_freq);
+      }
+      break;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       if (enable) { m5gfx::gpio_hi(M5Paper_EXT5V_ENABLE_PIN); }
@@ -636,7 +657,14 @@ namespace m5
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, port0_reg, i2c_freq) & port0_bitmask;
       }
       break;
-
+    case board_t::board_M5PowerHub:
+      uint8_t buf[4];
+      if (M5.In_I2C.readRegister(powerhub_i2c_addr, 0x01, buf, sizeof(buf), i2c_freq))
+      {
+        return (*(uint32_t*)buf != 0);
+      }
+      return false;
+      break;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       return m5gfx::gpio_in(M5Paper_EXT5V_ENABLE_PIN);
@@ -904,6 +932,13 @@ namespace m5
         M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.pin4 == PWROFF_PLUSE
         m5gfx::delay(50);
       }
+      break;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5PowerHub:
+      uint8_t buf[4]={};
+      M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x01, buf, sizeof(buf), i2c_freq);
       break;
 #endif
     }
@@ -1213,6 +1248,13 @@ namespace m5
       case board_t::board_M5Tab5:
         return Ina226.getBusVoltage() * 1000;
 #endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub:
+        uint8_t buf[2];
+        if (M5.In_I2C.readRegister(powerhub_i2c_addr, 0x30, buf, sizeof(buf), i2c_freq)) return (buf[1] << 8) | buf[0];
+        return 0;
+#endif
       default:
         return 0;
       }
@@ -1268,6 +1310,12 @@ namespace m5
         mv = Ina226.getBusVoltage() * 500;
         break;
 #endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub:
+        mv = getBatteryVoltage();
+        break;
+#endif
       default:
         return -2;
       }
@@ -1314,6 +1362,12 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
         M5.getIOExpander(1).digitalWrite(7, enable);
+        break;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub:
+        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x06, enable, i2c_freq);
         break;
 #endif
       default:
@@ -1396,6 +1450,14 @@ namespace m5
       case board_t::board_M5Tab5:
         return 1000.0f * Ina226.getShuntCurrent();
 #endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub:
+        uint8_t buf[2];
+        if(M5.In_I2C.readRegister(powerhub_i2c_addr, 0x32, buf, sizeof(buf), i2c_freq))
+          return (int16_t)(buf[1] << 8) | buf[0];
+        return 0;
+#endif
       default:
         return 0;
       }
@@ -1442,16 +1504,14 @@ namespace m5
 
   Power_Class::is_charging_t Power_Class::isCharging(void)
   {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-      if (M5.getBoard() == board_t::board_M5PaperS3)
-      {
-        return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
-      }
-#endif
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+
+    case pmic_t::pmic_aw32001:
+      return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1472,6 +1532,13 @@ namespace m5
 
     default:
       switch (M5.getBoard()) {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PaperS3:
+        return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+
+      case board_t::board_M5PowerHub: // 0x50 reg is not accurate
+        return (getBatteryCurrent() < -10) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+#endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
         return M5.getIOExpander(1).digitalRead(6) // io1.pin6 == CHG_STAT
@@ -1481,6 +1548,55 @@ namespace m5
         return is_charging_t::charge_unknown;
       }
     }
+  }
+
+  int16_t Power_Class::_readExtValue(ext_port_mask_t port_mask, int reg_offset)
+  {
+#if defined(M5UNIFIED_PC_BUILD)
+      (void)port_mask;
+      (void)reg_offset;
+#else
+    switch (M5.getBoard()) {
+    #if defined(CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub: {
+        struct PortReg {
+          ext_port_mask_t mask;
+          uint8_t reg;
+        };
+        static const PortReg port_regs[] = {
+          {ext_port_mask_t::ext_PA, 0x40},
+          {ext_port_mask_t::ext_PC1, 0x44},
+          {ext_port_mask_t::ext_USB, 0x3C},
+          {ext_port_mask_t::ext_PWR485, 0x38},
+          {ext_port_mask_t::ext_PWRCAN, 0x34},
+        };
+
+        uint8_t buf[2];
+        for (const auto& pr : port_regs) {
+          if (port_mask & pr.mask) {
+            if (M5.In_I2C.readRegister(powerhub_i2c_addr, pr.reg + reg_offset, buf, sizeof(buf), i2c_freq)) {
+              return (int16_t)((buf[1] << 8) | buf[0]);
+            }
+              return 0;
+          }
+        }
+        return 0;
+      } break;
+    #endif
+      default:
+        return 0;
+      }
+#endif
+  }
+
+  int16_t Power_Class::getExtVoltage(ext_port_mask_t port_mask)
+  {
+    return _readExtValue(port_mask, 0);
+  }
+
+  int16_t Power_Class::getExtCurrent(ext_port_mask_t port_mask)
+  {
+    return _readExtValue(port_mask, 2);
   }
 
   uint8_t Power_Class::getKeyState(void)
@@ -1507,6 +1623,26 @@ namespace m5
       return 0;
     }
   }
+
+  void Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
+  {
+    switch (M5.getBoard()) {
+    #if defined(CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5PowerHub: {
+        uint8_t buf[5];
+        buf[0] = config.voltage & 0xFF;
+        buf[1] = config.voltage >> 8;
+        buf[2] = config.currentLimit & 0xFF;
+        buf[3] = config.enable;
+        buf[4] = config.direction;
+        M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x20, buf, sizeof(buf), i2c_freq);
+      } break;
+    #endif
+      default:
+        break;
+    }
+  }
+
 
   void Power_Class::setVibration(uint8_t level)
   {

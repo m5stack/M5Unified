@@ -96,7 +96,7 @@ namespace m5
   AW32001_Class::ChargeStatus AW32001_Class::getChargeStatus(void)
   {
     uint8_t reg_value = 0;
-    if (_init && readRegister(AW32001_REG_CHR_VOL, &reg_value, 1))
+    if (_init && readRegister(AW32001_REG_SYS_STA, &reg_value, 1))
     {
       // Extract bits 4 and 3 for charge status
       reg_value = (reg_value >> 3) & 0b00000011; // Get bits 4 and 3
@@ -111,4 +111,11 @@ namespace m5
     }
     return CS_UNKNOWN; // Return unknown if read failed
   }
-}
+
+  bool AW32001_Class::isCharging(void)
+  {
+    ChargeStatus status = getChargeStatus();
+    return (status == CS_PRE_CHARGE || status == CS_CHARGE);
+  }
+
+} // namespace m5

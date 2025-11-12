@@ -71,6 +71,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - M5Cardputer / M5CardputerADV
  - M5VAMeter
  - M5PaperS3
+ - M5PowerHub
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U

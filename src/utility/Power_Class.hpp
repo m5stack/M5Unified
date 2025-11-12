@@ -36,14 +36,31 @@ namespace m5
 
   enum ext_port_mask_t
   { ext_none = 0
-  // For individual control of external ports of M5Station
-  , ext_PA   = 0b00000001
-  , ext_PB1  = 0b00000010
-  , ext_PB2  = 0b00000100
-  , ext_PC1  = 0b00001000
-  , ext_PC2  = 0b00010000
-  , ext_USB  = 0b00100000 // M5Station external USB.   ※ Not for CoreS3 main USB.
-  , ext_MAIN = 0b10000000
+  // For individual control of external ports of M5Station and M5PowerHub.
+  , ext_PA     = 1 << 0
+  , ext_PB1    = 1 << 1
+  , ext_PB2    = 1 << 2
+  , ext_PC1    = 1 << 3
+  , ext_PC2    = 1 << 4
+  , ext_USB    = 1 << 5 // M5Station external USB.   ※ Not for CoreS3 main USB.
+  , ext_PWR485 = 1 << 6 // M5PowerHub external RS485.
+  , ext_PWRCAN = 1 << 7 // M5PowerHub external CAN.
+  , ext_MAIN   = 1 << 15
+  };
+
+  struct ext_port_bus_t
+  {
+    // output voltage of the external port(3000~20000mV, step 20mV).
+    uint16_t voltage;
+
+    // output current limit(0~232mA).
+    uint8_t currentLimit;
+
+    // output enable/disable.
+    bool enable = 0;
+
+    // output direction. true=output / false=input
+    bool direction = 0;
   };
 
   class Power_Class
@@ -90,7 +107,7 @@ namespace m5
     /// Get power output of the main USB port.
     /// @return true=output enabled / false=output disabled
     /// @attention for M5Stack CoreS3 main USB port.
-    /// @attention ※ Not for M5Station external USB.
+    /// @attention ※ Not for M5Station/M5Tab external USB.
     bool getUsbOutput(void);
 
     /// Turn on/off the power LED.
@@ -160,11 +177,24 @@ namespace m5
     /// @return battery current [mA] ( +=charge / -=discharge )
     int32_t getBatteryCurrent(void);
 
+    /// Get Ext Port voltage
+    /// @return Ext voltage [mV]
+    int16_t getExtVoltage(ext_port_mask_t port_mask);
+
+    /// get Ext Port current
+    /// @return Ext current [mA] ( +=charge / -=discharge )
+    int16_t getExtCurrent(ext_port_mask_t port_mask);
+
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
     /// @attention Only for models with AXP192 or AXP2101
     /// @attention Once this function is called, the value is reset to 0, and the next time it is pressed on, the value changes.
     uint8_t getKeyState(void);
+
+    /// Set the configuration of the external port bus.
+    /// @param config Configuration of the external port bus.
+    /// @attention for M5PowerHub.
+    void setExtPortBusConfig(const ext_port_bus_t& config);
 
     /// Operate the vibration motor
     /// @param level Vibration strength of the motor. (0=stop)
@@ -199,6 +229,7 @@ namespace m5
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
+    int16_t _readExtValue(ext_port_mask_t port_mask, int reg_offset);
 
     float _adc_ratio = 0;
     std::uint8_t _wakeupPin = 255;
