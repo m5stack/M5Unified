@@ -15,6 +15,9 @@
 
 #include "IOExpander_Base.hpp"
 #include "I2C_Class.hpp"
+#if CONFIG_IDF_TARGET_ESP32C6
+#include "SoftI2C_Class.hpp"
+#endif
 
 namespace m5
 {
