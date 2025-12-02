@@ -188,6 +188,7 @@ namespace m5
       _batAdcUnit = 1;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
+      _wakeupPin = GPIO_NUM_48; // touch panel INT
       break;
 
     case board_t::board_M5Capsule:
@@ -391,7 +392,7 @@ namespace m5
         ///       ||||||||
         , 0x33, 0b11000000 // reg33h Charge control 1 (Charge 4.2V, 100mA)
 
-        , 0x35, 0xA2    // reg35h Enable RTC BAT charge 
+        , 0x35, 0xA2    // reg35h Enable RTC BAT charge
         , 0x36, 0x0C    // reg36h 128ms power on, 4s power off
         , 0x40, 0x00    // reg40h IRQ 1, all disable
         , 0x41, 0x00    // reg41h IRQ 2, all disable
@@ -441,7 +442,7 @@ namespace m5
       case board_t::board_M5Station:
         {
           Axp192.setLDO2(3300);
-          static constexpr std::uint8_t reg92h_96h[] = 
+          static constexpr std::uint8_t reg92h_96h[] =
           { 0x00 // GPIO1 NMOS OpenDrain
           , 0x00 // GPIO2 NMOS OpenDrain
           , 0x00 // GPIO0~2 low
@@ -1064,8 +1065,18 @@ namespace m5
     uint_fast8_t wpin = _wakeupPin;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-      esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
-      esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+      if (M5.getBoard() == board_t::board_M5PaperS3)
+      {
+        // M5PaperS3 touch interrupt pin (GPIO48) is not RTC IO
+        // and therefore not supported in EXT0 wakeup
+        gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
+        esp_sleep_enable_gpio_wakeup();
+      }
+      else
+      {
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+      }
       while (m5gfx::gpio_in(wpin) == false)
       {
         m5gfx::delay(10);
@@ -1078,6 +1089,10 @@ namespace m5
     }
 #endif
     esp_light_sleep_start();
+    if (M5.getBoard() == board_t::board_M5PaperS3)
+    {
+      gpio_wakeup_disable((gpio_num_t)wpin);
+    }
 #endif
   }
 
