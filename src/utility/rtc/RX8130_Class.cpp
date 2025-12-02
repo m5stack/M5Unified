@@ -216,6 +216,7 @@ namespace m5
   {
     if (isEnabled()) {
       bitOff(0x1E, 0x18);
+      bitOff(0x1D, 0x18);
     }
   }
 
