@@ -14,6 +14,7 @@
 #include "power/INA226_Class.hpp"
 #include "power/AW32001_Class.hpp"
 #include "power/BQ27220_Class.hpp"
+#include "power/PY32PMIC_Class.hpp"
 #include "RTC_Class.hpp"
 
 #if __has_include (<sdkconfig.h>)
@@ -75,6 +76,7 @@ namespace m5
     , pmic_ip5306
     , pmic_axp2101
     , pmic_aw32001
+    , pmic_py32pmic
     };
 
     enum is_charging_t
@@ -205,6 +207,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 
     AXP2101_Class Axp2101;
+    PY32PMIC_Class PY32pmic;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)

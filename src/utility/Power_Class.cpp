@@ -31,6 +31,7 @@ namespace m5
   static constexpr const uint32_t i2c_freq = 100000;
 
 #if !defined (M5UNIFIED_PC_BUILD)
+  static constexpr uint8_t py32pmic_i2c_addr = 0x6E;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
   static constexpr uint8_t powerhub_i2c_addr = 0x50;
@@ -174,6 +175,11 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      break;
+
+    case board_t::board_M5StickS3:
+      _pmic = Power_Class::pmic_t::pmic_py32pmic;
+      PY32pmic.begin();
       break;
 
     case board_t::board_M5PaperS3:
@@ -558,6 +564,13 @@ namespace m5
         }
       }
       break;
+
+    case board_t::board_M5StickS3:
+      {
+        PY32pmic.setExtOutput(enable);
+      }
+      break;
+
     case board_t::board_M5PowerHub:
       if (port_mask & ext_port_mask_t::ext_USB)
       {
@@ -892,6 +905,12 @@ namespace m5
       case pmic_t::pmic_axp2101:
         Axp2101.powerOff();
         break;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case pmic_t::pmic_py32pmic:
+        PY32pmic.powerOff();
+        break;
+#endif
 
 #endif
 
@@ -1616,6 +1635,12 @@ namespace m5
 
     case pmic_t::pmic_axp2101:
       return Axp2101.getPekPress();
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+
+    case pmic_t::pmic_py32pmic:
+      return PY32pmic.getPekPress();
+#endif
 
 #endif
 

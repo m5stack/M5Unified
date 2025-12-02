@@ -629,6 +629,7 @@ namespace m5
     static void _setup_pinmap(board_t);
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);
     static bool _speaker_enabled_cb_cores3(void* args, bool enabled);
+    static bool _speaker_enabled_cb_sticks3(void* args, bool enabled);
     static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
     static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
     static bool _speaker_enabled_cb_tab5(void* args, bool enabled);

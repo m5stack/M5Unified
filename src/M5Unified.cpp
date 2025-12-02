@@ -75,6 +75,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 { board_t::board_M5StackCoreS3, GPIO_NUM_11,GPIO_NUM_12 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5StackCoreS3SE,GPIO_NUM_11,GPIO_NUM_12, GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5StickS3    , GPIO_NUM_48,GPIO_NUM_47 , GPIO_NUM_10,GPIO_NUM_9  },
 { board_t::board_M5StampS3    , 255        ,255         , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Capsule    , GPIO_NUM_10,GPIO_NUM_8  , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Dial       , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
@@ -367,6 +368,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
   static constexpr uint8_t es8388_i2c_addr = 0x10;
   static constexpr uint8_t pi4io1_i2c_addr = 0x43;
+  static constexpr uint8_t py32pmic_i2c_addr = 0x6E;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
@@ -437,6 +439,45 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
       self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+    }
+#endif
+    return true;
+  }
+
+  bool M5Unified::_speaker_enabled_cb_sticks3(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    if (spk_cfg.pin_bck == GPIO_NUM_17)
+    {
+      static constexpr const uint8_t enabled_bulk_data[] = {
+        2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+        2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+        2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+        2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+        2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
+        2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
+        2, 0x32, 0xBF,  // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
+        2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
+        0
+      };
+      if (enabled)
+      {
+        self->In_I2C.bitOn(py32pmic_i2c_addr, 0x05, 0b00001000, 100000);
+printf("enabling es8311\n");
+fflush(stdout);
+        in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
+      }
+      else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+      {
+printf("disabling es8311\n");
+fflush(stdout);
+        self->In_I2C.bitOff(py32pmic_i2c_addr, 0x05, 0b00001000, 100000);
+      }
+//*/
     }
 #endif
     return true;
@@ -1459,7 +1500,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
     auto pmic_type = Power.getType();
     if (pmic_type == Power_Class::pmic_t::pmic_axp2101
-     || pmic_type == Power_Class::pmic_t::pmic_axp192)
+     || pmic_type == Power_Class::pmic_t::pmic_axp192
+     || pmic_type == Power_Class::pmic_t::pmic_py32pmic)
     {
       _use_pmic_button = cfg.pmic_button;
       /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
@@ -1620,6 +1662,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       break;
 
+    case board_t::board_M5StickS3:
+      m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input);
+      break;
+
 #endif
 
     default:
@@ -1682,6 +1729,17 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.i2s_port = I2S_NUM_1;
           mic_cfg.input_channel = input_channel_t::input_stereo;
           mic_enable_cb = _microphone_enabled_cb_cores3;
+        }
+        break;
+
+      case board_t::board_M5StickS3:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_mck = GPIO_NUM_18;
+          mic_cfg.pin_bck = GPIO_NUM_17;
+          mic_cfg.pin_ws = GPIO_NUM_15;
+          mic_cfg.pin_data_in = GPIO_NUM_16;
+          mic_cfg.i2s_port = I2S_NUM_1;
         }
         break;
 
@@ -1823,6 +1881,19 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           spk_cfg.magnification = 4;
           spk_cfg.i2s_port = I2S_NUM_1;
           spk_enable_cb = _speaker_enabled_cb_cores3;
+        }
+        break;
+
+      case board_t::board_M5StickS3:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_mck = GPIO_NUM_18;
+          spk_cfg.pin_bck = GPIO_NUM_17;
+          spk_cfg.pin_ws = GPIO_NUM_15;
+          spk_cfg.pin_data_out = GPIO_NUM_14;
+          spk_cfg.i2s_port = I2S_NUM_1;
+          spk_cfg.magnification = 4;
+          spk_enable_cb = _speaker_enabled_cb_sticks3;
         }
         break;
 
@@ -2390,6 +2461,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                         ;
       break;
     }
+
+    case board_t::board_M5StickS3:
+      use_rawstate_bits = 0b00011;
+      btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_11)) & 1)
+                        | ((!m5gfx::gpio_in(GPIO_NUM_12)) & 1) << 1;
+      break;
+
     default:
 
     break;
