@@ -8,6 +8,7 @@
 
 #include <esp_log.h>
 #include <esp_sleep.h>
+#include "driver/rtc_io.h"
 #include <sdkconfig.h>
 
 #include <soc/soc_caps.h>
@@ -1008,7 +1009,7 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32P4)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) // || defined (CONFIG_IDF_TARGET_ESP32P4)
 
 #else
 
@@ -1022,7 +1023,14 @@ namespace m5
     uint_fast8_t wpin = _wakeupPin;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
       esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
+#elif SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
+      const uint64_t ext_wakeup_pin_1_mask = 1ULL << _wakeupPin;
+      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+      ESP_ERROR_CHECK(rtc_gpio_pullup_dis((gpio_num_t)_wakeupPin));
+      ESP_ERROR_CHECK(rtc_gpio_pulldown_en((gpio_num_t)_wakeupPin));
+#endif
       while (m5gfx::gpio_in(wpin) == false)
       {
         // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
