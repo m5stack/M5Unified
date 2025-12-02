@@ -1433,6 +1433,41 @@ namespace m5
 #endif
 
     default:
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+      switch (M5.getBoard()) {
+        case board_t::board_M5Tab5: {
+          switch (max_mA) {
+            case 0:
+              // charge disable
+              M5.getIOExpander(1).digitalWrite(7, false); // CHG_EN = HIGH
+              // qc disable
+              M5.getIOExpander(1).digitalWrite(5, true); // CHG_EN = LOW
+              break;
+
+            case 500:
+              // charge enable
+              M5.getIOExpander(1).digitalWrite(7, true); // CHG_EN = HIGH
+              // qc disable
+              M5.getIOExpander(1).digitalWrite(5, true); // CHG_EN = LOW
+              break;
+
+            case 1000:
+              // charge enable
+              M5.getIOExpander(1).digitalWrite(7, true); // CHG_EN = HIGH
+              // qc enable
+              M5.getIOExpander(1).digitalWrite(5, false); // CHG_EN = LOW
+              break;
+
+            default:
+              break;
+          }
+        }
+        break;
+
+      default:
+        return;
+      }
+#endif
       return;
     }
   }
