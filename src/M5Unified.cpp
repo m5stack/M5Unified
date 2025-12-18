@@ -1334,6 +1334,39 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return board;
   }
 
+#if !defined (M5UNIFIED_PC_BUILD)
+namespace {
+  bool configure_tab5_ioexpander(PI4IOE5V6408_Class* ioexp, int index)
+  {
+    const uint8_t i2c_addr = 0x43 + index;
+    if (!ioexp->begin()) {
+      ESP_LOGW("M5Unified", "Tab5 I/O expander %d @ 0x%02x not detected, skipping", index, i2c_addr);
+      return false;
+    }
+
+    if (index == 0) {
+      // PI4IOE1 @ 0x43 - Display & peripherals
+      ioexp->writeRegister8(0x03, 0b01111111);  // Direction: P0-P6 output, P7 input
+      ioexp->writeRegister8(0x05, 0b01110110);  // Output: P1=SPK_EN, P2=EXT5V_EN, P4=LCD_RST, P5=TP_RST, P6=CAM_RST HIGH
+      ioexp->writeRegister8(0x07, 0b00000000);  // Disable high-impedance mode
+      ioexp->writeRegister8(0x0B, 0b01111111);  // Enable pull resistors
+      ioexp->writeRegister8(0x0D, 0b01111111);  // Pull-up (not pull-down)
+    } else {
+      // PI4IOE2 @ 0x44 - WiFi & power management
+      ioexp->writeRegister8(0x03, 0b10111001);  // Direction: P0,P3,P7 output, others input
+      ioexp->writeRegister8(0x05, 0b00001001);  // Output: P0=WLAN_PWR_EN (WiFi!), P3=USB5V_EN, P7=CHG_EN HIGH
+      ioexp->writeRegister8(0x07, 0b00000110);  // High-impedance for P1,P2
+      ioexp->writeRegister8(0x0B, 0b11111001);  // Enable pull resistors
+      ioexp->writeRegister8(0x0D, 0b10111001);  // Pull-up configuration
+      ioexp->writeRegister8(0x09, 0b01000000);  // P6 default high (USB-C detect)
+    }
+
+    ESP_LOGI("M5Unified", "Tab5 I/O expander %d @ 0x%02x configured", index, i2c_addr);
+    return true;
+  }
+}
+#endif
+
   void M5Unified::_setup_i2c(board_t board)
   {
 #if defined (M5UNIFIED_PC_BUILD)
@@ -1376,24 +1409,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       for (int i = 0; i < 2; ++i)
       {
         auto ioexp = new PI4IOE5V6408_Class(0x43 + i);
-        ioexp->begin();
-        
-        // Configure I/O expander pins for Tab5 peripherals
-        if (i == 0) {  // PI4IOE1 @ 0x43
-          ioexp->writeRegister8(0x03, 0b01111111);  // Direction: P0-P6 output, P7 input
-          ioexp->writeRegister8(0x05, 0b01110110);  // Output: P1=SPK_EN, P2=EXT5V_EN, P4=LCD_RST, P5=TP_RST, P6=CAM_RST HIGH
-          ioexp->writeRegister8(0x07, 0b00000000);  // Disable high-impedance mode
-          ioexp->writeRegister8(0x0B, 0b01111111);  // Enable pull resistors
-          ioexp->writeRegister8(0x0D, 0b01111111);  // Pull-up (not pull-down)
-        } else {  // PI4IOE2 @ 0x44
-          ioexp->writeRegister8(0x03, 0b10111001);  // Direction: P0,P3,P7 output, others input
-          ioexp->writeRegister8(0x05, 0b00001001);  // Output: P0=WLAN_PWR_EN (WiFi!), P3=USB5V_EN, P7=CHG_EN HIGH
-          ioexp->writeRegister8(0x07, 0b00000110);  // High-impedance for P1,P2
-          ioexp->writeRegister8(0x0B, 0b11111001);  // Enable pull resistors
-          ioexp->writeRegister8(0x0D, 0b10111001);  // Pull-up configuration
-          ioexp->writeRegister8(0x09, 0b01000000);  // P6 default high (USB-C detect)
+        if (!configure_tab5_ioexpander(ioexp, i)) {
+          delete ioexp;
+          continue;
         }
-        
         _io_expander[i].reset(ioexp);
       }
       break;
@@ -1409,34 +1428,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       for (int i = 0; i < 2; ++i)
       {
         auto ioexp = new PI4IOE5V6408_Class(0x43 + i);
-        
-        // Check if I/O expander chip is present
-        if (!ioexp->begin()) {
-          // Chip not responding - log and skip
-          // This handles future Tab5 variants without I/O expanders
-          ESP_LOGW("M5Unified", "Tab5 I/O expander %d @ 0x%02x not detected, skipping", i, 0x43 + i);
+        if (!configure_tab5_ioexpander(ioexp, i)) {
           delete ioexp;
           continue;
         }
-        
-        // Configure I/O expander pins for Tab5 peripherals
-        // Based on M5Stack official Tab5-UserDemo reference implementation
-        if (i == 0) {  // PI4IOE1 @ 0x43 - Display & peripherals
-          ioexp->writeRegister8(0x03, 0b01111111);  // Direction: P0-P6 output, P7 input
-          ioexp->writeRegister8(0x05, 0b01110110);  // Output: P1=SPK_EN, P2=EXT5V_EN, P4=LCD_RST, P5=TP_RST, P6=CAM_RST HIGH
-          ioexp->writeRegister8(0x07, 0b00000000);  // Disable high-impedance mode
-          ioexp->writeRegister8(0x0B, 0b01111111);  // Enable pull resistors
-          ioexp->writeRegister8(0x0D, 0b01111111);  // Pull-up (not pull-down)
-        } else {  // PI4IOE2 @ 0x44 - WiFi & power management
-          ioexp->writeRegister8(0x03, 0b10111001);  // Direction: P0,P3,P7 output, others input
-          ioexp->writeRegister8(0x05, 0b00001001);  // Output: P0=WLAN_PWR_EN (WiFi!), P3=USB5V_EN, P7=CHG_EN HIGH
-          ioexp->writeRegister8(0x07, 0b00000110);  // High-impedance for P1,P2
-          ioexp->writeRegister8(0x0B, 0b11111001);  // Enable pull resistors
-          ioexp->writeRegister8(0x0D, 0b10111001);  // Pull-up configuration
-          ioexp->writeRegister8(0x09, 0b01000000);  // P6 default high (USB-C detect)
-        }
-        
-        ESP_LOGI("M5Unified", "Tab5 I/O expander %d @ 0x%02x configured", i, 0x43 + i);
         _io_expander[i].reset(ioexp);
       }
       break;
