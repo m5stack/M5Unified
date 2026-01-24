@@ -77,7 +77,7 @@ namespace m5
     uint8_t buf[2] = {0};
     if (_i2c->readRegister(_addr, 0x08, buf, 2, _freq)) {
       uint16_t voltage_mV = (buf[0] | (buf[1] << 8));
-      return voltage_mV / 1000.0f; // Convert to volts
+      return voltage_mV;
     }
     return 0; // Return 0 if read failed
   }

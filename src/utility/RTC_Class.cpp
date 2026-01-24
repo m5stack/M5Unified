@@ -41,13 +41,17 @@ namespace m5
     {
     RTC_Base* instance = nullptr;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-      switch (M5.getBoard())
+      switch (board)
         {
-          default:
-            break;
-
           case board_t::board_M5PowerHub:
             instance = new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000);
+            break;
+          
+          case board_t::board_M5StampPLC:
+            instance = new RX8130_Class( RX8130_Class::DEFAULT_ADDRESS, 400000, i2c );
+            break;
+
+          default:
             break;
         }
 #endif

@@ -117,11 +117,12 @@ namespace m5
 
     writeRegister(0xD0, buf, 3);
 
-    if (irq_enable)
-    {
-      bitOn(0xD3, 0);
+    if (irq_enable) {
+      bitOn(0xB0, irq_enable);
+      bitOn(0xD3, irq_enable);
     } else {
-      bitOff(0xD3, 0);
+      bitOff(0xB0, irq_enable);
+      bitOff(0xD3, irq_enable);
     }
 
     return irq_enable;
