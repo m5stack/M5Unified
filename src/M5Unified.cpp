@@ -1796,6 +1796,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.pin_ws = GPIO_NUM_15;
           mic_cfg.pin_data_in = GPIO_NUM_16;
           mic_cfg.i2s_port = I2S_NUM_1;
+          mic_enable_cb = _microphone_enabled_cb_sticks3;
         }
         break;
 

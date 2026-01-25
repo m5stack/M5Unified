@@ -62,6 +62,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 
 ## Supported devices (ESP32-S3)
  - M5Stack CoreS3 / CoreS3SE
+ - M5StickS3
  - M5ATOMS3 / S3Lite / S3U
  - M5ATOMS3R / S3RExt / S3RCam / ECHO S3R
  - M5STAMPS3 (S3 / S3A)
