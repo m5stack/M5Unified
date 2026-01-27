@@ -1017,6 +1017,15 @@ namespace m5
         m5gfx::delay(50);
       }
       break;
+
+    case board_t::board_M5UnitPoEP4:
+      for (int ledPin = 15; ledPin <= 17; ledPin++)
+      {
+        m5gfx::pinMode(ledPin, m5gfx::pin_mode_t::output);
+        m5gfx::gpio_hi(ledPin);
+        m5gfx::delay(50);
+      }
+      break;
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32C6)
