@@ -203,6 +203,11 @@ namespace m5
     /// @param level Vibration strength of the motor. (0=stop)
     void setVibration(uint8_t level);
 
+    /// Set power button as reset
+    /// @param disable true=disable / false=enable
+    /// @attention use to configure power button (M5StickS3 only)
+    void setSingleResetDisable(bool disable);
+
     pmic_t getType(void) const { return _pmic; }
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)

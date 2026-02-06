@@ -1549,6 +1549,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.
       BtnPWR.setHoldThresh(BtnPWR.getHoldThresh() * 1.2);
     }
+    if (pmic_type == Power_Class::pmic_t::pmic_m5pm1)
+    {
+      _use_pmic_button = cfg.pmic_button;
+      Power.setSingleResetDisable(_use_pmic_button);
+    }
 
     if (cfg.clear_display)
     {
@@ -2614,7 +2619,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
 
 #if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (_use_pmic_button)
+
+    if ((_use_pmic_button) && (_board == board_t::board_M5StickS3))
+    {
+      bool b = false;
+      uint8_t ks = Power.getKeyState();
+      if(ks == 2) b = true;
+      BtnPWR.setRawState(ms, b);
+    }
+    if ((_use_pmic_button) && (_board != board_t::board_M5StickS3))
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
       bool read_axp = (ms - BtnPWR.getUpdateMsec()) >= BTNPWR_MIN_UPDATE_MSEC;

@@ -1877,6 +1877,13 @@ namespace m5
 
     case pmic_t::pmic_py32pmic:
       return PY32pmic.getPekPress();
+
+    case pmic_t::pmic_m5pm1:
+    {
+      uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x48, i2c_freq);
+      return(reg_val & 1) ? 2 : 0;
+    }
+
 #endif
 
 #endif
@@ -1924,6 +1931,24 @@ namespace m5
 
         default:
           break;
+      }
+    }
+#endif
+  }
+
+  void Power_Class::setSingleResetDisable(bool disable)
+  {
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32S3)
+    if (M5.getBoard() == board_t::board_M5StickS3)
+    {
+      if (_pmic == pmic_t::pmic_m5pm1)
+      {
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x49, i2c_freq);
+
+        if (disable) reg_val |= 0x01;
+        else reg_val &= ~0x01;
+
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x49, reg_val, i2c_freq);
       }
     }
 #endif
