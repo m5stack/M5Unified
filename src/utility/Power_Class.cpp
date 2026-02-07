@@ -971,7 +971,7 @@ namespace m5
           // Power off: register 0x0C bit 1:0, 01=power off
           uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x0C, i2c_freq);
           reg_val &= ~0x03;  // Clear bits 1:0
-          reg_val |= 0x01;   // Set to 01 (power off)
+          reg_val |= 0xA1;   // Set to A1 (command key | power off)
           M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x0C, reg_val, i2c_freq);
         }
         break;
