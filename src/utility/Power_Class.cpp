@@ -1774,7 +1774,7 @@ namespace m5
         return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
       case board_t::board_M5PowerHub: // 0x50 reg is not accurate
-        return (getBatteryCurrent() < -10) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+        return (getBatteryCurrent() > 10) ? is_charging_t::is_charging : is_charging_t::is_discharging;
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
