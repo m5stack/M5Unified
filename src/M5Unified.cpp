@@ -1372,12 +1372,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
-      /// M5Tab5 ?
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
       if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
         board = board_t::board_M5Tab5;
-      else
+      else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
+      else
+        board = board_t::board_M5StampP4;
     }
 
 #endif
