@@ -631,6 +631,7 @@ namespace m5
     board_t _check_boardtype(board_t);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
+    bool _detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list=nullptr);
 
     static void _setup_pinmap(board_t);
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);
