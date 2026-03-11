@@ -990,7 +990,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
       delay(50);  // 延时 50ms，保证设备上电稳定
 
-      for (uint8_t i2caddr : (const uint8_t[]){addr << 1}) { //detect address
+      for (uint8_t i2caddr : (const uint8_t[]){static_cast<uint8_t>(addr << 1)}) { //detect address
         delay(2);  // 小延时
         bool nack = true;
         // I2C START
