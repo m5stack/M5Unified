@@ -32,6 +32,7 @@
 #endif
 
 #include "utility/led/LED_Strip_Class.hpp"
+#include "utility/led/LED_PMIC_Class.hpp"
 #include "utility/led/LED_PowerHub_Class.hpp"
 
 #endif
@@ -91,6 +92,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
+{ board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -968,6 +970,65 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
+  bool M5Unified::_detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list)
+  {
+#if defined(M5UNIFIED_PC_BUILD)
+#else
+    uint32_t result = 0;
+    m5gfx::gpio::pin_backup_t pin_backup[] = {scl, sda};
+    {
+      if(cmd_list == nullptr)
+      {
+        m5gfx::gpio::command((const uint8_t[]) {
+          m5gfx::gpio::command_write_low, scl,
+          m5gfx::gpio::command_mode_output, scl,  // SCL
+          m5gfx::gpio::command_write_low, sda,
+          m5gfx::gpio::command_mode_output, sda, // SDA
+        });
+      }
+      else m5gfx::gpio::command(cmd_list);
+
+      delay(50);  // 延时 50ms，保证设备上电稳定
+
+      for (uint8_t i2caddr : (const uint8_t[]){static_cast<uint8_t>(addr << 1)}) { //detect address
+        delay(2);  // 小延时
+        bool nack = true;
+        // I2C START
+        m5gfx::gpio_lo(sda);  // SDA LOW = START
+        for (int cycle = 0; cycle < 20; ++cycle) {
+          // SCL toggle
+          m5gfx::gpio_hi(scl);
+          delay(1);
+          m5gfx::gpio_lo(scl);
+          delay(1);
+
+          if (cycle & 1) {
+            if (cycle == 17) {
+                nack = m5gfx::gpio_in(sda);  // 读 ACK
+            }
+          } else {
+            if (i2caddr & 0x80) {
+              m5gfx::gpio_hi(sda);
+            } else {
+              m5gfx::gpio_lo(sda);
+            }
+            i2caddr <<= 1;
+            if (cycle >= 16) {
+              m5gfx::pinMode(sda, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
+            }
+          }
+        }
+        m5gfx::gpio_hi(sda);  // SDA HIGH = STOP
+        result = result << 1 | nack;
+      }
+    }
+    for (auto& backup : pin_backup) {
+        backup.restore();
+    }
+    return result;
+#endif
+  }
+
   board_t M5Unified::_check_boardtype(board_t board)
   {
 #if defined (M5UNIFIED_PC_BUILD)
@@ -1193,114 +1254,21 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
       if (board == board_t::board_unknown) {
         /// PowerHub ?
-
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_48, GPIO_NUM_45 };
-        {
-          m5gfx::gpio::command((const uint8_t[]) {
-            m5gfx::gpio::command_write_low, GPIO_NUM_48,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_48,  // SCL
-            m5gfx::gpio::command_write_low, GPIO_NUM_45,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_45, // SDA
-          });
-
-          delay(50); // 延时 50ms，保证设备上电稳定
-
-          uint32_t result = 0;
-          for (uint8_t i2caddr: (const uint8_t[]){ 0x50 << 1}) { // PowerHub I2C 7bit addr = 0x50
-            delay(2); // 小延时
-            bool nack = true;
-            // I2C START
-            m5gfx::gpio_lo(GPIO_NUM_45);  // SDA LOW = START
-            for (int cycle = 0; cycle < 20; ++cycle) {
-              // SCL toggle
-              m5gfx::gpio_hi(GPIO_NUM_48);
-              delay(1);
-              m5gfx::gpio_lo(GPIO_NUM_48);
-              delay(1);
-
-              if (cycle & 1) {
-                if (cycle == 17) {
-                  nack = m5gfx::gpio_in(GPIO_NUM_45);  // 读 ACK
-                }
-              } else { 
-                if (i2caddr & 0x80) { // 输出 addr
-                  m5gfx::gpio_hi(GPIO_NUM_45); 
-                } else {
-                  m5gfx::gpio_lo(GPIO_NUM_45);
-                }
-                i2caddr <<= 1;
-                if (cycle >= 16) {
-                  m5gfx::pinMode(GPIO_NUM_45, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-                }
-              }
-            }
-            m5gfx::gpio_hi(GPIO_NUM_45); // SDA HIGH = STOP
-            result = result << 1 | nack;
-          }
-          if (result == 1) {
-            board = board_t::board_M5PowerHub;
-            ESP_LOGD("M5Unified", "PowerHub detected");
-          }
-        }
-
-        for (auto &backup : pin_backup) {
-          backup.restore();
+        if (_detect_i2c_device(45, 48, 0x50)) {
+          board = board_t::board_M5PowerHub;
         }
       }
       break;
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
-      if (board == board_t::board_unknown) {
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_0, GPIO_NUM_45 };
-        {
-          m5gfx::gpio::command((const uint8_t[]) {
-              m5gfx::gpio::command_write_low, GPIO_NUM_0,
-              m5gfx::gpio::command_mode_output, GPIO_NUM_0,  // SCL
-              m5gfx::gpio::command_write_low, GPIO_NUM_45,
-              m5gfx::gpio::command_mode_output, GPIO_NUM_45, // SDA
-            });
-
-          delay(50); // 延时 50ms，保证设备上电稳定
-
-          uint32_t result = 0;
-          for (uint8_t i2caddr: (const uint8_t[]){ 0x18 << 1 }) {
-            delay(2); // 小延时
-            bool nack = true;
-            // I2C START
-            m5gfx::gpio_lo(GPIO_NUM_45);  // SDA LOW = START
-            for (int cycle = 0; cycle < 20; ++cycle) {
-              // SCL toggle
-              m5gfx::gpio_hi(GPIO_NUM_0);
-              delay(1);
-              m5gfx::gpio_lo(GPIO_NUM_0);
-              delay(1);
-
-              if (cycle & 1) {
-                if (cycle == 17) {
-                  nack = m5gfx::gpio_in(GPIO_NUM_45);  // 读 ACK
-                }
-              } else {
-                if (i2caddr & 0x80) {
-                  m5gfx::gpio_hi(GPIO_NUM_45);
-                } else {
-                  m5gfx::gpio_lo(GPIO_NUM_45);
-                }
-                i2caddr <<= 1;
-                if (cycle >= 16) {
-                  m5gfx::pinMode(GPIO_NUM_45, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-                }
-              }
-            }
-            m5gfx::gpio_hi(GPIO_NUM_45); // SDA HIGH = STOP
-            result = result << 1 | nack;
-          }
-          if (result == 1) {
-            board = board_t::board_M5AtomEchoS3R;
-          }
+    if (board == board_t::board_unknown) {
+        /// AtomEchoS3R ?
+        if(_detect_i2c_device(45, 0, 0x18)) {
+          board = board_t::board_M5AtomEchoS3R;
         }
-
-        for (auto &backup : pin_backup) {
-          backup.restore();
+        /// Stamp-S3Bat ?
+        else if (_detect_i2c_device(48, 47, 0x6E)) {
+          board = board_t::board_M5StampS3Bat;
         }
       }
 
@@ -1404,12 +1372,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
-      /// M5Tab5 ?
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
       if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
         board = board_t::board_M5Tab5;
-      else
+      else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
+      else
+        board = board_t::board_M5StampP4;
     }
 
 #endif
@@ -1504,6 +1474,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PowerHub:
       Led.setLedInstance(std::make_shared<m5::LED_PowerHub_Class>());
       return;
+    case board_t::board_M5StampS3Bat:
+    {
+      auto busled = std::make_shared<m5::LED_PMIC_Class>();
+      auto buscfg = busled->getConfig();
+      buscfg.pin_data = 0;
+      buscfg.led_count = 1;
+      busled->setConfig(buscfg);
+      Led.setLedInstance(busled);
+      return;
+    }
 #else
     case board_t::board_M5AtomMatrix:
       led_count = 25;
@@ -1708,6 +1688,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_17, m5gfx::pin_mode_t::input);
       break;
+
     case board_t::board_M5StickS3:
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input);

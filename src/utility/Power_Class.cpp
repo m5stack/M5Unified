@@ -194,6 +194,24 @@ namespace m5
       }
       break;
 
+    case board_t::board_M5StampS3Bat:
+      _pmic = pmic_t::pmic_m5pm1;
+      {
+        // Configure PM1_G1 ~ PM1_G3 to GPIO mode
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x16, i2c_freq);
+        reg_val &= 0x03;  // set to gpio function
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x16, reg_val, i2c_freq);
+        // gpio1 mode: output: register 0x10 bit 1 (bit on = output mode)
+        // gpio2 mode: input: register 0x10 bit 2 (bit off = input mode)
+        // gpio3 mode: input: register 0x10 bit 3 (bit off = input mode)
+        reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x10, i2c_freq);
+        reg_val |= (1 << 1);   // Set bit 1 , set to output mode
+        reg_val &= ~(1 << 2);  // Clear bit 2 , set to input mode
+        reg_val |= (1 << 3);   // Set bit 3 , set to output mode
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x10, reg_val, i2c_freq);
+      }
+      break;
+
     case board_t::board_M5PaperS3:
       m5gfx::pinMode(M5PaperS3_CHG_STAT_PIN, m5gfx::pin_mode_t::input);
       _batAdcCh = ADC1_GPIO3_CHANNEL;
@@ -606,6 +624,15 @@ namespace m5
       }
       break;
 
+    case board_t::board_M5StampS3Bat:
+      // Use G1 Control 5V output
+      if (enable) {
+        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 1, i2c_freq); // Set G1 to High level
+      } else {
+        M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 1, i2c_freq);
+      }
+      break;
+
     case board_t::board_M5PowerHub:
       if (port_mask & ext_port_mask_t::ext_USB)
       {
@@ -685,19 +712,6 @@ namespace m5
 
   bool Power_Class::getExtOutput(void)
   {
-    switch (_pmic)
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case pmic_t::pmic_m5pm1:
-      {
-        // Read 5V output status: register 0x06 bit 3
-        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
-        return (reg_val & 0x08) != 0;
-      }
-#endif
-    default:
-      break;
-    }
     switch (M5.getBoard())
     {
 #if defined (M5UNIFIED_PC_BUILD)
@@ -718,6 +732,7 @@ namespace m5
         return M5.In_I2C.readRegister8(aw9523_i2c_addr, port0_reg, i2c_freq) & port0_bitmask;
       }
       break;
+
     case board_t::board_M5PowerHub:
       uint8_t buf[4];
       if (M5.In_I2C.readRegister(powerhub_i2c_addr, 0x01, buf, sizeof(buf), i2c_freq))
@@ -725,6 +740,22 @@ namespace m5
         return (*(uint32_t*)buf != 0);
       }
       return false;
+      break;
+
+    case board_t::board_M5StickS3:
+      {
+        // Read 5V output status: register 0x06 bit 3
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
+        return (reg_val & 0x08) != 0;
+      }
+      break;
+
+    case board_t::board_M5StampS3Bat:
+      {
+        // Read G1 Control 5V output status: register 0x11 bit 1
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x11, i2c_freq);
+        return (reg_val & (1 << 1)) != 0;
+      }
       break;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
@@ -1596,6 +1627,13 @@ namespace m5
     case pmic_t::pmic_axp2101:
       Axp2101.setChargeCurrent(max_mA);
       break;
+    
+    case pmic_t::pmic_m5pm1:
+      if (max_mA >= 650)
+        M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to low level
+      else
+        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to High level
+      break;
 
 #endif
 
@@ -1769,6 +1807,14 @@ namespace m5
           return (reg_val & 0x01) ? is_charging_t::is_discharging : is_charging_t::is_charging;
         }
         break;
+      
+      case board_t::board_M5StampS3Bat:
+        {
+          // PM1_G2 is charging status input pin, low=charging / high=not charging
+          uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x12, i2c_freq);
+          return (reg_val & 0x04) ? is_charging_t::is_discharging : is_charging_t::is_charging;
+        }
+        break;
 
       case board_t::board_M5PaperS3:
         return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
@@ -1820,6 +1866,7 @@ namespace m5
         return 0;
       }
 
+      case board_t::board_M5StampS3Bat:
       case board_t::board_M5StickS3: {
         // Read output voltage from device PM1: register 0x26 (5VOUT_L) and 0x27 (5VOUT_H)
         // Unit: mV, format: (5VOUT_H << 8) | 5VOUT_L
