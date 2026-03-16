@@ -203,12 +203,17 @@ namespace m5
         M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x16, reg_val, i2c_freq);
         // gpio1 mode: output: register 0x10 bit 1 (bit on = output mode)
         // gpio2 mode: input: register 0x10 bit 2 (bit off = input mode)
-        // gpio3 mode: input: register 0x10 bit 3 (bit off = input mode)
+        // gpio3 mode: input: register 0x10 bit 3 (bit off = output mode)
         reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x10, i2c_freq);
         reg_val |= (1 << 1);   // Set bit 1 , set to output mode
         reg_val &= ~(1 << 2);  // Clear bit 2 , set to input mode
         reg_val |= (1 << 3);   // Set bit 3 , set to output mode
         M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x10, reg_val, i2c_freq);
+        // gpio1, gpio3 set to push pull mode
+        reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x13, i2c_freq);
+        reg_val &= ~(1 << 1);   // Clear bit 1 , set gpio1 to push pull mode
+        reg_val &= ~(1 << 3);   // Clear bit 3 , set gpio3 to push pull mode
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x13, reg_val, i2c_freq);
       }
       break;
 
