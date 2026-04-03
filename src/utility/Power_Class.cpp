@@ -203,7 +203,7 @@ namespace m5
         M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x16, reg_val, i2c_freq);
         // gpio1 mode: output: register 0x10 bit 1 (bit on = output mode)
         // gpio2 mode: input: register 0x10 bit 2 (bit off = input mode)
-        // gpio3 mode: input: register 0x10 bit 3 (bit off = output mode)
+        // gpio3 mode: input: register 0x10 bit 3 (bit on = output mode)
         reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x10, i2c_freq);
         reg_val |= (1 << 1);   // Set bit 1 , set to output mode
         reg_val &= ~(1 << 2);  // Clear bit 2 , set to input mode
@@ -1632,13 +1632,15 @@ namespace m5
     case pmic_t::pmic_axp2101:
       Axp2101.setChargeCurrent(max_mA);
       break;
-    
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
     case pmic_t::pmic_m5pm1:
       if (max_mA >= 650)
         M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to low level
       else
         M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to High level
       break;
+#endif
 
 #endif
 
