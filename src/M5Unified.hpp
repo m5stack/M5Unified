@@ -349,7 +349,7 @@ namespace m5
         res = Display.init_without_reset(false);
       }
       auto board = _check_boardtype(Display.getBoard());
-      printf("auto detect board:%d\n",board);
+      // printf("auto detect board:%d\n",board);
       if (board == board_t::board_unknown) { board = cfg.fallback_board; }
       _board = board;
       _setup_pinmap(board);

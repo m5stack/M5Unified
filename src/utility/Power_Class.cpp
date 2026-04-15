@@ -1897,6 +1897,7 @@ namespace m5
         return 0;
       }
 #endif
+    return 0;
   }
 
   float Power_Class::getExtVoltage(ext_port_mask_t port_mask)

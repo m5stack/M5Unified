@@ -979,12 +979,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       if(cmd_list == nullptr)
       {
-        m5gfx::gpio::command((const uint8_t[]) {
+        uint8_t cmd_low[] = {
           m5gfx::gpio::command_write_low, scl,
           m5gfx::gpio::command_mode_output, scl,  // SCL
           m5gfx::gpio::command_write_low, sda,
           m5gfx::gpio::command_mode_output, sda, // SDA
-        });
+          m5gfx::gpio::command_end,
+        };
+        m5gfx::gpio::command(cmd_low);
       }
       else m5gfx::gpio::command(cmd_list);
 
@@ -1109,6 +1111,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                   m5gfx::gpio::command_read               , GPIO_NUM_33,
                   m5gfx::gpio::command_read               , GPIO_NUM_19,
                   m5gfx::gpio::command_read               , GPIO_NUM_22,
+                  m5gfx::gpio::command_end
                   }
                 );
                 // G19 G22 G33 = ECHOのI2Sスピーカ用ピン。プルアップを無効化するとすぐにLOWになるため、この性質を利用して判定する。
@@ -1711,6 +1714,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
 
 #if defined ( ARDUINO )
+ #ifdef HardwareSerial_h
 
     if (cfg.serial_baudrate)
     { // Wait with delay to prevent startup log output from disappearing.
@@ -1718,6 +1722,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       Serial.begin(cfg.serial_baudrate);
     }
 
+ #endif
 #endif
   }
 
