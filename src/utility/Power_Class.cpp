@@ -225,6 +225,19 @@ namespace m5
       _adc_ratio = 2.0f;
       _wakeupPin = GPIO_NUM_48; // touch panel INT
       break;
+    
+    case board_t::board_M5PaperColor:
+      _rtcIntPin = GPIO_NUM_7;
+      _pmic = pmic_t::pmic_m5pm1;
+      {
+        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x06, 1 << 2, i2c_freq);  // Enable LDO (RGB PWR EN)
+        // Turn on TF Card Power
+        M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x16, 1 << 3, i2c_freq); // Set pin gpio3 as gpio function
+        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x10, 1 << 3, i2c_freq);  // Set pin gpio3 mode: output
+        M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x13, 1 << 3, i2c_freq); // Set gpio3 push-pull mode
+        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set gpio3 output high
+      }
+      break;
 
     case board_t::board_M5Capsule:
       _batAdcCh = ADC1_GPIO6_CHANNEL;
@@ -616,6 +629,7 @@ namespace m5
       break;
 
     case board_t::board_M5StickS3:
+    case board_t::board_M5PaperColor:
       if (_pmic == pmic_t::pmic_m5pm1)
       {
         // Control 5V output: register 0x06 bit 3 (1=enable, 0=disable)
@@ -748,6 +762,7 @@ namespace m5
       break;
 
     case board_t::board_M5StickS3:
+    case board_t::board_M5PaperColor:
       {
         // Read 5V output status: register 0x06 bit 3
         uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
@@ -1004,11 +1019,13 @@ namespace m5
 
       case pmic_t::pmic_m5pm1:
         {
-          // Power off: register 0x0C bit 1:0, 01=power off
-          uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x0C, i2c_freq);
-          reg_val &= ~0x03;  // Clear bits 1:0
-          reg_val |= 0xA1;   // Set to A1 (command key | power off)
-          M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x0C, reg_val, i2c_freq);
+          if(!withTimer){
+            // Power off: register 0x0C bit 1:0, 01=power off
+            uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x0C, i2c_freq);
+            reg_val &= ~0x03;  // Clear bits 1:0
+            reg_val |= 0xA1;   // Set to A1 (command key | power off)
+            M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x0C, reg_val, i2c_freq);
+          }
         }
         break;
 #endif
@@ -1573,6 +1590,10 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case pmic_t::pmic_m5pm1:
       {
+        // M5PaperColor does not support charge control
+        if (M5.getBoard() == board_t::board_M5PaperColor) {
+            return;
+        }
         // Control charge enable: register 0x06 bit 0 (1=enable, 0=disable)
         uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
         if (enable) {
@@ -1635,10 +1656,12 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case pmic_t::pmic_m5pm1:
-      if (max_mA >= 650)
-        M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to low level
-      else
-        M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to High level
+      if (M5.getBoard() == board_t::board_M5StampS3Bat) {
+        if (max_mA >= 650)
+          M5.In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to low level
+        else
+          M5.In_I2C.bitOn(m5pm1_i2c_addr, 0x11, 1 << 3, i2c_freq); // Set G3 to High level
+        }
       break;
 #endif
 
