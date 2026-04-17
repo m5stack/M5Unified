@@ -26,47 +26,43 @@ namespace m5
       i2c->begin();
     }
 
-    bool result = false;
-
+    auto instance = std::unique_ptr<RTC_Base>();
+    switch (board)
+    {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
-    if (result == false && board == board_t::board_M5Tab5)
-    {
-      auto instance = new RX8130_Class( RX8130_Class::DEFAULT_ADDRESS, 400000, i2c );
-      result = instance->begin();
-      _rtc_instance.reset(instance);
-    }
+      case board_t::board_M5Tab5:
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
+        break;
 #endif
 
-    if (result == false)
-    {
-    RTC_Base* instance = nullptr;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-      switch (board)
-        {
-          case board_t::board_M5PowerHub:
-            instance = new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000);
-            break;
-          
-          case board_t::board_M5StampPLC:
-            instance = new RX8130_Class( RX8130_Class::DEFAULT_ADDRESS, 400000, i2c );
-            break;
+      case board_t::board_M5PowerHub:
+        instance.reset(new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000));
+        break;
 
-          default:
-            break;
-        }
+      case board_t::board_M5StampPLC:
+      case board_t::board_M5PaperColor:
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
+        break;
 #endif
-      if (instance ==nullptr ){
-        instance = new PCF8563_Class( PCF8563_Class::DEFAULT_ADDRESS, 400000);
-      }
-      result = instance->begin();
-      _rtc_instance.reset(instance);
+
+      default:
+        break;
     }
 
-    if (result == false)
+    if (instance == nullptr)
     {
-      _rtc_instance.reset();
+      instance.reset(new PCF8563_Class(PCF8563_Class::DEFAULT_ADDRESS, 400000));
     }
-    return result;
+
+    if (instance->begin())
+    {
+      _rtc_instance = std::move(instance);
+      return true;
+    }
+
+    _rtc_instance.reset();
+    return false;
   }
 
   bool RTC_Class::getVoltLow(void)

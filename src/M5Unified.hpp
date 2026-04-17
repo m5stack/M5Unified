@@ -401,8 +401,8 @@ namespace m5
       }
 #endif
 
-      // Speaker selection is performed after the Module Display has been determined.
-      _begin_spk(cfg);
+      // Audio selection is performed after the Module Display has been determined.
+      _begin_audio(cfg);
 
       update();
 
@@ -625,7 +625,7 @@ namespace m5
     bool _use_pmic_button = false;
 
     void _begin(const config_t& cfg);
-    void _begin_spk(config_t& cfg);
+    void _begin_audio(config_t& cfg);
     bool _begin_rtc_imu(const config_t& cfg);
 
     board_t _check_boardtype(board_t);
@@ -637,18 +637,20 @@ namespace m5
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);
     static bool _speaker_enabled_cb_cores3(void* args, bool enabled);
     static bool _speaker_enabled_cb_sticks3(void* args, bool enabled);
-    static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
-    static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _speaker_enabled_cb_papercolor(void* args, bool enabled);
     static bool _speaker_enabled_cb_tab5(void* args, bool enabled);
     static bool _speaker_enabled_cb_cardputer_adv(void* args, bool enabled);
-    static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
-    static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
-    static bool _microphone_enabled_cb_sticks3(void* args, bool enabled);
-    static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
-    static bool _microphone_enabled_cb_atom_echos3r(void* args, bool enabled);
     static bool _speaker_enabled_cb_atom_echos3r(void* args, bool enabled);
+    static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _speaker_enabled_cb_hat_spk(void* args, bool enabled);
+    static bool _microphone_enabled_cb_cores3(void* args, bool enabled);
+    static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
+    static bool _microphone_enabled_cb_sticks3(void* args, bool enabled);
+    static bool _microphone_enabled_cb_papercolor(void* args, bool enabled);
     static bool _microphone_enabled_cb_tab5(void* args, bool enabled);
     static bool _microphone_enabled_cb_cardputer_adv(void* args, bool enabled);
+    static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
+    static bool _microphone_enabled_cb_atom_echos3r(void* args, bool enabled);
 
     static int8_t _get_pin_table[pin_name_max];
   };

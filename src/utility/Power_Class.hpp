@@ -138,11 +138,11 @@ namespace m5
     void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
     /// ESP32 deepsleep
-    /// @param seconds Number of micro seconds to wakeup.
+    /// @param micro_seconds Number of micro seconds to wakeup.
     void deepSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
 
     /// ESP32 lightsleep
-    /// @param seconds Number of micro seconds to wakeup.
+    /// @param micro_seconds Number of micro seconds to wakeup.
     void lightSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
 
     /// Get the remaining battery power.
