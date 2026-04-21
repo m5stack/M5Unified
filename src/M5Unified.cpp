@@ -508,7 +508,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
         2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
         2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
-        2, 0x32, 0xBF,  // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
+        2, 0x32, 0xCF,  // 0x32 DAC/ DAC volume (0xCF == +16 dB )
         2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
         0
       };
@@ -1078,9 +1078,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
   bool M5Unified::_detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list)
   {
-#if defined(M5UNIFIED_PC_BUILD)
-#else
     uint32_t result = 0;
+#if defined(M5UNIFIED_PC_BUILD)
+    return result;
+#else
     m5gfx::gpio::pin_backup_t pin_backup[] = {scl, sda};
     {
       if(cmd_list == nullptr)
