@@ -3,9 +3,12 @@
 
 #ifndef __M5_IOEXPANDER_BASE_H__
 #define __M5_IOEXPANDER_BASE_H__
-
 #include <stdint.h>
 #include "I2C_Class.hpp"
+
+#if CONFIG_IDF_TARGET_ESP32C6
+#include "SoftI2C_Class.hpp"
+#endif
 
 namespace m5
 {
