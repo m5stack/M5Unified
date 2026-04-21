@@ -32,6 +32,7 @@
 #endif
 
 #include "utility/led/LED_Strip_Class.hpp"
+#include "utility/led/LED_PMIC_Class.hpp"
 #include "utility/led/LED_PowerHub_Class.hpp"
 
 #endif
@@ -91,6 +92,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
+{ board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
+{ board_t::board_M5PaperColor , GPIO_NUM_2 ,GPIO_NUM_3  , GPIO_NUM_5 ,GPIO_NUM_4  },
 { board_t::board_unknown      , GPIO_NUM_39,GPIO_NUM_38 , GPIO_NUM_1 ,GPIO_NUM_2  }, // AtomS3,AtomS3Lite,AtomS3U
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_0 ,GPIO_NUM_1  },
@@ -163,6 +166,7 @@ static constexpr const uint8_t _pin_table_spi_sd[][5] = {
 { board_t::board_M5CardputerADV,GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, GPIO_NUM_47 },
 { board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  GPIO_NUM_10 },
+{ board_t::board_M5PaperColor , GPIO_NUM_15, GPIO_NUM_13, GPIO_NUM_14, GPIO_NUM_47 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
@@ -188,6 +192,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5Capsule    , GPIO_NUM_21 },
 { board_t::board_M5Cardputer  , GPIO_NUM_21 },
 { board_t::board_M5CardputerADV,GPIO_NUM_21 },
+{ board_t::board_M5PaperColor , GPIO_NUM_21 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 { board_t::board_M5StampC3    , GPIO_NUM_2  },
 { board_t::board_M5StampC3U   , GPIO_NUM_2  },
@@ -478,6 +483,46 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         self->In_I2C.bitOff(py32pmic_i2c_addr, 0x11, 0b00001000, 100000);
       }
 //*/
+    }
+#endif
+    return true;
+  }
+
+  bool M5Unified::_speaker_enabled_cb_papercolor(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    auto self = (M5Unified*)args;
+    auto spk_cfg = self->Speaker.config();
+    gpio_num_t codec_en_pin = GPIO_NUM_45;
+    gpio_num_t spk_en_pin = GPIO_NUM_46;
+    m5gfx::pinMode(codec_en_pin, m5gfx::pin_mode_t::output);
+    m5gfx::pinMode(spk_en_pin, m5gfx::pin_mode_t::output);
+    if (spk_cfg.pin_bck == GPIO_NUM_40)
+    {
+      static constexpr const uint8_t enabled_bulk_data[] = {
+        2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+        2, 0x01, 0xB5,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+        2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+        2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+        2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
+        2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
+        2, 0x32, 0xCF,  // 0x32 DAC/ DAC volume (0xCF == +16 dB )
+        2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
+        0
+      };
+      if (enabled)
+      {
+        m5gfx::gpio_hi(codec_en_pin);
+        m5gfx::gpio_hi(spk_en_pin);
+        in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
+      }
+      else
+      {
+        m5gfx::gpio_lo(codec_en_pin);
+        m5gfx::gpio_lo(spk_en_pin);
+      }
     }
 #endif
     return true;
@@ -823,6 +868,69 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+  bool M5Unified::_microphone_enabled_cb_papercolor(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    auto self = (M5Unified*)args;
+    auto cfg = self->Mic.config();
+    gpio_num_t codec_en_pin = GPIO_NUM_45;
+    m5gfx::pinMode(codec_en_pin, m5gfx::pin_mode_t::output);
+    m5gfx::gpio_hi(codec_en_pin);
+    delay(50);
+    if (cfg.pin_bck == GPIO_NUM_40)
+    {
+      es7210_write_reg(0x00, 0xFF); // RESET_CTL
+      struct __attribute__((packed)) reg_data_t
+      {
+        uint8_t reg;
+        uint8_t value;
+      };
+      if (enabled)
+      {
+        static constexpr reg_data_t data[] =
+        {
+          { 0x00, 0x41 }, // RESET_CTL
+          { 0x01, 0x1f }, // CLK_ON_OFF
+          { 0x06, 0x00 }, // DIGITAL_PDN
+          { 0x07, 0x20 }, // ADC_OSR
+          { 0x08, 0x10 }, // MODE_CFG
+          { 0x09, 0x30 }, // TCT0_CHPINI
+          { 0x0A, 0x30 }, // TCT1_CHPINI
+          { 0x20, 0x0a }, // ADC34_HPF2
+          { 0x21, 0x2a }, // ADC34_HPF1
+          { 0x22, 0x0a }, // ADC12_HPF2
+          { 0x23, 0x2a }, // ADC12_HPF1
+          { 0x02, 0xC1 },
+          { 0x04, 0x01 },
+          { 0x05, 0x00 },
+          { 0x11, 0x60 },
+          { 0x40, 0x42 }, // ANALOG_SYS
+          { 0x41, 0x70 }, // MICBIAS12
+          { 0x42, 0x70 }, // MICBIAS34
+          { 0x43, 0x1B }, // MIC1_GAIN
+          { 0x44, 0x00 }, // MIC2_GAIN
+          { 0x45, 0x00 }, // MIC3_GAIN
+          { 0x46, 0x00 }, // MIC4_GAIN
+          { 0x47, 0x00 }, // MIC1_LP
+          { 0x48, 0x00 }, // MIC2_LP
+          { 0x49, 0x00 }, // MIC3_LP
+          { 0x4A, 0x00 }, // MIC4_LP
+          { 0x4B, 0x00 }, // MIC12_PDN
+          { 0x4C, 0xFF }, // MIC34_PDN
+          { 0x01, 0x14 }, // CLK_ON_OFF
+        };
+        for (auto& d: data)
+        {
+          es7210_write_reg(d.reg, d.value);
+        }
+      }
+    }
+#endif
+    return true;
+  }
+
 #if defined (CONFIG_IDF_TARGET_ESP32) && SOC_TOUCH_SENSOR_SUPPORTED
   static void _read_touch_pad(uint32_t* results, const touch_pad_t* channel, const size_t channel_count)
   {
@@ -968,6 +1076,68 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
+  bool M5Unified::_detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list)
+  {
+    uint32_t result = 0;
+#if defined(M5UNIFIED_PC_BUILD)
+    return result;
+#else
+    m5gfx::gpio::pin_backup_t pin_backup[] = {scl, sda};
+    {
+      if(cmd_list == nullptr)
+      {
+        uint8_t cmd_low[] = {
+          m5gfx::gpio::command_write_low, scl,
+          m5gfx::gpio::command_mode_output, scl,  // SCL
+          m5gfx::gpio::command_write_low, sda,
+          m5gfx::gpio::command_mode_output, sda, // SDA
+          m5gfx::gpio::command_end,
+        };
+        m5gfx::gpio::command(cmd_low);
+      }
+      else m5gfx::gpio::command(cmd_list);
+
+      delay(50);  // 延时 50ms，保证设备上电稳定
+
+      for (uint8_t i2caddr : (const uint8_t[]){static_cast<uint8_t>(addr << 1)}) { //detect address
+        delay(2);  // 小延时
+        bool nack = true;
+        // I2C START
+        m5gfx::gpio_lo(sda);  // SDA LOW = START
+        for (int cycle = 0; cycle < 20; ++cycle) {
+          // SCL toggle
+          m5gfx::gpio_hi(scl);
+          delay(1);
+          m5gfx::gpio_lo(scl);
+          delay(1);
+
+          if (cycle & 1) {
+            if (cycle == 17) {
+                nack = m5gfx::gpio_in(sda);  // 读 ACK
+            }
+          } else {
+            if (i2caddr & 0x80) {
+              m5gfx::gpio_hi(sda);
+            } else {
+              m5gfx::gpio_lo(sda);
+            }
+            i2caddr <<= 1;
+            if (cycle >= 16) {
+              m5gfx::pinMode(sda, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
+            }
+          }
+        }
+        m5gfx::gpio_hi(sda);  // SDA HIGH = STOP
+        result = result << 1 | nack;
+      }
+    }
+    for (auto& backup : pin_backup) {
+        backup.restore();
+    }
+    return result;
+#endif
+  }
+
   board_t M5Unified::_check_boardtype(board_t board)
   {
 #if defined (M5UNIFIED_PC_BUILD)
@@ -1048,6 +1218,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                   m5gfx::gpio::command_read               , GPIO_NUM_33,
                   m5gfx::gpio::command_read               , GPIO_NUM_19,
                   m5gfx::gpio::command_read               , GPIO_NUM_22,
+                  m5gfx::gpio::command_end
                   }
                 );
                 // G19 G22 G33 = ECHOのI2Sスピーカ用ピン。プルアップを無効化するとすぐにLOWになるため、この性質を利用して判定する。
@@ -1193,114 +1364,21 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
       if (board == board_t::board_unknown) {
         /// PowerHub ?
-
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_48, GPIO_NUM_45 };
-        {
-          m5gfx::gpio::command((const uint8_t[]) {
-            m5gfx::gpio::command_write_low, GPIO_NUM_48,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_48,  // SCL
-            m5gfx::gpio::command_write_low, GPIO_NUM_45,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_45, // SDA
-          });
-
-          delay(50); // 延时 50ms，保证设备上电稳定
-
-          uint32_t result = 0;
-          for (uint8_t i2caddr: (const uint8_t[]){ 0x50 << 1}) { // PowerHub I2C 7bit addr = 0x50
-            delay(2); // 小延时
-            bool nack = true;
-            // I2C START
-            m5gfx::gpio_lo(GPIO_NUM_45);  // SDA LOW = START
-            for (int cycle = 0; cycle < 20; ++cycle) {
-              // SCL toggle
-              m5gfx::gpio_hi(GPIO_NUM_48);
-              delay(1);
-              m5gfx::gpio_lo(GPIO_NUM_48);
-              delay(1);
-
-              if (cycle & 1) {
-                if (cycle == 17) {
-                  nack = m5gfx::gpio_in(GPIO_NUM_45);  // 读 ACK
-                }
-              } else { 
-                if (i2caddr & 0x80) { // 输出 addr
-                  m5gfx::gpio_hi(GPIO_NUM_45); 
-                } else {
-                  m5gfx::gpio_lo(GPIO_NUM_45);
-                }
-                i2caddr <<= 1;
-                if (cycle >= 16) {
-                  m5gfx::pinMode(GPIO_NUM_45, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-                }
-              }
-            }
-            m5gfx::gpio_hi(GPIO_NUM_45); // SDA HIGH = STOP
-            result = result << 1 | nack;
-          }
-          if (result == 1) {
-            board = board_t::board_M5PowerHub;
-            ESP_LOGD("M5Unified", "PowerHub detected");
-          }
-        }
-
-        for (auto &backup : pin_backup) {
-          backup.restore();
+        if (_detect_i2c_device(45, 48, 0x50)) {
+          board = board_t::board_M5PowerHub;
         }
       }
       break;
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
-      if (board == board_t::board_unknown) {
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_0, GPIO_NUM_45 };
-        {
-          m5gfx::gpio::command((const uint8_t[]) {
-              m5gfx::gpio::command_write_low, GPIO_NUM_0,
-              m5gfx::gpio::command_mode_output, GPIO_NUM_0,  // SCL
-              m5gfx::gpio::command_write_low, GPIO_NUM_45,
-              m5gfx::gpio::command_mode_output, GPIO_NUM_45, // SDA
-            });
-
-          delay(50); // 延时 50ms，保证设备上电稳定
-
-          uint32_t result = 0;
-          for (uint8_t i2caddr: (const uint8_t[]){ 0x18 << 1 }) {
-            delay(2); // 小延时
-            bool nack = true;
-            // I2C START
-            m5gfx::gpio_lo(GPIO_NUM_45);  // SDA LOW = START
-            for (int cycle = 0; cycle < 20; ++cycle) {
-              // SCL toggle
-              m5gfx::gpio_hi(GPIO_NUM_0);
-              delay(1);
-              m5gfx::gpio_lo(GPIO_NUM_0);
-              delay(1);
-
-              if (cycle & 1) {
-                if (cycle == 17) {
-                  nack = m5gfx::gpio_in(GPIO_NUM_45);  // 读 ACK
-                }
-              } else {
-                if (i2caddr & 0x80) {
-                  m5gfx::gpio_hi(GPIO_NUM_45);
-                } else {
-                  m5gfx::gpio_lo(GPIO_NUM_45);
-                }
-                i2caddr <<= 1;
-                if (cycle >= 16) {
-                  m5gfx::pinMode(GPIO_NUM_45, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-                }
-              }
-            }
-            m5gfx::gpio_hi(GPIO_NUM_45); // SDA HIGH = STOP
-            result = result << 1 | nack;
-          }
-          if (result == 1) {
-            board = board_t::board_M5AtomEchoS3R;
-          }
+    if (board == board_t::board_unknown) {
+        /// AtomEchoS3R ?
+        if(_detect_i2c_device(45, 0, 0x18)) {
+          board = board_t::board_M5AtomEchoS3R;
         }
-
-        for (auto &backup : pin_backup) {
-          backup.restore();
+        /// Stamp-S3Bat ?
+        else if (_detect_i2c_device(48, 47, 0x6E)) {
+          board = board_t::board_M5StampS3Bat;
         }
       }
 
@@ -1404,12 +1482,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
-      /// M5Tab5 ?
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
+      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
       if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
         board = board_t::board_M5Tab5;
-      else
+      else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
+      else
+        board = board_t::board_M5StampP4;
     }
 
 #endif
@@ -1504,6 +1584,19 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PowerHub:
       Led.setLedInstance(std::make_shared<m5::LED_PowerHub_Class>());
       return;
+    case board_t::board_M5StampS3Bat:
+    {
+      auto busled = std::make_shared<m5::LED_PMIC_Class>();
+      auto buscfg = busled->getConfig();
+      buscfg.pin_data = 0;
+      buscfg.led_count = 1;
+      busled->setConfig(buscfg);
+      Led.setLedInstance(busled);
+      return;
+    }
+    case board_t::board_M5PaperColor:
+      led_count = 2;
+      break;
 #else
     case board_t::board_M5AtomMatrix:
       led_count = 25;
@@ -1513,7 +1606,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
     }
 
-    auto pin_rgb_led = M5.getPin(m5::pin_name_t::rgb_led);
+    auto pin_rgb_led = M5.getPin(m5::pin_name_t::rgb_led); //Line: 181
     if (pin_rgb_led >= 0)
     {
       auto busled = std::make_shared<m5::LedBus_RMT>();
@@ -1708,6 +1801,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_17, m5gfx::pin_mode_t::input);
       break;
+
     case board_t::board_M5StickS3:
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input);
@@ -1717,6 +1811,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       this->In_I2C.bitOff(pm1_i2c_addr, 0x13, 1 << 3, 100000); // Set gpio3 push-pull mode
       this->In_I2C.bitOff(pm1_i2c_addr, 0x11, 1 << 3, 100000); // Set gpio3 output low
       break;
+
+    case board_t::board_M5PaperColor:
+      m5gfx::pinMode(GPIO_NUM_1, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_10, m5gfx::pin_mode_t::input);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5UnitPoEP4:
@@ -1730,6 +1829,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
 
 #if defined ( ARDUINO )
+ #ifdef HardwareSerial_h
 
     if (cfg.serial_baudrate)
     { // Wait with delay to prevent startup log output from disappearing.
@@ -1737,10 +1837,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       Serial.begin(cfg.serial_baudrate);
     }
 
+ #endif
 #endif
   }
 
-  void M5Unified::_begin_spk(config_t& cfg)
+  void M5Unified::_begin_audio(config_t& cfg)
   {
     bool(*mic_enable_cb)(void*, bool) = nullptr;
     auto mic_cfg = Mic.config();
@@ -1797,6 +1898,20 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.pin_data_in = GPIO_NUM_16;
           mic_cfg.i2s_port = I2S_NUM_1;
           mic_enable_cb = _microphone_enabled_cb_sticks3;
+        }
+        break;
+
+      case board_t::board_M5PaperColor:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.over_sampling = 1;
+          mic_cfg.pin_mck = GPIO_NUM_42;
+          mic_cfg.pin_bck = GPIO_NUM_40;
+          mic_cfg.pin_ws = GPIO_NUM_41;
+          mic_cfg.pin_data_in = GPIO_NUM_39; // data in from mic output
+          mic_cfg.i2s_port = I2S_NUM_1;
+          mic_cfg.input_channel = input_channel_t::input_only_left;
+          mic_enable_cb = _microphone_enabled_cb_papercolor;
         }
         break;
 
@@ -2083,6 +2198,21 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           spk_cfg.pin_data_out = GPIO_NUM_21;
           spk_cfg.buzzer = true;
           spk_cfg.magnification = 48;
+        }
+        break;
+
+      case board_t::board_M5PaperColor:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_mck = GPIO_NUM_42;
+          spk_cfg.pin_bck = GPIO_NUM_40;
+          spk_cfg.pin_ws = GPIO_NUM_41;
+          spk_cfg.pin_data_out = GPIO_NUM_38; // data out to spk
+          spk_cfg.i2s_port = I2S_NUM_0;
+          spk_cfg.magnification = 1;
+          spk_cfg.sample_rate = 44100;
+          spk_cfg.stereo = true;
+          spk_enable_cb = _speaker_enabled_cb_papercolor;
         }
         break;
 
@@ -2535,6 +2665,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       use_rawstate_bits = 0b00011;
       btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_11)) & 1)
                         | ((!m5gfx::gpio_in(GPIO_NUM_12)) & 1) << 1;
+      break;
+
+    case board_t::board_M5PaperColor:
+    {
+      use_rawstate_bits = 0b00111;
+      btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_1)) & 1)
+                        | ((!m5gfx::gpio_in(GPIO_NUM_10)) & 1) << 1
+                        | ((!m5gfx::gpio_in(GPIO_NUM_9)) & 1) << 2;
+    }
       break;
 
     default:

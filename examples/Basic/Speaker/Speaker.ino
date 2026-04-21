@@ -150,6 +150,7 @@ void hold_menu(bool holding)
 void setup(void)
 {
   auto cfg = M5.config();
+  cfg.clear_display = false;
 
   // If you want to play sound from ATOMIC Speaker, write this
   cfg.external_speaker.atomic_spk     = true;
@@ -229,9 +230,11 @@ void setup(void)
     for (;;) { M5.delay(1); }
   }
 
+  M5.Display.startWrite();
   M5.Display.setEpdMode(epd_mode_t::epd_fastest);
   M5.Display.fillScreen(TFT_DARKGRAY);
   M5.Display.print("SOUND TEST");
+  M5.Display.endWrite();
 
   /// The setVolume function can be set the master volume in the range of 0-255. (default : 64)
   M5.Speaker.setVolume(64);
