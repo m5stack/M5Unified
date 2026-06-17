@@ -120,7 +120,8 @@ namespace m5
           uint16_t unit_glass2 : 1;
           uint16_t unit_rca : 1;
           uint16_t module_rca : 1;
-          uint16_t reserve : 7;
+          uint16_t unit_poep4_hdmi : 1;
+          uint16_t reserve : 6;
         } external_display;
         uint16_t external_display_value = 0xFFFF;
       };
@@ -208,6 +209,9 @@ namespace m5
 #endif
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
+#endif
+#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
+      M5UnitPoEP4HDMI::config_t unit_poep4_hdmi;
 #endif
 #if defined ( __M5GFX_M5UNITRCA__ )
       M5UnitRCA::config_t unit_rca;
@@ -381,6 +385,18 @@ namespace m5
 
       _begin(cfg);
 
+
+      // Unit PoEP4 has no built-in LCD; attach its LT8912B HDMI output as a board display.
+#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
+      if (cfg.external_display.unit_poep4_hdmi && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
+      {
+        M5UnitPoEP4HDMI dsp(cfg.unit_poep4_hdmi);
+        dsp.setI2C(&In_I2C);
+        if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
+          addDisplay(dsp);
+        }
+      }
+#endif
 
       // Module Display / Unit OLED / Unit LCD is determined after _begin (because it must be after external power supply)
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )

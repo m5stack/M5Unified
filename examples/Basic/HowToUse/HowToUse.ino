@@ -49,6 +49,9 @@
 // If you use UnitRCA (for Video output), write this.
 #include <M5UnitRCA.h>
 
+// If you use AddOn Display Out For PoE-P4, write this.
+#include <M5UnitPoEP4HDMI.h>
+
 // * The display header must be included before the M5Unified library.
 
 //----------------------------------------------------------------
@@ -101,6 +104,7 @@ void setup(void)
   cfg.external_display.unit_lcd       = false; // default=true. use UnitLCD
   cfg.external_display.unit_rca       = false; // default=true. use UnitRCA VideoOutput
   cfg.external_display.module_rca     = false; // default=true. use ModuleRCA VideoOutput
+  cfg.external_display.unit_poep4_hdmi = false; // default=true. use AddOn Display Out For PoE-P4
 /*
 ※ Unit OLED, Unit Mini OLED, Unit GLASS2 cannot be distinguished at runtime and may be misidentified as each other.
 
@@ -112,6 +116,7 @@ void setup(void)
  - unit_oled
  - unit_mini_oled
  - unit_lcd
+ - unit_poep4_hdmi
 
 ※ Displays that cannot be auto-detected
  - module_rca
@@ -181,6 +186,16 @@ void setup(void)
 // cfg.unit_lcd.i2c_freq = 400000;
 // cfg.unit_lcd.i2c_port = I2C_NUM_0;
 #endif
+#if defined ( __M5GFX_M5UNITPOEP4HDMI__ ) // setting for AddOn Display Out For PoE-P4.
+// Supported timings only. Choose one of the following two modes:
+// cfg.unit_poep4_hdmi.width = 1280;
+// cfg.unit_poep4_hdmi.height = 720;
+// cfg.unit_poep4_hdmi.refresh_rate = 60;
+
+// cfg.unit_poep4_hdmi.width = 1920;
+// cfg.unit_poep4_hdmi.height = 1080;
+// cfg.unit_poep4_hdmi.refresh_rate = 30;
+#endif
 
   // begin M5Unified.
   M5.begin(cfg);
@@ -197,6 +212,7 @@ void setup(void)
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
+//    m5::board_t::board_M5UnitPoEP4HDMI,
   } );
 
   if (M5.Speaker.isEnabled())
@@ -298,6 +314,7 @@ void setup(void)
   case m5::board_t::board_NanoH2:           name = "NanoH2";         break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
   case m5::board_t::board_M5Tab5:           name = "Tab5";           break;
+  case m5::board_t::board_M5UnitPoEP4:      name = "UnitPoEP4";      break; 
 #else
   case m5::board_t::board_M5Stack:          name = "Stack";          break;
   case m5::board_t::board_M5StackCore2:     name = "StackCore2";     break;
