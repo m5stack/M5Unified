@@ -1301,8 +1301,10 @@ namespace m5
       }
       else
       {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
         esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+#endif
       }
       while (m5gfx::gpio_in(wpin) == false)
       {

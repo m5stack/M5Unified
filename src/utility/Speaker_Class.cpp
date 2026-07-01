@@ -25,7 +25,7 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #if __has_include(<driver/i2s_std.h>)
   #if __has_include(<hal/i2s_ll.h>)
    #include <hal/i2s_ll.h>
@@ -378,7 +378,7 @@ namespace m5
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
     static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
@@ -410,7 +410,7 @@ namespace m5
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {
@@ -418,7 +418,7 @@ namespace m5
       dev->tx_conf.tx_chan_equal = 1;
     }
 
-#if defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     dev->tx_conf.tx_bck_div_num = div_m - 1;
 #else
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
@@ -455,9 +455,13 @@ namespace m5
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_z = div_b;
     PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_yn1 = yn1;
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_div_num = div_n;
-    PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK
+    PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;   // PLL_240M_CLK(C6) / PLL_F120M_CLK(C61)
     PCR.i2s_tx_clkm_conf.i2s_tx_clkm_en = 1;
+#if defined (CONFIG_IDF_TARGET_ESP32C6)
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    PCR.pll_div_clk_en.pll_120m_clk_en = 1;
+#endif
 #elif defined ( I2S_TX_CLKM_DIV_X )
     dev->tx_clkm_div_conf.tx_clkm_div_x = div_x;
     dev->tx_clkm_div_conf.tx_clkm_div_y = div_y;

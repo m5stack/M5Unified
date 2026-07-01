@@ -25,7 +25,7 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #if __has_include(<driver/i2s_std.h>)
   #if __has_include(<hal/i2s_ll.h>)
    #include <hal/i2s_ll.h>
@@ -428,7 +428,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
     static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
@@ -457,7 +457,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
@@ -470,7 +470,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
     dev->rx_conf.rx_update = 1;
 
-#if defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     dev->rx_conf.rx_bck_div_num = div_m - 1;
 #else
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
@@ -507,9 +507,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_z = div_b;
     PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_yn1 = yn1;
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_div_num = div_n;
-    PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;   // PLL_240M_CLK
+    PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;   // PLL_240M_CLK(C6) / PLL_F120M_CLK(C61)
     PCR.i2s_rx_clkm_conf.i2s_rx_clkm_en = 1;
+#if defined (CONFIG_IDF_TARGET_ESP32C6)
     PCR.pll_div_clk_en.pll_240m_clk_en = 1;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    PCR.pll_div_clk_en.pll_120m_clk_en = 1;
+#endif
 #elif defined ( I2S_RX_CLKM_DIV_X )
     dev->rx_clkm_div_conf.rx_clkm_div_x = div_x;
     dev->rx_clkm_div_conf.rx_clkm_div_y = div_y;

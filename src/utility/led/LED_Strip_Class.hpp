@@ -12,8 +12,11 @@
 #if __has_include (<sdkconfig.h>)
  #include <sdkconfig.h>
  #include <esp_idf_version.h>
+ #include <soc/soc_caps.h>
 // RMT
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#if defined(CONFIG_IDF_TARGET_ESP32C61) || (defined(SOC_RMT_SUPPORTED) && !SOC_RMT_SUPPORTED)
+  #define M5UNIFIED_RMT_VERSION 0
+ #elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
   #define M5UNIFIED_RMT_VERSION 2
  #else
   #define M5UNIFIED_RMT_VERSION 1
