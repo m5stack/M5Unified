@@ -1084,7 +1084,7 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case pmic_t::pmic_py32pmic:
-        PY32pmic.powerOff();
+        M5pm1.powerOff();
         break;
 
       case pmic_t::pmic_m5pm1:
@@ -2055,7 +2055,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 
     case pmic_t::pmic_py32pmic:
-      return PY32pmic.getPekPress();
+      return M5pm1.getPekPress();
 
     case pmic_t::pmic_m5pm1:
       {
