@@ -14,7 +14,7 @@
 #include "power/INA226_Class.hpp"
 #include "power/AW32001_Class.hpp"
 #include "power/BQ27220_Class.hpp"
-#include "power/PY32PMIC_Class.hpp"
+#include "power/M5PM1_Class.hpp"
 #include "RTC_Class.hpp"
 
 #if __has_include (<sdkconfig.h>)
@@ -208,7 +208,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 
     AXP2101_Class Axp2101;
-    PY32PMIC_Class PY32pmic;
+    M5PM1_Class M5pm1;
     INA226_Class Ina226 = { 0x40 };
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
