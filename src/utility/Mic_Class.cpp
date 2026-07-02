@@ -25,7 +25,7 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #if __has_include(<driver/i2s_std.h>)
   #if __has_include(<hal/i2s_ll.h>)
    #include <hal/i2s_ll.h>
@@ -428,7 +428,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
     static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
     static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
@@ -457,7 +457,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
@@ -470,7 +470,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
     dev->rx_conf.rx_update = 1;
 
-#if defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
     dev->rx_conf.rx_bck_div_num = div_m - 1;
 #else
     dev->rx_conf1.rx_bck_div_num = div_m - 1;

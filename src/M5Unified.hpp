@@ -255,6 +255,8 @@ namespace m5
 
 
     static int8_t getPin(pin_name_t name) { return _get_pin_table[name]; }
+    static bool hasSD(void) { return getPin(pin_name_t::sd_mmc_clk) >= 0; }
+    static bool hasSDMMC(void) { return getPin(pin_name_t::sd_mmc_d1) >= 0; }
 
     Button_Class& getButton(size_t index) { return _buttons[index]; }
 
