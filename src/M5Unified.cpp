@@ -114,6 +114,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
 { board_t::board_M5Paper      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_32,GPIO_NUM_25 },
@@ -144,6 +146,7 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
@@ -163,6 +166,7 @@ static constexpr const uint8_t _pin_table_port_de[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_5 ,GPIO_NUM_13 },
 { board_t::board_M5StackCore2 , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_27,GPIO_NUM_19 },
@@ -190,6 +194,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, 255        , 255        , GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, 255        , 255        , GPIO_NUM_4  },
@@ -221,6 +226,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , GPIO_NUM_11 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
@@ -248,6 +254,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 
 { board_t::board_M5StickCPlus2 , GPIO_NUM_4  },
@@ -334,6 +341,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack  ,
   255        , GPIO_NUM_35,
@@ -1625,7 +1633,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     gpio_num_t ex_sda = (gpio_num_t)getPin(pin_name_t::ex_i2c_sda);
 
     i2c_port_t ex_port = I2C_NUM_0;
-#if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
 #else
     i2c_port_t in_port = I2C_NUM_1;
