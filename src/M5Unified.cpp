@@ -1764,7 +1764,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     auto pmic_type = Power.getType();
     if (pmic_type == Power_Class::pmic_t::pmic_axp2101
      || pmic_type == Power_Class::pmic_t::pmic_axp192
-     || pmic_type == Power_Class::pmic_t::pmic_py32pmic)
+     || pmic_type == Power_Class::pmic_t::pmic_m5pm1)
     {
       _use_pmic_button = cfg.pmic_button;
       /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.

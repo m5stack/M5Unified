@@ -76,7 +76,6 @@ namespace m5
     , pmic_ip5306
     , pmic_axp2101
     , pmic_aw32001
-    , pmic_py32pmic
     , pmic_m5pm1
     };
 
@@ -216,6 +215,9 @@ namespace m5
 
     AW32001_Class Aw32001;
     BQ27220_Class Bq27220;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    M5PM1_Class M5pm1;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     INA226_Class Ina226 = { 0x41 };
