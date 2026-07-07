@@ -99,7 +99,17 @@ jobs:
       - name: Configure arduino-cli
         run: |
           arduino-cli config init
-          arduino-cli config add board_manager.additional_urls ${{ matrix.board_manager_url }}
+          # The M5Stack CN index still lists pre-rename tool versions (without
+          # the "-cn" suffix) in the toolsDependencies of older platforms,
+          # which makes them uninstallable. Fetch the index, patch those
+          # entries, and use it as a local index instead.
+          if [[ "${{ matrix.board_manager_url }}" == *package_m5stack_index_cn.json ]]; then
+            curl -fsSL "${{ matrix.board_manager_url }}" -o /tmp/package_m5stack_index.json
+            python3 .github/scripts/fix_m5stack_package_index.py /tmp/package_m5stack_index.json
+            arduino-cli config add board_manager.additional_urls "file:///tmp/package_m5stack_index.json"
+          else
+            arduino-cli config add board_manager.additional_urls ${{ matrix.board_manager_url }}
+          fi
 
       - name: Install board package
         run: |
