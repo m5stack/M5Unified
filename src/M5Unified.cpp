@@ -7,6 +7,7 @@
 #include "utility/PI4IOE5V6408_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
+#include <soc/soc.h>
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
@@ -1594,8 +1595,20 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     if (board == board_t::board_unknown)
-    { // NanoC6
-      board = board_t::board_M5NanoC6;
+    {
+      if (m5gfx::get_pkg_ver() == 1)
+      { // QFN32 : NanoC6 = C6FH4 (FLASH_CAP=1) / StampC6 = C6FH8 (FLASH_CAP=2)
+        if (REG_GET_FIELD(EFUSE_RD_MAC_SPI_SYS_4_REG, EFUSE_FLASH_CAP) == 2)
+        {
+          board = board_t::board_M5StampC6;
+        }
+        else
+        { // NanoC6
+          board = board_t::board_M5NanoC6;
+        }
+      }
+      // QFN40 (PKG_VERSION=0) : NessoN1 / UnitC6L carry displays and are
+      // identified by M5GFX; an undetected QFN40 board stays unknown.
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
@@ -1603,6 +1616,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
 #if defined (BOARD_ID) && BOARD_ID == 153
       board = board_t::board_M5StampC5;
+#else
+      // StampC5 = ESP32-C5HF4 (in-package 4MB flash, no PSRAM) : FLASH_CAP=1, PSRAM_CAP=0
+      // ToughC5 = ESP32-C5HR8 (8MB PSRAM) carries a display and is identified by M5GFX.
+      std::uint32_t sys2 = REG_READ(EFUSE_RD_MAC_SYS2_REG);
+      if (((sys2 >> EFUSE_FLASH_CAP_S) & EFUSE_FLASH_CAP_V) == 1
+       && ((sys2 >> EFUSE_PSRAM_CAP_S) & EFUSE_PSRAM_CAP_V) == 0)
+      {
+        board = board_t::board_M5StampC5;
+      }
 #endif
     }
 
