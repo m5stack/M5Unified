@@ -1492,21 +1492,29 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
     if (board == board_t::board_unknown) {
-        /// AtomEchoS3R ?
-        if(_detect_i2c_device(45, 0, 0x18)) {
-          board = board_t::board_M5AtomVoiceS3R;
+        /// AtomS3RExt / AtomS3RCam have a BMI270 on the internal I2C bus.
+        if (_detect_i2c_device(45, 0, 0x68)
+         || _detect_i2c_device(45, 0, 0x69)) {
+          board = board_t::board_M5AtomS3RExt;
         }
         /// Stamp-S3Bat ?
         else if (_detect_i2c_device(48, 47, 0x6E)) {
           board = board_t::board_M5StampS3Bat;
         }
+        /// AtomEchoS3R ?
+        else if(_detect_i2c_device(45, 0, 0x18)) {
+          board = board_t::board_M5AtomVoiceS3R;
+        }
+        /// StampS3Mini has no other onboard device that can identify it.
+        else {
+          board = board_t::board_M5StampS3Mini;
+        }
       }
 
-      if (board == board_t::board_unknown)
+      if (board == board_t::board_M5AtomS3RExt)
       { /// AtomS3RCam or AtomS3RExt ?
       // Cam    = GC0308 = I2C 7bit addr = 0x21
       // CamM12 = OV3660 = I2C 7bit addr = 0x3C
-        board = board_t::board_M5AtomS3RExt;
         m5gfx::gpio_lo(GPIO_NUM_18);
         m5gfx::pinMode(GPIO_NUM_18, m5gfx::pin_mode_t::output);
         m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_9, GPIO_NUM_12, GPIO_NUM_21 };
