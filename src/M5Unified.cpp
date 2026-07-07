@@ -115,6 +115,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -1595,6 +1596,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (board == board_t::board_unknown)
     { // NanoC6
       board = board_t::board_M5NanoC6;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    if (board == board_t::board_unknown)
+    {
+#if defined (BOARD_ID) && BOARD_ID == 153
+      board = board_t::board_M5StampC5;
+#endif
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
