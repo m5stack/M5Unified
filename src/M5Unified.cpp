@@ -7,6 +7,7 @@
 #include "utility/PI4IOE5V6408_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
+#include <soc/soc.h>
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
@@ -106,12 +107,16 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_ArduinoNessoN1,GPIO_NUM_8 ,GPIO_NUM_10 , GPIO_NUM_8 ,GPIO_NUM_10 },
 { board_t::board_M5NanoC6     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -139,9 +144,11 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 { board_t::board_M5UnitC6L     ,GPIO_NUM_4 ,GPIO_NUM_5 , GPIO_NUM_4 ,GPIO_NUM_5  },
 { board_t::board_ArduinoNessoN1,GPIO_NUM_4 ,GPIO_NUM_5 , GPIO_NUM_4 ,GPIO_NUM_5  },
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
@@ -159,7 +166,9 @@ static constexpr const uint8_t _pin_table_port_de[][5] = {
 { board_t::board_M5StackChan, 14, 10, 18, 17 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_5 ,GPIO_NUM_13 },
 { board_t::board_M5StackCore2 , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_27,GPIO_NUM_19 },
@@ -183,9 +192,11 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 { board_t::board_M5PaperMono  , GPIO_NUM_13, GPIO_NUM_12, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, 255        , 255        , GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, 255        , 255        , GPIO_NUM_4  },
@@ -214,8 +225,10 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 { board_t::board_M5NanoC6     , GPIO_NUM_20 },
 { board_t::board_M5UnitC6L    , GPIO_NUM_2  },
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , GPIO_NUM_11 },
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
@@ -241,7 +254,9 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 
 { board_t::board_M5StickCPlus2 , GPIO_NUM_4  },
@@ -326,7 +341,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
 { board_t::board_M5Stack  ,
   255        , GPIO_NUM_35,
@@ -1578,8 +1595,37 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     if (board == board_t::board_unknown)
-    { // NanoC6
-      board = board_t::board_M5NanoC6;
+    {
+      if (m5gfx::get_pkg_ver() == 1)
+      { // QFN32 : NanoC6 = C6FH4 (FLASH_CAP=1) / StampC6 = C6FH8 (FLASH_CAP=2)
+        if (REG_GET_FIELD(EFUSE_RD_MAC_SPI_SYS_4_REG, EFUSE_FLASH_CAP) == 2)
+        {
+          board = board_t::board_M5StampC6;
+        }
+        else
+        { // NanoC6
+          board = board_t::board_M5NanoC6;
+        }
+      }
+      // QFN40 (PKG_VERSION=0) : NessoN1 / UnitC6L carry displays and are
+      // identified by M5GFX; an undetected QFN40 board stays unknown.
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    if (board == board_t::board_unknown)
+    {
+#if defined (BOARD_ID) && BOARD_ID == 153
+      board = board_t::board_M5StampC5;
+#else
+      // StampC5 = ESP32-C5HF4 (in-package 4MB flash, no PSRAM) : FLASH_CAP=1, PSRAM_CAP=0
+      // ToughC5 = ESP32-C5HR8 (8MB PSRAM) carries a display and is identified by M5GFX.
+      std::uint32_t sys2 = REG_READ(EFUSE_RD_MAC_SYS2_REG);
+      if (((sys2 >> EFUSE_FLASH_CAP_S) & EFUSE_FLASH_CAP_V) == 1
+       && ((sys2 >> EFUSE_PSRAM_CAP_S) & EFUSE_PSRAM_CAP_V) == 0)
+      {
+        board = board_t::board_M5StampC5;
+      }
+#endif
     }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
@@ -1618,7 +1664,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     gpio_num_t ex_sda = (gpio_num_t)getPin(pin_name_t::ex_i2c_sda);
 
     i2c_port_t ex_port = I2C_NUM_0;
-#if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6)
+#if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
 #else
     i2c_port_t in_port = I2C_NUM_1;
@@ -1749,7 +1795,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     auto pmic_type = Power.getType();
     if (pmic_type == Power_Class::pmic_t::pmic_axp2101
      || pmic_type == Power_Class::pmic_t::pmic_axp192
-     || pmic_type == Power_Class::pmic_t::pmic_py32pmic)
+     || pmic_type == Power_Class::pmic_t::pmic_m5pm1)
     {
       _use_pmic_button = cfg.pmic_button;
       /// Slightly lengthen the acceptance time of the AXP192 power button multiclick.

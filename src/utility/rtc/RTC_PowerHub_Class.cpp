@@ -13,6 +13,12 @@ namespace m5
     return (bcdhigh << 4) | (value - (bcdhigh * 10));
   }
 
+  static std::uint8_t weekdayToPowerHub(std::int8_t weekDay)
+  {
+    static constexpr std::uint8_t weekDayTable[] = { 1, 2, 4, 8, 10, 20, 40 };
+    return ((std::uint8_t)weekDay < sizeof(weekDayTable)) ? weekDayTable[weekDay] : 0;
+  }
+
   bool RTC_PowerHub_Class::begin(I2C_Class* i2c)
   {
     if (i2c)
@@ -52,7 +58,8 @@ namespace m5
       date->date    = buf[idx++] & 0x1f;
       date->month   = buf[idx++] & 0x0f;
       date->year    = (buf[idx++] & 0x7f) + 2000;
-      date->weekDay = __builtin_ctz(byteToBcd2(buf[idx++]));
+      std::uint8_t weekDay = byteToBcd2(buf[idx++]);
+      date->weekDay = weekDay ? __builtin_ctz(weekDay) : -1;
     }
     return true;
   }
@@ -76,7 +83,7 @@ namespace m5
       buf[idx++] = date->date  & 0x1f;
       buf[idx++] = date->month & 0x0f;
       buf[idx++] = (date->year >= 2000) ? ((date->year - 2000) & 0x7f) : (date->year & 0x7f);
-      buf[idx++] = (uint8_t)(1u << (7 & date->weekDay));
+      buf[idx++] = weekdayToPowerHub(date->weekDay);
     }
 
     if (idx == 0) { return false; }
@@ -92,7 +99,7 @@ namespace m5
   int RTC_PowerHub_Class::setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time)
   {
 
-    std::uint8_t buf[3];
+    std::uint8_t buf[3] = { };
     bool irq_enable = false;
 
     if (time) {

@@ -14,7 +14,7 @@
 #include "power/INA226_Class.hpp"
 #include "power/AW32001_Class.hpp"
 #include "power/BQ27220_Class.hpp"
-#include "power/PY32PMIC_Class.hpp"
+#include "power/M5PM1_Class.hpp"
 #include "RTC_Class.hpp"
 
 #if __has_include (<sdkconfig.h>)
@@ -76,7 +76,6 @@ namespace m5
     , pmic_ip5306
     , pmic_axp2101
     , pmic_aw32001
-    , pmic_py32pmic
     , pmic_m5pm1
     };
 
@@ -208,7 +207,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 
     AXP2101_Class Axp2101;
-    PY32PMIC_Class PY32pmic;
+    M5PM1_Class M5pm1;
     INA226_Class Ina226 = { 0x40 };
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -216,6 +215,9 @@ namespace m5
 
     AW32001_Class Aw32001;
     BQ27220_Class Bq27220;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    M5PM1_Class M5pm1;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     INA226_Class Ina226 = { 0x41 };

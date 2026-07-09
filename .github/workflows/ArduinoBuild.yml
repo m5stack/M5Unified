@@ -99,7 +99,28 @@ jobs:
       - name: Configure arduino-cli
         run: |
           arduino-cli config init
-          arduino-cli config add board_manager.additional_urls ${{ matrix.board_manager_url }}
+          # The M5Stack index is intermittently unavailable (404 as of
+          # 2026-07). Try the primary URL first and fall back to the CN
+          # mirror. Either index is then passed through a patch script that
+          # fixes stale toolsDependencies entries (the CN index renames all
+          # tools with a "-cn" suffix but older platforms still reference the
+          # pre-rename versions); the script is a no-op on a consistent index.
+          if [[ "${{ matrix.board_manager_url }}" == *package_m5stack_index*.json ]]; then
+            PRIMARY="${{ matrix.board_manager_url }}"
+            INDEX=/tmp/package_m5stack_index.json
+            for url in "$PRIMARY" "${PRIMARY%.json}_cn.json"; do
+              if curl -fsSL "$url" -o "$INDEX"; then
+                echo "Using board manager index: $url"
+                break
+              fi
+              echo "Board manager index unreachable: $url"
+            done
+            [ -s "$INDEX" ] || { echo "No reachable board manager index"; exit 1; }
+            python3 .github/scripts/fix_m5stack_package_index.py "$INDEX"
+            arduino-cli config add board_manager.additional_urls "file://$INDEX"
+          else
+            arduino-cli config add board_manager.additional_urls ${{ matrix.board_manager_url }}
+          fi
 
       - name: Install board package
         run: |
