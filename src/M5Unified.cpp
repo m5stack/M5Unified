@@ -2421,6 +2421,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         }
         break;
 
+      case board_t::board_M5PaperMono:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_data_out = GPIO_NUM_42;
+          spk_cfg.buzzer = true;
+          spk_cfg.magnification = 48;
+        }
+        break;
+
       case board_t::board_M5PaperColor:
         if (cfg.internal_spk)
         {
