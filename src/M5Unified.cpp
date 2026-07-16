@@ -5,6 +5,7 @@
 
 #include "M5Unified.hpp"
 #include "utility/PI4IOE5V6408_Class.hpp"
+#include "utility/M5IOE1_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
 #include <soc/soc.h>
@@ -428,7 +429,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr uint8_t es8388_i2c_addr = 0x10;
   static constexpr uint8_t pi4io1_i2c_addr = 0x43;
   static constexpr uint8_t m5pm1_i2c_addr = 0x6E;
-  static constexpr uint8_t m5ioe1_i2c_addr = 0x4F;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
@@ -599,15 +599,17 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     };
     if (enabled)
     {
-      self->In_I2C.bitOn(m5ioe1_i2c_addr, 0x05, 0b00000100, 100000); // Enable Audio Power (M5IOE1_G3)
+      auto& ioe1 = self->getIOExpander(0);
+      ioe1.digitalWrite(M5IOE1_Class::gpio3, true); // Enable Audio Power (M5IOE1_G3)
       self->delay(10);
       in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
-      self->In_I2C.bitOn(m5ioe1_i2c_addr, 0x06, 0b00000010, 100000); // Enable PA (M5IOE1_G10)
+      ioe1.digitalWrite(M5IOE1_Class::gpio10, true); // Enable PA (M5IOE1_G10)
     }
     else
     {
-      self->In_I2C.bitOff(m5ioe1_i2c_addr, 0x06, 0b00000010, 100000); // Disable PA (M5IOE1_G10)
-      self->In_I2C.bitOff(m5ioe1_i2c_addr, 0x05, 0b00000100, 100000); // Disable Audio Power (M5IOE1_G3)
+      auto& ioe1 = self->getIOExpander(0);
+      ioe1.digitalWrite(M5IOE1_Class::gpio10, false); // Disable PA (M5IOE1_G10)
+      ioe1.digitalWrite(M5IOE1_Class::gpio3, false); // Disable Audio Power (M5IOE1_G3)
     }
 #endif
     return true;
@@ -1041,7 +1043,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     };
     if (enabled)
     {
-      self->In_I2C.bitOn(m5ioe1_i2c_addr, 0x05, 0b00000100, 100000); // Enable Audio Power (M5IOE1_G3)
+      self->getIOExpander(0).digitalWrite(M5IOE1_Class::gpio3, true); // Enable Audio Power (M5IOE1_G3)
       self->delay(5);
     }
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_47, GPIO_NUM_48);
@@ -1730,6 +1732,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         _io_expander[0].reset(ioexp);
       }
       break;
+    case board_t::board_M5PaperMono:
+    case board_t::board_M5StopWatch:
+      {
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
 #endif
     default:
       break;
@@ -1999,20 +2009,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5StopWatch:
       m5gfx::pinMode(GPIO_NUM_1, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input);
-      // M5IOE1@0x4F: display power M5IOE1_G8
+      // M5IOE1 PIN4: display power
       {
-        this->In_I2C.writeRegister8(m5ioe1_i2c_addr, 0x23, 0x00, 100000);
-        this->In_I2C.bitOff(m5ioe1_i2c_addr, 0x13, 0b00001000, 100000);
-        this->In_I2C.bitOn(m5ioe1_i2c_addr, 0x03, 0b00001000, 100000);
-        this->In_I2C.bitOn(m5ioe1_i2c_addr, 0x05, 0b00001000, 100000);
+        auto& ioe1 = getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio4, false);
+        ioe1.setDirection(M5IOE1_Class::gpio4, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio4, true);
       }
       // M5IOE1_G3 codec power / M5IOE1_G10 PA
-      this->In_I2C.bitOff(m5ioe1_i2c_addr, 0x13, 0b00000100, 100000);
-      this->In_I2C.bitOff(m5ioe1_i2c_addr, 0x14, 0b00000010, 100000);
-      this->In_I2C.bitOn(m5ioe1_i2c_addr, 0x03, 0b00000100, 100000);
-      this->In_I2C.bitOn(m5ioe1_i2c_addr, 0x04, 0b00000010, 100000);
-      this->In_I2C.bitOff(m5ioe1_i2c_addr, 0x05, 0b00000100, 100000);
-      this->In_I2C.bitOff(m5ioe1_i2c_addr, 0x06, 0b00000010, 100000);
+      {
+        auto& ioe1 = getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio10, false);
+        ioe1.setDirection(M5IOE1_Class::gpio3, true);
+        ioe1.setDirection(M5IOE1_Class::gpio10, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
+        ioe1.digitalWrite(M5IOE1_Class::gpio10, false);
+      }
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
