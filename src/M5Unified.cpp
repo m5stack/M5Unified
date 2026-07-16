@@ -2884,11 +2884,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5StampPLC:
     {
       use_rawstate_bits = 0b00111;
-      auto value = _io_expander[0]->readRegister8(0x0F);
-      btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
-                        | (!(value & 0b010) ? 0b00010 : 0) // BtnB
-                        | (!(value & 0b001) ? 0b00100 : 0) // BtnC
-                        ;
+      uint8_t value = 0xFF;
+      if (_io_expander[0]->readRegister(0x0F, &value, 1)) {
+        btn_rawstate_bits = (!(value & 0b100) ? 0b00001 : 0) // BtnA
+                          | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                          | (!(value & 0b001) ? 0b00100 : 0) // BtnC
+                          ;
+      }
     }
       break;
 
@@ -2969,18 +2971,22 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5UnitC6L:
       {
         use_rawstate_bits = 0b00001;
-        auto value = _io_expander[0]->readRegister8(0x0F);
-        btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0); // BtnA
+        uint8_t value = 0xFF;
+        if (_io_expander[0]->readRegister(0x0F, &value, 1)) {
+          btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0); // BtnA
+        }
       }
       break;
 
     case board_t::board_ArduinoNessoN1:
       {
         use_rawstate_bits = 0b00011;
-        auto value = _io_expander[0]->readRegister8(0x0F);
-        btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0) // BtnA
-                          | (!(value & 0b010) ? 0b00010 : 0) // BtnB
-                          ;
+        uint8_t value = 0xFF;
+        if (_io_expander[0]->readRegister(0x0F, &value, 1)) {
+            btn_rawstate_bits = (!(value & 0b001) ? 0b00001 : 0) // BtnA
+                              | (!(value & 0b010) ? 0b00010 : 0) // BtnB
+                              ;
+        }
       }
       break;
 
