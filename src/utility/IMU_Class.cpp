@@ -102,6 +102,12 @@ namespace m5
           _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
           _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
           _internal_axisorder_fixed[sensor_index_mag  ] = (internal_axisorder_t)(axis_invert_x | axis_invert_z); // X軸,Z軸反転
+        } else
+        if (board == m5::board_t::board_M5ChainCaptain)
+        { // ChainCaptain BMI270 : X=-Y, Y=-X, Z=-Z
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
+          _internal_axisorder_fixed[sensor_index_mag  ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
         }
 #endif
 

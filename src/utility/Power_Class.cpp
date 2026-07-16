@@ -254,6 +254,30 @@ namespace m5
       M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true); // TF card power
       break;
+
+    case board_t::board_M5ChainCaptain:
+      _pmic = pmic_t::pmic_m5pm1;
+      // M5PM1_G0 -- Grove Power
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio0, M5PM1_Class::push_pull);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio0, false);
+      // M5PM1_G3 -- Chain Power
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio3, false);
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        // M5IOE1_G3 -- Charge Status
+        ioe1.setDirection(M5IOE1_Class::gpio3, false);
+        ioe1.enablePull(M5IOE1_Class::gpio3, false);
+        // M5IOE1_G4 -- Boost Control
+        ioe1.setHighImpedance(M5IOE1_Class::gpio4, false);
+        ioe1.setDirection(M5IOE1_Class::gpio4, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio4, false);
+      }
+      break;
     
     case board_t::board_M5PaperMono:
       _rtcIntPin = GPIO_NUM_1;
@@ -682,6 +706,21 @@ namespace m5
       }
       break;
 
+    case board_t::board_M5ChainCaptain:
+    {
+      if (port_mask & ext_port_mask_t::ext_PA)
+      {
+        M5pm1.setGPIOOutput(M5PM1_Class::gpio0, enable);
+      }
+      if (port_mask & (ext_port_mask_t::ext_PB1 | ext_port_mask_t::ext_PB2))
+      {
+        M5pm1.setGPIOOutput(M5PM1_Class::gpio3, enable);
+      }
+      const bool boost_enabled = M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0)
+                              || M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3);
+      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio4, boost_enabled);
+      break;
+    }
     case board_t::board_M5StampS3Bat:
       // Use G1 Control 5V output
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable);
@@ -803,6 +842,12 @@ namespace m5
     case board_t::board_M5StopWatch:
     case board_t::board_M5PaperColor:
       return M5pm1.getExtOutput();
+      break;
+
+    case board_t::board_M5ChainCaptain:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio4)
+          && (M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0)
+           || M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3));
       break;
 
     case board_t::board_M5StampS3Bat:
@@ -1883,6 +1928,12 @@ namespace m5
         }
         break;
 
+        case board_t::board_M5ChainCaptain:
+          return M5.getIOExpander(0).digitalRead(M5IOE1_Class::gpio3)
+            ? is_charging_t::is_discharging
+            : is_charging_t::is_charging;
+          break;
+
       case board_t::board_M5PaperS3:
         return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
@@ -1938,6 +1989,21 @@ namespace m5
       case board_t::board_M5StickS3: {
         return M5pm1.get5VoutVoltage();
       } break;
+
+      case board_t::board_M5ChainCaptain: {
+        if (!is_voltage) { return 0; }
+        static constexpr float diode_offset_mv = 530.0f;
+        static constexpr float valid_voltage_threshold_mv = 2000.0f;
+        if (port_mask & ext_port_mask_t::ext_PA) {
+          float mv = M5pm1.getVBUSVoltage();
+          return mv >= valid_voltage_threshold_mv ? mv + diode_offset_mv : mv;
+        }
+        if (port_mask & (ext_port_mask_t::ext_PB1 | ext_port_mask_t::ext_PB2)) {
+          float mv = M5pm1.get5VoutVoltage();
+          return mv >= valid_voltage_threshold_mv ? mv + diode_offset_mv : mv;
+        }
+        return 0;
+      }
 
       case board_t::board_M5StampPLC:
         if (port_mask & (ext_port_mask_t::ext_PWR485 | ext_port_mask_t::ext_PWRCAN)) {
