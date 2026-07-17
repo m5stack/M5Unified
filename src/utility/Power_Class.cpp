@@ -39,6 +39,29 @@ namespace m5
   static constexpr uint8_t ip2315_i2c_addr = 0x75; // M5PaperMono USB fast-charger
   static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
 
+  static void init_papermono_ip2315_access(void)
+  {
+    auto& ioe1 = M5.getIOExpander(0);
+    ioe1.setHighImpedance(M5IOE1_Class::gpio11, false);
+    ioe1.setDirection(M5IOE1_Class::gpio11, true);
+    ioe1.digitalWrite(M5IOE1_Class::gpio11, false);
+  }
+
+  static void set_papermono_ip2315_enabled(bool enable)
+  {
+    M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio11, enable);
+  }
+
+  static bool wait_papermono_ip2315_ready(void)
+  {
+    m5gfx::delay(2);
+    for (int i = 0; i < 64; ++i)
+    {
+      if (M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq)) { return true; }
+    }
+    return false;
+  }
+
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
   static constexpr int M5NanoC6_LED_PIN = GPIO_NUM_7;
 
@@ -273,20 +296,8 @@ namespace m5
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
 
-      // M5PaperMono charging is controlled by the IP2316 charger (not PM1).
-      // Enable IP2316 readout/control by driving IOE1 IO11 ("CHARGE READ") high.
-      // IP2316 stays off the I2C bus while IO11 is low, and answers ~1.3ms after high
-      // (measured), so polling its address is enough; no fixed startup delay is needed.
-      // IO11 = bit10 of the 16-bit GPIO regs = bit2 of the high byte (P14-P9).
-      {
-        auto& ioe1 = M5.getIOExpander(0);
-        ioe1.setHighImpedance(M5IOE1_Class::gpio11, false);
-        ioe1.setDirection(M5IOE1_Class::gpio11, true);
-        ioe1.digitalWrite(M5IOE1_Class::gpio11, true);
-      }
-      // Wait for the IP2316 to wake, then enable battery charging (SYS_CTL1 0x01 bit0 = EN_CHG).
-      for (int i = 0; i < 64 && !M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq); ++i) {}
-      M5.In_I2C.bitOn(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq);
+      // Keep IP2316 off the I2C bus until charge control/status is requested.
+      init_papermono_ip2315_access();
       break;
 
     case board_t::board_M5Capsule:
@@ -1628,10 +1639,13 @@ namespace m5
             return;
         }
         // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
-        // IP2316 SYS_CTL1 (0x01) bit0 = EN_CHG. (IO11 was driven high in begin().)
         if (M5.getBoard() == board_t::board_M5PaperMono) {
-          if (enable) { M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
-          else        { M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
+          set_papermono_ip2315_enabled(true);
+          if (wait_papermono_ip2315_ready()) {
+            if (enable) { M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
+            else        { M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
+          }
+          set_papermono_ip2315_enabled(false);
           return;
         }
         M5pm1.setBatteryCharge(enable);
@@ -1871,15 +1885,18 @@ namespace m5
         {
           // Running from battery (no external power) -> not charging.
           if (M5pm1.getPowerSource() == M5PM1_Class::battery) { return is_charging_t::is_discharging; }
-          // External power present. The IP2316 charger (IO11 enabled in begin()) reports
+          // External power present. The IP2316 charger reports
           // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
           // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
-          if (M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq))
+          set_papermono_ip2315_enabled(true);
+          is_charging_t res = is_charging_t::is_discharging;
+          if (wait_papermono_ip2315_ready())
           {
             uint8_t chg_stat = M5.In_I2C.readRegister8(ip2315_i2c_addr, 0xC7, i2c_freq);
-            return (chg_stat & (1 << 7)) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+            res = (chg_stat & (1 << 7)) ? is_charging_t::is_charging : is_charging_t::is_discharging;
           }
-          return is_charging_t::is_discharging; // fallback: charger not responding -> not charging
+          set_papermono_ip2315_enabled(false);
+          return res;
         }
         break;
 
