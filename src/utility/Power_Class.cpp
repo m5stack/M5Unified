@@ -258,6 +258,21 @@ namespace m5
     case board_t::board_M5PaperMono:
       _rtcIntPin = GPIO_NUM_1;
       _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_1; // PY IQR
+
+      M5pm1.clearWakeSource();
+      M5pm1.clearIRQStatus();
+      M5pm1.setGPIOIRQMaskBits(0x1E);  // enable GPIO0 interrupt, disable other GPIO IRQ
+
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
+
       // M5PaperMono charging is controlled by the IP2316 charger (not PM1).
       // Enable IP2316 readout/control by driving IOE1 IO11 ("CHARGE READ") high.
       // IP2316 stays off the I2C bus while IO11 is low, and answers ~1.3ms after high
