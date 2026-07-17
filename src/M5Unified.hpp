@@ -670,6 +670,7 @@ namespace m5
     static bool _microphone_enabled_cb_stickc(void* args, bool enabled);
     static bool _microphone_enabled_cb_sticks3(void* args, bool enabled);
     static bool _microphone_enabled_cb_papercolor(void* args, bool enabled);
+    static bool _microphone_enabled_cb_papermono(void* args, bool enabled);
     static bool _microphone_enabled_cb_stopwatch(void* args, bool enabled);
     static bool _microphone_enabled_cb_chain_captain(void* args, bool enabled);
     static bool _microphone_enabled_cb_tab5(void* args, bool enabled);
