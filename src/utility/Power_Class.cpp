@@ -3,6 +3,7 @@
 
 #include "../M5Unified.hpp"
 #include "Power_Class.hpp"
+#include "M5IOE1_Class.hpp"
 
 #if !defined (M5UNIFIED_PC_BUILD)
 
@@ -35,7 +36,6 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
   static constexpr uint8_t powerhub_i2c_addr = 0x50;
-  static constexpr uint8_t m5ioe1_i2c_addr = 0x4F;
   static constexpr uint8_t ip2315_i2c_addr = 0x75; // M5PaperMono USB fast-charger
   static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
 
@@ -215,17 +215,12 @@ namespace m5
 
         // M5IOE1: PWM1 drives IO9 (G9 motor). REG_PWM_FREQ 0x25/0x26 Hz LE; REG_PWM1_DUTY 0x1B/0x1C (bit7 EN).
         constexpr uint16_t motor_pwm_hz = 2000;
-        M5.In_I2C.writeRegister8(m5ioe1_i2c_addr, 0x23, 0x00, i2c_freq);  // REG_I2C_CFG: disable I2C sleep
-        uint8_t pwm_freq_le[2] = {
-          static_cast<uint8_t>(motor_pwm_hz & 0xFF),
-          static_cast<uint8_t>((motor_pwm_hz >> 8) & 0xFF),
-        };
-        M5.In_I2C.writeRegister(m5ioe1_i2c_addr, 0x25, pwm_freq_le, sizeof(pwm_freq_le), i2c_freq);
+        auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
+        ioe1.setPwmFrequency(motor_pwm_hz);
         // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
-        M5.In_I2C.bitOff(m5ioe1_i2c_addr, 0x14, 0b00000001, i2c_freq);
-        M5.In_I2C.bitOn(m5ioe1_i2c_addr, 0x04, 0b00000001, i2c_freq);
-        M5.In_I2C.writeRegister8(m5ioe1_i2c_addr, 0x1B, 0x00, i2c_freq);
-        M5.In_I2C.writeRegister8(m5ioe1_i2c_addr, 0x1C, 0x00, i2c_freq);  // PWM off at boot
+        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
+        ioe1.setDirection(M5IOE1_Class::gpio9, true);
+        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);  // PWM off at boot
       }
       break;
 
@@ -268,10 +263,12 @@ namespace m5
       // IP2316 stays off the I2C bus while IO11 is low, and answers ~1.3ms after high
       // (measured), so polling its address is enough; no fixed startup delay is needed.
       // IO11 = bit10 of the 16-bit GPIO regs = bit2 of the high byte (P14-P9).
-      M5.In_I2C.writeRegister8(m5ioe1_i2c_addr, 0x23, 0x00, i2c_freq); // I2C_CFG: disable IOE1 idle-sleep
-      M5.In_I2C.bitOff(m5ioe1_i2c_addr, 0x14, 1 << 2, i2c_freq); // GPIO_DRV_H: IO11 push-pull
-      M5.In_I2C.bitOn (m5ioe1_i2c_addr, 0x04, 1 << 2, i2c_freq); // GPIO_MODE_H: IO11 output
-      M5.In_I2C.bitOn (m5ioe1_i2c_addr, 0x06, 1 << 2, i2c_freq); // GPIO_OUT_H: IO11 high
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio11, false);
+        ioe1.setDirection(M5IOE1_Class::gpio11, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio11, true);
+      }
       // Wait for the IP2316 to wake, then enable battery charging (SYS_CTL1 0x01 bit0 = EN_CHG).
       for (int i = 0; i < 64 && !M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq); ++i) {}
       M5.In_I2C.bitOn(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq);
@@ -1094,7 +1091,7 @@ namespace m5
     case board_t::board_M5Tab5:
       for (int i = 0; i < 10; ++i)
       {
-        M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.pin4 == PWROFF_PLUSE
+        M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.gpio4 == PWROFF_PLUSE
         m5gfx::delay(50);
       }
       break;
@@ -1894,7 +1891,7 @@ namespace m5
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
-        return M5.getIOExpander(1).digitalRead(6) // io1.pin6 == CHG_STAT
+        return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
           ? is_charging_t::is_charging : is_charging_t::is_discharging;
 #endif
       default:
@@ -2022,19 +2019,15 @@ namespace m5
     if (M5.getBoard() == board_t::board_M5StopWatch)
     {
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
+      auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
       if (level == 0) {
-        uint8_t pwm_off[2] = { 0x00, 0x00 };
-        M5.In_I2C.writeRegister(m5ioe1_i2c_addr, 0x1B, pwm_off, sizeof(pwm_off), i2c_freq);
+        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);
       } else {
         // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
-        M5.In_I2C.bitOff(m5ioe1_i2c_addr, 0x14, 0b00000001, i2c_freq);
-        M5.In_I2C.bitOn(m5ioe1_i2c_addr, 0x04, 0b00000001, i2c_freq);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
+        ioe1.setDirection(M5IOE1_Class::gpio9, true);
         uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
-        uint8_t pwm_on[2] = {
-          static_cast<uint8_t>(duty12 & 0xFF),
-          static_cast<uint8_t>(((duty12 >> 8) & 0x0Fu) | 0x80u),
-        };
-        M5.In_I2C.writeRegister(m5ioe1_i2c_addr, 0x1B, pwm_on, sizeof(pwm_on), i2c_freq);
+        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, duty12);
       }
       return;
     }
