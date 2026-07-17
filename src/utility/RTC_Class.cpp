@@ -19,6 +19,20 @@
 
 namespace m5
 {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+  static void clear_m5pm1_rtc_irq(void)
+  {
+    if (M5.getBoard() == board_t::board_M5PaperMono
+     && M5.Power.getType() == Power_Class::pmic_t::pmic_m5pm1)
+    {
+      M5.Power.M5pm1.clearWakeSource();
+      M5.Power.M5pm1.clearIRQStatus();
+    }
+  }
+#else
+  static void clear_m5pm1_rtc_irq(void) {}
+#endif
+
   bool RTC_Class::begin(I2C_Class* i2c, board_t board)
   {
     if (i2c)
@@ -115,7 +129,10 @@ namespace m5
 
   std::uint32_t RTC_Class::setTimerIRQ(std::uint32_t timer_msec)
   {
-    return _rtc_instance ? _rtc_instance->setTimerIRQ(timer_msec) : 0;
+    if (!_rtc_instance) { return 0; }
+    auto result = _rtc_instance->setTimerIRQ(timer_msec);
+    clear_m5pm1_rtc_irq();
+    return result;
   }
 
   int RTC_Class::setAlarmIRQ(const tm* datetime)
@@ -130,7 +147,10 @@ namespace m5
 
   int RTC_Class::setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time)
   {
-    return _rtc_instance ? _rtc_instance->setAlarmIRQ(date, time) : -1;
+    if (!_rtc_instance) { return -1; }
+    auto result = _rtc_instance->setAlarmIRQ(date, time);
+    clear_m5pm1_rtc_irq();
+    return result;
   }
 
   bool RTC_Class::getIRQstatus(void)
@@ -142,12 +162,14 @@ namespace m5
   {
     if (!_rtc_instance) { return; }
     _rtc_instance->clearIRQ();
+    clear_m5pm1_rtc_irq();
   }
 
   void RTC_Class::disableIRQ(void)
   {
     if (!_rtc_instance) { return; }
     _rtc_instance->disableIRQ();
+    clear_m5pm1_rtc_irq();
   }
 
   void RTC_Class::setSystemTimeFromRtc(struct timezone* tz)
