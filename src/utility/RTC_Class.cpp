@@ -44,6 +44,7 @@ namespace m5
       case board_t::board_M5StampPLC:
       case board_t::board_M5PaperColor:
       case board_t::board_M5PaperMono:
+      case board_t::board_M5ChainCaptain:
         instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
         break;
 #endif
