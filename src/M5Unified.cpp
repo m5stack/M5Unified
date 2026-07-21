@@ -1051,6 +1051,29 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+  bool M5Unified::_microphone_enabled_cb_papermono(void* args, bool enabled)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    auto self = (M5Unified*)args;
+    auto& ioe1 = self->getIOExpander(0);
+    bool result = true;
+    if (enabled)
+    {
+      // The factory firmware enables PM1 BOOST before powering the PDM mic.
+      result = self->Power.M5pm1.setExtOutput(true);
+    }
+    // M5IOE1 GPIO12 is the Paper Mono PDM microphone power enable.
+    ioe1.setHighImpedance(M5IOE1_Class::gpio12, false);
+    ioe1.setDirection(M5IOE1_Class::gpio12, true);
+    ioe1.digitalWrite(M5IOE1_Class::gpio12, enabled);
+    return result;
+#else
+    (void)args;
+    (void)enabled;
+#endif
+    return true;
+  }
+
 
   bool M5Unified::_microphone_enabled_cb_stopwatch(void* args, bool enabled)
   {
@@ -2213,6 +2236,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         { /// builtin PDM mic
           mic_cfg.pin_ws = GPIO_NUM_45;
           mic_cfg.pin_data_in = GPIO_NUM_46;
+          mic_enable_cb = _microphone_enabled_cb_papermono;
         }
       break;
 
