@@ -65,24 +65,35 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - M5StickS3
  - M5ATOMS3 / S3Lite / S3U
  - M5ATOMS3R / S3RExt / S3RCam / ECHO S3R
- - M5STAMPS3 (S3 / S3A)
+ - M5STAMPS3 (S3 / S3A) / S3Bat / S3Mini
+ - M5STAMPPLC
  - M5Dial
  - M5DinMeter
  - M5Capsule
  - M5Cardputer / M5CardputerADV
  - M5VAMeter
+ - M5AirQ
  - M5PaperS3
  - M5PaperColor
  - M5PaperMono
+ - M5PaperDIY
  - M5PowerHub
  - M5StopWatch
+ - M5StackChan
+ - M5ChainCaptain
+ - M5DualKey
 
 ## Supported devices (ESP32-C3)
  - M5STAMPC3 / C3U
 
+## Supported devices (ESP32-C5)
+ - M5STAMPC5
+ - M5ToughC5
+
 ## Supported devices (ESP32-C6)
  - M5NanoC6
  - M5UnitC6L
+ - M5STAMPC6
  - ArduinoNessoN1
 
 ## Supported devices (ESP32-H2)
@@ -90,6 +101,8 @@ or have explicit support in the M5Unified library.  To use these functions, simp
 
 ## Supported devices (ESP32-P4)
  - M5Tab5
+ - M5STAMPP4
+ - M5UnitPoEP4
 
 ## Supported external displays and video adapters
  - Unit LCD
