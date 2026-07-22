@@ -42,6 +42,13 @@ namespace m5
     , special = 0b11
     };
 
+    /// PM1 GPIO pull-up/pull-down setting.
+    enum gpio_pull_t : std::uint8_t
+    { pull_none = 0b00
+    , pull_up   = 0b01
+    , pull_down = 0b10
+    };
+
     /// PM1 GPIO output driver type.
     enum gpio_drive_t : std::uint8_t
     { push_pull  = 0
@@ -76,6 +83,9 @@ namespace m5
     /// set PM1 GPIO direction.
     bool setGPIOMode(gpio_t pin, gpio_mode_t mode);
 
+    /// set PM1 GPIO pull-up/pull-down setting.
+    bool setGPIOPull(gpio_t pin, gpio_pull_t pull);
+
     /// set PM1 GPIO output driver type.
     bool setGPIODrive(gpio_t pin, gpio_drive_t drive);
 
@@ -87,6 +97,30 @@ namespace m5
 
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
+
+    /// clear PM1 wake source bits selected by mask.
+    bool clearWakeSource(std::uint8_t mask = 0x7F);
+
+    /// clear all PM1 GPIO IRQ status bits.
+    bool clearGPIOIRQStatus(void);
+
+    /// clear all PM1 system IRQ status bits.
+    bool clearSystemIRQStatus(void);
+
+    /// clear all PM1 button IRQ status bits.
+    bool clearButtonIRQStatus(void);
+
+    /// clear all PM1 IRQ status bits.
+    bool clearIRQStatus(void);
+
+    /// set PM1 GPIO IRQ mask register. bit=1 disables interrupt.
+    bool setGPIOIRQMaskBits(std::uint8_t mask);
+
+    /// set PM1 system IRQ mask register. bit=1 disables interrupt.
+    bool setSystemIRQMaskBits(std::uint8_t mask);
+
+    /// set PM1 button IRQ mask register. bit=1 disables interrupt.
+    bool setButtonIRQMaskBits(std::uint8_t mask);
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable

@@ -14,6 +14,7 @@ namespace m5
 // M5PM1 registers
   static constexpr const uint8_t M5PM1_REG_DEVICE_ID   = 0x00;
   static constexpr const uint8_t M5PM1_REG_PWR_SRC     = 0x04;
+  static constexpr const uint8_t M5PM1_REG_WAKE_SRC    = 0x05;
   static constexpr const uint8_t M5PM1_REG_PWR_CFG     = 0x06;
   static constexpr const uint8_t M5PM1_REG_I2C_CFG     = 0x09;
   static constexpr const uint8_t M5PM1_REG_WDT_CNT     = 0x0A;
@@ -22,12 +23,19 @@ namespace m5
   static constexpr const uint8_t M5PM1_REG_GPIO_OUT    = 0x11;
   static constexpr const uint8_t M5PM1_REG_GPIO_IN     = 0x12;
   static constexpr const uint8_t M5PM1_REG_GPIO_DRV    = 0x13;
+  static constexpr const uint8_t M5PM1_REG_GPIO_PUPD0  = 0x14;
+  static constexpr const uint8_t M5PM1_REG_GPIO_PUPD1  = 0x15;
   static constexpr const uint8_t M5PM1_REG_GPIO_FUNC0  = 0x16;
   static constexpr const uint8_t M5PM1_REG_GPIO_FUNC1  = 0x17;
   static constexpr const uint8_t M5PM1_REG_VBAT_L      = 0x22;
   static constexpr const uint8_t M5PM1_REG_VIN_L       = 0x24;
   static constexpr const uint8_t M5PM1_REG_5VOUT_L     = 0x26;
+  static constexpr const uint8_t M5PM1_REG_IRQ_STATUS1 = 0x40;
+  static constexpr const uint8_t M5PM1_REG_IRQ_STATUS2 = 0x41;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS3 = 0x42;
+  static constexpr const uint8_t M5PM1_REG_IRQ_MASK1   = 0x43;
+  static constexpr const uint8_t M5PM1_REG_IRQ_MASK2   = 0x44;
+  static constexpr const uint8_t M5PM1_REG_IRQ_MASK3   = 0x45;
 
   static constexpr const uint8_t M5PM1_PWR_CFG_CHG_EN   = 1 << 0;
   static constexpr const uint8_t M5PM1_PWR_CFG_LDO_EN   = 1 << 2;
@@ -104,6 +112,18 @@ namespace m5
                           : bitOff(M5PM1_REG_GPIO_MODE, mask);
   }
 
+  bool M5PM1_Class::setGPIOPull(gpio_t pin, gpio_pull_t pull)
+  {
+    if (!is_valid_gpio(pin)) { return false; }
+    auto num = gpio_num(pin);
+    auto reg = num < 4 ? M5PM1_REG_GPIO_PUPD0 : M5PM1_REG_GPIO_PUPD1;
+    auto shift = static_cast<std::uint8_t>((num < 4 ? num : num - 4) * 2);
+    std::uint8_t mask = 0x03 << shift;
+    std::uint8_t reg_val = readRegister8(reg);
+    reg_val = (reg_val & ~mask) | (static_cast<std::uint8_t>(pull) << shift);
+    return writeRegister8(reg, reg_val);
+  }
+
   bool M5PM1_Class::setGPIODrive(gpio_t pin, gpio_drive_t drive)
   {
     if (!is_valid_gpio(pin)) { return false; }
@@ -129,6 +149,49 @@ namespace m5
   {
     if (!_init || !is_valid_gpio(pin)) { return false; }
     return readRegister8(M5PM1_REG_GPIO_OUT) & (1 << gpio_num(pin));
+  }
+
+  bool M5PM1_Class::clearWakeSource(std::uint8_t mask)
+  {
+    auto src = readRegister8(M5PM1_REG_WAKE_SRC);
+    return writeRegister8(M5PM1_REG_WAKE_SRC, src & ~mask);
+  }
+
+  bool M5PM1_Class::clearGPIOIRQStatus(void)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_STATUS1, 0x00);
+  }
+
+  bool M5PM1_Class::clearSystemIRQStatus(void)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_STATUS2, 0x00);
+  }
+
+  bool M5PM1_Class::clearButtonIRQStatus(void)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_STATUS3, 0x00);
+  }
+
+  bool M5PM1_Class::clearIRQStatus(void)
+  {
+    return clearGPIOIRQStatus()
+        && clearSystemIRQStatus()
+        && clearButtonIRQStatus();
+  }
+
+  bool M5PM1_Class::setGPIOIRQMaskBits(std::uint8_t mask)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_MASK1, mask & 0x1F);
+  }
+
+  bool M5PM1_Class::setSystemIRQMaskBits(std::uint8_t mask)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_MASK2, mask & 0x3F);
+  }
+
+  bool M5PM1_Class::setButtonIRQMaskBits(std::uint8_t mask)
+  {
+    return writeRegister8(M5PM1_REG_IRQ_MASK3, mask & 0x07);
   }
 
   bool M5PM1_Class::setBatteryCharge(bool enable)

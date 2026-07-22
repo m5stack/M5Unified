@@ -2,4 +2,7 @@ description: Unified library for M5Stack series
 issues: https://github.com/m5stack/M5Unified/issues
 repository: https://github.com/m5stack/M5Unified.git
 url: https://github.com/m5stack/M5Unified.git
-version: 0.2.18
+version: 0.2.19
+dependencies:
+  m5stack/m5gfx:
+    version: ">=0.2.26"
