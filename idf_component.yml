@@ -5,4 +5,4 @@ url: https://github.com/m5stack/M5Unified.git
 version: 0.2.19
 dependencies:
   m5stack/m5gfx:
-    version: ">=0.2.25"
+    version: ">=0.2.26"
