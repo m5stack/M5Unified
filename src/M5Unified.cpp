@@ -94,6 +94,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomVoiceS3R,GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5PaperDIY   , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_42,GPIO_NUM_41 },
 { board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
 { board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
@@ -190,6 +191,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 { board_t::board_M5Cardputer  , GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, 255        , 255       , GPIO_NUM_12 },
 { board_t::board_M5CardputerADV,GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, 255        , 255       , GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
+{ board_t::board_M5PaperDIY   , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  255        , 255       , GPIO_NUM_10 },
 { board_t::board_M5PaperColor , GPIO_NUM_15, GPIO_NUM_13, GPIO_NUM_14, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5PaperMono  , GPIO_NUM_13, GPIO_NUM_12, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8  },
@@ -2083,6 +2085,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       this->In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, 100000); // Set gpio3 output low
       break;
 
+    case board_t::board_M5PaperDIY:
+      m5gfx::pinMode(GPIO_NUM_4, m5gfx::pin_mode_t::input);
+      m5gfx::pinMode(GPIO_NUM_3, m5gfx::pin_mode_t::input);
+      break;
+
     case board_t::board_M5PaperColor:
       m5gfx::pinMode(GPIO_NUM_1, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_9, m5gfx::pin_mode_t::input);
@@ -3064,6 +3071,12 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       use_rawstate_bits = 0b00011;
       btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_11)) & 1)
                         | ((!m5gfx::gpio_in(GPIO_NUM_12)) & 1) << 1;
+      break;
+
+    case board_t::board_M5PaperDIY:
+      use_rawstate_bits = 0b00011;
+      btn_rawstate_bits = ((!m5gfx::gpio_in(GPIO_NUM_4)) & 1)
+                        | ((!m5gfx::gpio_in(GPIO_NUM_3)) & 1) << 1;
       break;
 
     case board_t::board_M5PaperColor:

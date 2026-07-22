@@ -267,6 +267,17 @@ namespace m5
       _adc_ratio = 2.0f;
       _wakeupPin = GPIO_NUM_48; // touch panel INT
       break;
+
+    case board_t::board_M5PaperDIY:
+      _pmic = pmic_t::pmic_m5pm1;
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio2, M5PM1_Class::push_pull);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio2, true); // EPD_PWR
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_up); // CHG_STAT, active low
+      break;
     
     case board_t::board_M5PaperColor:
       _rtcIntPin = GPIO_NUM_7;
@@ -1949,6 +1960,13 @@ namespace m5
         {
           // PM1_G0 is charging status input pin, low=charging / high=not charging
           return M5pm1.getGPIOInput(M5PM1_Class::gpio0) ? is_charging_t::is_discharging : is_charging_t::is_charging;
+        }
+        break;
+
+        case board_t::board_M5PaperDIY:
+        {
+          // PM1_G3 is CHG_STAT, low=charging / high=not charging
+          return M5pm1.getGPIOInput(M5PM1_Class::gpio3) ? is_charging_t::is_discharging : is_charging_t::is_charging;
         }
         break;
       
