@@ -285,6 +285,9 @@ void setup(void)
   case m5::board_t::board_M5StackCoreS3SE:  name = "StackCoreS3SE";  break;
   case m5::board_t::board_M5StickS3:        name = "StickS3";        break;
   case m5::board_t::board_M5StampS3:        name = "StampS3";        break;
+  case m5::board_t::board_M5StampS3Bat:     name = "StampS3Bat";     break;
+  case m5::board_t::board_M5StampS3Mini:    name = "StampS3Mini";    break;
+  case m5::board_t::board_M5StampPLC:       name = "StampPLC";       break;
   case m5::board_t::board_M5AtomS3U:        name = "ATOMS3U";        break;
   case m5::board_t::board_M5AtomS3Lite:     name = "ATOMS3Lite";     break;
   case m5::board_t::board_M5AtomS3:         name = "ATOMS3";         break;
@@ -299,22 +302,32 @@ void setup(void)
   case m5::board_t::board_M5CardputerADV:   name = "CardputerADV";   break;
   case m5::board_t::board_M5VAMeter:        name = "VAMeter";        break;
   case m5::board_t::board_M5PaperS3:        name = "PaperS3";        break;
+  case m5::board_t::board_M5PaperDIY:       name = "PaperDIY";       break;
   case m5::board_t::board_M5PowerHub:       name = "PowerHub";       break;
   case m5::board_t::board_M5PaperColor:     name = "PaperColor";     break;
   case m5::board_t::board_M5PaperMono:      name = "PaperMono";      break;
   case m5::board_t::board_M5StopWatch:      name = "StopWatch";      break;
+  case m5::board_t::board_M5AirQ:           name = "AirQ";           break;
+  case m5::board_t::board_M5StackChan:      name = "StackChan";      break;
+  case m5::board_t::board_M5ChainCaptain:   name = "ChainCaptain";   break;
+  case m5::board_t::board_M5DualKey:        name = "DualKey";        break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
   case m5::board_t::board_M5StampC3:        name = "StampC3";        break;
   case m5::board_t::board_M5StampC3U:       name = "StampC3U";       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+  case m5::board_t::board_M5StampC5:        name = "StampC5";        break;
+  case m5::board_t::board_M5ToughC5:        name = "ToughC5";        break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
   case m5::board_t::board_M5NanoC6:         name = "NanoC6";         break;
   case m5::board_t::board_M5UnitC6L:        name = "UnitC6L";        break;
+  case m5::board_t::board_M5StampC6:        name = "StampC6";        break;
   case m5::board_t::board_ArduinoNessoN1:   name = "NessoN1";        break;
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
-  case m5::board_t::board_NanoH2:           name = "NanoH2";         break;
+  case m5::board_t::board_M5NanoH2:         name = "NanoH2";         break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
   case m5::board_t::board_M5Tab5:           name = "Tab5";           break;
-  case m5::board_t::board_M5UnitPoEP4:      name = "UnitPoEP4";      break; 
+  case m5::board_t::board_M5UnitPoEP4:      name = "UnitPoEP4";      break;
+  case m5::board_t::board_M5StampP4:        name = "StampP4";        break;
 #else
   case m5::board_t::board_M5Stack:          name = "Stack";          break;
   case m5::board_t::board_M5StackCore2:     name = "StackCore2";     break;
