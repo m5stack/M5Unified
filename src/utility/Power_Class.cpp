@@ -1277,6 +1277,10 @@ namespace m5
 #endif
 
     uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && (M5.getBoard() == board_t::board_M5PaperMono))
+    {
+      wpin = GPIO_NUM_4;
+    }
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
@@ -1328,6 +1332,10 @@ namespace m5
 #endif
 
     uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && (M5.getBoard() == board_t::board_M5PaperMono))
+    {
+      wpin = GPIO_NUM_4;
+    }
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
       if (M5.getBoard() == board_t::board_M5PaperS3)
