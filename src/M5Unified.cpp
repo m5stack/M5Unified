@@ -12,6 +12,10 @@
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+#include <esp_chip_info.h>
+#endif
+
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
  #if __has_include (<driver/touch_sens.h>)
  #include <driver/touch_sens.h>
@@ -1743,7 +1747,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
       else
-        board = board_t::board_M5StampP4;
+      {
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        board = chip_info.revision >= 300
+              ? board_t::board_M5StampP4X
+              : board_t::board_M5StampP4;
+      }
     }
 
 #endif
