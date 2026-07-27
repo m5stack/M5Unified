@@ -330,6 +330,12 @@ namespace m5
       M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio14, false); // Turn on SD card power
+        ioe1.setDirection(M5IOE1_Class::gpio14, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio14, true);
+      }
 
       // Keep IP2316 off the I2C bus until charge control/status is requested.
       init_papermono_ip2315_access();
