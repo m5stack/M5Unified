@@ -136,13 +136,20 @@ namespace m5
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
     void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
+    /// Value for micro_seconds of deepSleep / lightSleep, meaning "sleep without a timer wakeup".
+    /// The device sleeps until a wakeup pin or another wakeup source is triggered.
+    static constexpr std::uint64_t sleep_no_timer = ~0ull;
+
     /// ESP32 deepsleep
-    /// @param micro_seconds Number of micro seconds to wakeup.
-    void deepSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
+    /// @param micro_seconds Number of micro seconds to wakeup. 0 = do not sleep. sleep_no_timer = no timer wakeup.
+    /// @param touch_wakeup Enable wakeup by the wakeup pin of the device, if it has one.
+    /// @attention Waking up from deep sleep restarts the program from the beginning.
+    void deepSleep(std::uint64_t micro_seconds = sleep_no_timer, bool touch_wakeup = true);
 
     /// ESP32 lightsleep
-    /// @param micro_seconds Number of micro seconds to wakeup.
-    void lightSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
+    /// @param micro_seconds Number of micro seconds to wakeup. 0 = do not sleep. sleep_no_timer = no timer wakeup.
+    /// @param touch_wakeup Enable wakeup by the wakeup pin of the device, if it has one.
+    void lightSleep(std::uint64_t micro_seconds = sleep_no_timer, bool touch_wakeup = true);
 
     /// Get the remaining battery power.
     /// @return 0-100 level

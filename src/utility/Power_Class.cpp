@@ -1264,6 +1264,12 @@ namespace m5
 
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
+    if (micro_seconds == 0)
+    { // A wakeup time of zero means "do not sleep".
+      // ( This check comes before the display is put to sleep. )
+      M5_LOGW("deepSleep: micro_seconds is 0. not sleeping. ( use Power.sleep_no_timer to sleep without a timer wakeup )");
+      return;
+    }
     M5.Display.sleep();
     M5.Display.waitDisplay();
 #if defined (M5UNIFIED_PC_BUILD)
@@ -1318,10 +1324,10 @@ namespace m5
       else
       { // The wakeup pin is not an RTC IO. ( ex. M5PaperS3 touch INT = GPIO48 )
         // Such a pin can wake up from light sleep, but not from deep sleep.
-        ESP_LOGW("Power", "deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
+        M5_LOGW("deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
       }
     }
-    if (micro_seconds > 0)
+    if (micro_seconds != sleep_no_timer)
     {
       esp_sleep_enable_timer_wakeup(micro_seconds);
     }
@@ -1331,7 +1337,7 @@ namespace m5
       if (!pin_wakeup_enabled)
       { // Neither a timer nor a wakeup pin was configured by this call.
         // Unless another wakeup source has been set up, the device will not wake up until it is reset.
-        ESP_LOGW("Power", "deepSleep: no timer or pin wakeup source was requested.");
+        M5_LOGW("deepSleep: no timer or pin wakeup source is enabled.");
       }
     }
 #endif
@@ -1341,6 +1347,11 @@ namespace m5
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
+    if (micro_seconds == 0)
+    { // A wakeup time of zero means "do not sleep".
+      M5_LOGW("lightSleep: micro_seconds is 0. not sleeping. ( use Power.sleep_no_timer to sleep without a timer wakeup )");
+      return;
+    }
 #if defined (M5UNIFIED_PC_BUILD)
     (void)micro_seconds;
     (void)touch_wakeup;
@@ -1362,31 +1373,43 @@ namespace m5
     {
       wpin = GPIO_NUM_4;
     }
+    bool pin_wakeup_enabled = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
       if (M5.getBoard() == board_t::board_M5PaperS3)
       {
         // M5PaperS3 touch interrupt pin (GPIO48) is not RTC IO
         // and therefore not supported in EXT0 wakeup
-        gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
-        esp_sleep_enable_gpio_wakeup();
+        pin_wakeup_enabled = (ESP_OK == gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL))
+                          && (ESP_OK == esp_sleep_enable_gpio_wakeup());
       }
       else
       {
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
 #endif
       }
-      while (m5gfx::gpio_in(wpin) == false)
+      if (pin_wakeup_enabled)
       {
-        m5gfx::delay(10);
+        while (m5gfx::gpio_in(wpin) == false)
+        {
+          m5gfx::delay(10);
+        }
+      }
+      else
+      {
+        M5_LOGW("lightSleep: wakeup by GPIO%d is not enabled.", (int)wpin);
       }
     }
-    if (micro_seconds > 0){
+    if (micro_seconds != sleep_no_timer){
       esp_sleep_enable_timer_wakeup(micro_seconds);
     }else{
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+      if (!pin_wakeup_enabled)
+      { // Neither a timer nor a wakeup pin was configured by this call.
+        M5_LOGW("lightSleep: no timer or pin wakeup source is enabled.");
+      }
     }
     esp_light_sleep_start();
     if (M5.getBoard() == board_t::board_M5PaperS3)
