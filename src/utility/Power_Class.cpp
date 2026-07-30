@@ -1287,23 +1287,38 @@ namespace m5
     {
       wpin = GPIO_NUM_4;
     }
+    bool pin_wakeup_enabled = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
-      esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
+      pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
 #elif SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
-      const uint64_t ext_wakeup_pin_1_mask = 1ULL << _wakeupPin;
-      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
- #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
-      ESP_ERROR_CHECK(rtc_gpio_pullup_dis((gpio_num_t)_wakeupPin));
-      ESP_ERROR_CHECK(rtc_gpio_pulldown_en((gpio_num_t)_wakeupPin));
- #endif
-#endif
-      while (m5gfx::gpio_in(wpin) == false)
+      if (rtc_gpio_is_valid_gpio((gpio_num_t)wpin))
       {
-        // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
-        M5.update();
-        m5gfx::delay(10);
+        const uint64_t ext_wakeup_pin_1_mask = 1ULL << wpin;
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+ #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+        if (pin_wakeup_enabled)
+        {
+          rtc_gpio_pullup_dis((gpio_num_t)wpin);
+          rtc_gpio_pulldown_en((gpio_num_t)wpin);
+        }
+ #endif
+      }
+#endif
+      if (pin_wakeup_enabled)
+      {
+        while (m5gfx::gpio_in(wpin) == false)
+        {
+          // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
+          M5.update();
+          m5gfx::delay(10);
+        }
+      }
+      else
+      { // The wakeup pin is not an RTC IO. ( ex. M5PaperS3 touch INT = GPIO48 )
+        // Such a pin can wake up from light sleep, but not from deep sleep.
+        ESP_LOGW("Power", "deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
       }
     }
     if (micro_seconds > 0)
@@ -1313,6 +1328,11 @@ namespace m5
     else
     {
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+      if (!pin_wakeup_enabled)
+      { // Neither a timer nor a wakeup pin was configured by this call.
+        // Unless another wakeup source has been set up, the device will not wake up until it is reset.
+        ESP_LOGW("Power", "deepSleep: no timer or pin wakeup source was requested.");
+      }
     }
 #endif
     esp_deep_sleep_start();
