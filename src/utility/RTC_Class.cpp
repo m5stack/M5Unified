@@ -69,7 +69,7 @@ namespace m5
 
     if (instance == nullptr)
     {
-      instance.reset(new PCF8563_Class(PCF8563_Class::DEFAULT_ADDRESS, 400000));
+      instance.reset(new PCF8563_Class(PCF8563_Class::DEFAULT_ADDRESS, 400000, i2c));
     }
 
     if (instance->begin())
