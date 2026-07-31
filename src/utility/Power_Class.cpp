@@ -13,6 +13,27 @@
 #include <sdkconfig.h>
 
 #include <soc/soc_caps.h>
+
+// ESP-IDF v4 defines only the generic SOC_PM_SUPPORT_EXT_WAKEUP; the split into
+// SOC_PM_SUPPORT_EXT0_WAKEUP / SOC_PM_SUPPORT_EXT1_WAKEUP came later.
+// Without these fallbacks both wakeup branches below vanish when building with such an
+// ESP-IDF, and the wakeup pin is then silently ignored on every board.
+#if defined (SOC_PM_SUPPORT_EXT0_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT0 SOC_PM_SUPPORT_EXT0_WAKEUP
+#elif defined (SOC_PM_SUPPORT_EXT_WAKEUP) \
+   && (defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S2) || defined (CONFIG_IDF_TARGET_ESP32S3))
+ #define M5UNIFIED_PM_SUPPORT_EXT0 1
+#else
+ #define M5UNIFIED_PM_SUPPORT_EXT0 0
+#endif
+
+#if defined (SOC_PM_SUPPORT_EXT1_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT1 SOC_PM_SUPPORT_EXT1_WAKEUP
+#elif defined (SOC_PM_SUPPORT_EXT_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT1 1
+#else
+ #define M5UNIFIED_PM_SUPPORT_EXT1 0
+#endif
 #include <soc/adc_channel.h>
 
 #if __has_include (<esp_idf_version.h>)
@@ -222,6 +243,11 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
+      // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
+      // AXP2101 IRQ pin is shared with the RTC INT, so neither reaches the ESP32.
+      // Therefore touch is the only usable wakeup source on this board.
+      _wakeupPin = GPIO_NUM_21; // I2C_INT ( AW9523 INTN )
       break;
 
     case board_t::board_M5StickS3:
@@ -1262,6 +1288,17 @@ namespace m5
     _powerOff(true);
   }
 
+  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin)
+  {
+    for (int retry = 8; retry > 0; --retry)
+    {
+      if (m5gfx::gpio_in(wakeup_pin)) { return true; }
+      M5._clearWakeupInterrupt();
+      m5gfx::delay(5);
+    }
+    return m5gfx::gpio_in(wakeup_pin);
+  }
+
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
     if (micro_seconds == 0)
@@ -1296,16 +1333,31 @@ namespace m5
     bool pin_wakeup_enabled = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-#if SOC_PM_SUPPORT_EXT0_WAKEUP
+#if M5UNIFIED_PM_SUPPORT_EXT0
       pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
-#elif SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
+#elif M5UNIFIED_PM_SUPPORT_EXT1 && SOC_RTCIO_PIN_COUNT > 0
       if (rtc_gpio_is_valid_gpio((gpio_num_t)wpin))
       {
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << wpin;
+        // SOC_PM_SUPPORT_EXT1_WAKEUP ( the old name is SOC_PM_SUPPORT_EXT_WAKEUP ) and
+        // esp_sleep_enable_ext1_wakeup_io() only exist in recent ESP-IDF. Without these
+        // fallbacks the whole branch disappears on older ESP-IDF, and the wakeup pin is
+        // then silently ignored on every target that has no EXT0. ( ESP32-S3 / P4 etc. )
+ #if defined (ESP_IDF_VERSION_VAL) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
         pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+ #else
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+ #endif
  #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         if (pin_wakeup_enabled)
-        {
+        { /// TODO: reconsider these pull settings.
+          // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
+          // and every board that reaches here now shares them.
+          // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
+          // without an external pull-up would wake up immediately. On CoreS3 this works
+          // only because I2C_INT has an external 10k pull-up, and it costs about 60uA
+          // through that divider for as long as the device sleeps.
+          // Check how the wakeup pin of M5Tab5 is wired before changing this.
           rtc_gpio_pullup_dis((gpio_num_t)wpin);
           rtc_gpio_pulldown_en((gpio_num_t)wpin);
         }
@@ -1314,7 +1366,7 @@ namespace m5
 #endif
       if (pin_wakeup_enabled)
       {
-        while (m5gfx::gpio_in(wpin) == false)
+        while (!_releaseWakeupPin(wpin))
         {
           // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
           M5.update();
@@ -1326,6 +1378,10 @@ namespace m5
         // Such a pin can wake up from light sleep, but not from deep sleep.
         M5_LOGW("deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
       }
+    }
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("deepSleep: this device has no wakeup pin.");
     }
     if (micro_seconds != sleep_no_timer)
     {
@@ -1339,6 +1395,10 @@ namespace m5
         // Unless another wakeup source has been set up, the device will not wake up until it is reset.
         M5_LOGW("deepSleep: no timer or pin wakeup source is enabled.");
       }
+    }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping. ( see lightSleep )
+      M5_LOGW("deepSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
     }
 #endif
     esp_deep_sleep_start();
@@ -1374,33 +1434,35 @@ namespace m5
       wpin = GPIO_NUM_4;
     }
     bool pin_wakeup_enabled = false;
+    bool gpio_wakeup_used = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-      if (M5.getBoard() == board_t::board_M5PaperS3)
+#if M5UNIFIED_PM_SUPPORT_EXT0 && SOC_RTCIO_PIN_COUNT > 0
+      if (rtc_gpio_is_valid_gpio((gpio_num_t)wpin))
       {
-        // M5PaperS3 touch interrupt pin (GPIO48) is not RTC IO
-        // and therefore not supported in EXT0 wakeup
-        pin_wakeup_enabled = (ESP_OK == gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL))
-                          && (ESP_OK == esp_sleep_enable_gpio_wakeup());
-      }
-      else
-      {
-#if SOC_PM_SUPPORT_EXT0_WAKEUP
         pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+      }
 #endif
+      if (!pin_wakeup_enabled)
+      { // A pin outside the RTC IO range ( ex. M5PaperS3 touch INT = GPIO48 ), or a target
+        // without EXT0, can still wake from light sleep by gpio wakeup.
+        gpio_wakeup_used = (ESP_OK == gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL))
+                        && (ESP_OK == esp_sleep_enable_gpio_wakeup());
+        pin_wakeup_enabled = gpio_wakeup_used;
       }
       if (pin_wakeup_enabled)
-      {
-        while (m5gfx::gpio_in(wpin) == false)
-        {
-          m5gfx::delay(10);
-        }
+      { // Wait until the wakeup pin is released, otherwise the sleep request is rejected.
+        while (!_releaseWakeupPin(wpin)) { m5gfx::delay(10); }
       }
       else
       {
         M5_LOGW("lightSleep: wakeup by GPIO%d is not enabled.", (int)wpin);
       }
+    }
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("lightSleep: this device has no wakeup pin.");
     }
     if (micro_seconds != sleep_no_timer){
       esp_sleep_enable_timer_wakeup(micro_seconds);
@@ -1411,13 +1473,19 @@ namespace m5
         M5_LOGW("lightSleep: no timer or pin wakeup source is enabled.");
       }
     }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping: an event that happens after the wait
+      // loop leaves the interrupt asserted, so the sleep request would be rejected or
+      // the wakeup source would be dead while sleeping.
+      M5_LOGW("lightSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
+    }
     esp_light_sleep_start();
-    if (M5.getBoard() == board_t::board_M5PaperS3)
+    if (gpio_wakeup_used)
     {
       gpio_wakeup_disable((gpio_num_t)wpin);
     }
-#endif
-#endif
+#endif // CONFIG_IDF_TARGET_ESP32C3 / C6 / C5
+#endif // M5UNIFIED_PC_BUILD
   }
 
   void Power_Class::powerOff(void)
