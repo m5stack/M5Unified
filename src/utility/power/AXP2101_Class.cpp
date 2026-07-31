@@ -8,6 +8,7 @@
 #endif
 
 #include <algorithm>
+#include <limits>
 
 #define IS_BIT_SET(val,mask)            (((val)&(mask)) == (mask))
 
@@ -213,14 +214,21 @@ return false;
     return val >> 2;
   }
 
-  float AXP2101_Class::getACINVoltage(void)
+  /// Used where the AXP2101 provides no reading for the requested value.
+  /// Returning NaN instead of 0 lets the caller tell it from a real zero.
+  static constexpr float not_available(void)
   {
-return 0;
+    return std::numeric_limits<float>::quiet_NaN();
+  }
+
+  float AXP2101_Class::getACINVoltage(void)
+  { // The AXP2101 takes its input from VBUS. ( see getVBUSVoltage )
+    return not_available();
   }
 
   float AXP2101_Class::getACINCurrent(void)
-  {
-return 0;
+  { // The AXP2101 takes its input from VBUS.
+    return not_available();
   }
 
   float AXP2101_Class::getVBUSVoltage(void)
@@ -234,8 +242,8 @@ return 0;
   }
 
   float AXP2101_Class::getVBUSCurrent(void)
-  {
-return 0;
+  { // Not provided by the AXP2101. ( see getBatteryChargeCurrent )
+    return not_available();
   }
 
   float AXP2101_Class::getTSVoltage(void)
@@ -252,8 +260,8 @@ return 0;
   }
 
   float AXP2101_Class::getBatteryPower(void)
-  {
-return 0;
+  { // Derived from the battery current, which the AXP2101 does not provide.
+    return not_available();
   }
 
   float AXP2101_Class::getBatteryVoltage(void)
@@ -262,18 +270,24 @@ return 0;
   }
 
   float AXP2101_Class::getBatteryChargeCurrent(void)
-  {
-return 0;
+  { // The ADC of the AXP2101 covers VBAT / TS / VBUS / VSYS / TDIE. Current is measured
+    // by a dedicated sense IC where the board provides one ( ex. INA3221 on Core2 v1.1 ,
+    // INA226 on Tab5 ) , and Power_Class::getBatteryCurrent() reads that IC.
+    return not_available();
   }
 
   float AXP2101_Class::getBatteryDischargeCurrent(void)
-  {
-return 0;
+  { // Not provided by the AXP2101. ( see getBatteryChargeCurrent )
+    return not_available();
   }
 
   float AXP2101_Class::getAPSVoltage(void)
-  {
-return 0;
+  { // VSYS is the equivalent measurement point on the AXP2101 of the APS rail
+    // of the AXP192.
+    float volt = readRegister14(0x3A);
+    if (volt >= 16375) { return 0.0f; }
+
+    return volt / 1000.0f;
   }
 
   bool AXP2101_Class::enableIRQ(std::uint64_t registerEn)

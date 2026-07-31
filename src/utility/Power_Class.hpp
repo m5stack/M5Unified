@@ -184,6 +184,9 @@ namespace m5
 
     /// get battery current
     /// @return battery current [mA] ( +=charge / -=discharge )
+    /// @attention This reading comes from the hardware of the board: an AXP192, or a
+    /// dedicated current sense IC ( ex. Core2 v1.1 , M5Tab5 , M5PowerHub ).
+    /// Boards without either of them return 0.
     int32_t getBatteryCurrent(void);
 
     /// Get Ext Port voltage
