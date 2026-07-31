@@ -8,6 +8,7 @@
 #endif
 
 #include <algorithm>
+#include <limits>
 
 #define IS_BIT_SET(val,mask)            (((val)&(mask)) == (mask))
 
@@ -213,14 +214,28 @@ return false;
     return val >> 2;
   }
 
-  float AXP2101_Class::getACINVoltage(void)
+  /// Used where the AXP2101 provides no reading for the requested value.
+  /// Returning NaN instead of 0 lets the caller tell it from a real zero.
+  static constexpr float not_available(void)
   {
-return 0;
+    return std::numeric_limits<float>::quiet_NaN();
+  }
+
+  /// A 14 bit ADC channel sits at the top of its range when there is nothing to measure
+  /// on it, so a reading within this margin of full scale is not treated as a value.
+  /// A channel that does have an input reads far below the margin; measured on a CoreS3,
+  /// the closest was TS at 5563, while VBUS with nothing connected read 16372.
+  static constexpr std::size_t adc_full_scale  = 0x3FFF;
+  static constexpr std::size_t adc_invalid_min = adc_full_scale - 32;
+
+  float AXP2101_Class::getACINVoltage(void)
+  { // The AXP2101 takes its input from VBUS. ( see getVBUSVoltage )
+    return not_available();
   }
 
   float AXP2101_Class::getACINCurrent(void)
-  {
-return 0;
+  { // The AXP2101 takes its input from VBUS.
+    return not_available();
   }
 
   float AXP2101_Class::getVBUSVoltage(void)
@@ -228,20 +243,20 @@ return 0;
     if (isVBUS() == false) { return 0.0f; }
     
     float vBus = readRegister14(0x38);
-    if (vBus >= 16375) { return 0.0f; }
+    if (vBus >= adc_invalid_min) { return 0.0f; }
 
     return vBus / 1000.0f;
   }
 
   float AXP2101_Class::getVBUSCurrent(void)
-  {
-return 0;
+  { // Not provided by the AXP2101. ( see getBatteryChargeCurrent )
+    return not_available();
   }
 
   float AXP2101_Class::getTSVoltage(void)
   {
     float volt = readRegister14(0x36);
-    if (volt >= 16375) { return 0.0f; }
+    if (volt >= adc_invalid_min) { return 0.0f; }
 
     return volt / 2000.0f;
   }
@@ -252,8 +267,8 @@ return 0;
   }
 
   float AXP2101_Class::getBatteryPower(void)
-  {
-return 0;
+  { // Derived from the battery current, which the AXP2101 does not provide.
+    return not_available();
   }
 
   float AXP2101_Class::getBatteryVoltage(void)
@@ -262,18 +277,24 @@ return 0;
   }
 
   float AXP2101_Class::getBatteryChargeCurrent(void)
-  {
-return 0;
+  { // The ADC of the AXP2101 covers VBAT / TS / VBUS / VSYS / TDIE. Current is measured
+    // by a dedicated sense IC where the board provides one ( ex. INA3221 on Core2 v1.1 ,
+    // INA226 on M5Tab5 ) , and Power_Class::getBatteryCurrent() reads that IC.
+    return not_available();
   }
 
   float AXP2101_Class::getBatteryDischargeCurrent(void)
-  {
-return 0;
+  { // Not provided by the AXP2101. ( see getBatteryChargeCurrent )
+    return not_available();
   }
 
   float AXP2101_Class::getAPSVoltage(void)
-  {
-return 0;
+  { // VSYS is the equivalent measurement point on the AXP2101 of the APS rail
+    // of the AXP192.
+    float volt = readRegister14(0x3A);
+    if (volt >= adc_invalid_min) { return 0.0f; }
+
+    return volt / 1000.0f;
   }
 
   bool AXP2101_Class::enableIRQ(std::uint64_t registerEn)
