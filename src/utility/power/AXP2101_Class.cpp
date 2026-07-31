@@ -272,7 +272,7 @@ return false;
   float AXP2101_Class::getBatteryChargeCurrent(void)
   { // The ADC of the AXP2101 covers VBAT / TS / VBUS / VSYS / TDIE. Current is measured
     // by a dedicated sense IC where the board provides one ( ex. INA3221 on Core2 v1.1 ,
-    // INA226 on Tab5 ) , and Power_Class::getBatteryCurrent() reads that IC.
+    // INA226 on M5Tab5 ) , and Power_Class::getBatteryCurrent() reads that IC.
     return not_available();
   }
 
