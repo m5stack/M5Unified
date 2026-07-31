@@ -243,6 +243,10 @@ namespace m5
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
+
+    /// Release the wakeup pin so that it can be asserted again while sleeping.
+    /// @return true if the pin is released ( high ).
+    bool _releaseWakeupPin(std::uint_fast8_t wakeup_pin);
     float _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;

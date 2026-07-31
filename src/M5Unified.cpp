@@ -2847,6 +2847,38 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
   }
 
+  void M5Unified::_clearWakeupInterrupt(void)
+  {
+    // A touch panel holds its INT asserted until the touch data is read. Every board that
+    // uses the touch INT as its wakeup pin therefore has to consume the data here.
+    // ( M5Paper = GPIO36 , M5PaperS3 = GPIO48 , Core2 / Tough = GPIO39 , CoreS3 = via AW9523 )
+    if (!_displays.empty() && _displays.front().touch())
+    { // Same source as Touch_Class, see Touch.begin() in _begin().
+      m5gfx::touch_point_t tp;
+      _displays.front().getTouchRaw(&tp, 1);
+    }
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    switch (getBoard())
+    {
+    case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackChan:
+      { // TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN -> I2C_INT -> GPIO21.
+        // The AW9523 reports input changes only, so releasing the touch INT is not enough:
+        // its input would stay in the touched state and a later touch would not produce
+        // any change, leaving the wakeup source dead.
+        uint8_t buf[2];
+        In_I2C.readRegister(aw9523_i2c_addr, 0x00, buf, sizeof(buf), 400000);
+      }
+      break;
+
+    default:
+      break;
+    }
+#endif
+  }
+
   bool M5Unified::_begin_rtc_imu(const config_t& cfg)
   {
     bool port_a_used = false;

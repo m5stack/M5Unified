@@ -243,6 +243,11 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
+      // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
+      // AXP2101 IRQ pin is shared with the RTC INT, so neither reaches the ESP32.
+      // Therefore touch is the only usable wakeup source on this board.
+      _wakeupPin = GPIO_NUM_21; // I2C_INT ( AW9523 INTN )
       break;
 
     case board_t::board_M5StickS3:
@@ -1283,6 +1288,17 @@ namespace m5
     _powerOff(true);
   }
 
+  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin)
+  {
+    for (int retry = 8; retry > 0; --retry)
+    {
+      if (m5gfx::gpio_in(wakeup_pin)) { return true; }
+      M5._clearWakeupInterrupt();
+      m5gfx::delay(5);
+    }
+    return m5gfx::gpio_in(wakeup_pin);
+  }
+
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
     if (micro_seconds == 0)
@@ -1350,7 +1366,7 @@ namespace m5
 #endif
       if (pin_wakeup_enabled)
       {
-        while (m5gfx::gpio_in(wpin) == false)
+        while (!_releaseWakeupPin(wpin))
         {
           // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
           M5.update();
@@ -1362,6 +1378,10 @@ namespace m5
         // Such a pin can wake up from light sleep, but not from deep sleep.
         M5_LOGW("deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
       }
+    }
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("deepSleep: this device has no wakeup pin.");
     }
     if (micro_seconds != sleep_no_timer)
     {
@@ -1375,6 +1395,10 @@ namespace m5
         // Unless another wakeup source has been set up, the device will not wake up until it is reset.
         M5_LOGW("deepSleep: no timer or pin wakeup source is enabled.");
       }
+    }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping. ( see lightSleep )
+      M5_LOGW("deepSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
     }
 #endif
     esp_deep_sleep_start();
@@ -1428,16 +1452,17 @@ namespace m5
         pin_wakeup_enabled = gpio_wakeup_used;
       }
       if (pin_wakeup_enabled)
-      {
-        while (m5gfx::gpio_in(wpin) == false)
-        {
-          m5gfx::delay(10);
-        }
+      { // Wait until the wakeup pin is released, otherwise the sleep request is rejected.
+        while (!_releaseWakeupPin(wpin)) { m5gfx::delay(10); }
       }
       else
       {
         M5_LOGW("lightSleep: wakeup by GPIO%d is not enabled.", (int)wpin);
       }
+    }
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("lightSleep: this device has no wakeup pin.");
     }
     if (micro_seconds != sleep_no_timer){
       esp_sleep_enable_timer_wakeup(micro_seconds);
@@ -1447,6 +1472,12 @@ namespace m5
       { // Neither a timer nor a wakeup pin was configured by this call.
         M5_LOGW("lightSleep: no timer or pin wakeup source is enabled.");
       }
+    }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping: an event that happens after the wait
+      // loop leaves the interrupt asserted, so the sleep request would be rejected or
+      // the wakeup source would be dead while sleeping.
+      M5_LOGW("lightSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
     }
     esp_light_sleep_start();
     if (gpio_wakeup_used)
