@@ -221,6 +221,10 @@ return false;
     return std::numeric_limits<float>::quiet_NaN();
   }
 
+  /// A 14 bit ADC channel reads close to its full scale ( 0x3FFF ) when there is
+  /// nothing to measure on it. Values from here up are not treated as a reading.
+  static constexpr std::size_t adc_invalid_min = 16375;
+
   float AXP2101_Class::getACINVoltage(void)
   { // The AXP2101 takes its input from VBUS. ( see getVBUSVoltage )
     return not_available();
@@ -236,7 +240,7 @@ return false;
     if (isVBUS() == false) { return 0.0f; }
     
     float vBus = readRegister14(0x38);
-    if (vBus >= 16375) { return 0.0f; }
+    if (vBus >= adc_invalid_min) { return 0.0f; }
 
     return vBus / 1000.0f;
   }
@@ -249,7 +253,7 @@ return false;
   float AXP2101_Class::getTSVoltage(void)
   {
     float volt = readRegister14(0x36);
-    if (volt >= 16375) { return 0.0f; }
+    if (volt >= adc_invalid_min) { return 0.0f; }
 
     return volt / 2000.0f;
   }
@@ -285,7 +289,7 @@ return false;
   { // VSYS is the equivalent measurement point on the AXP2101 of the APS rail
     // of the AXP192.
     float volt = readRegister14(0x3A);
-    if (volt >= 16375) { return 0.0f; }
+    if (volt >= adc_invalid_min) { return 0.0f; }
 
     return volt / 1000.0f;
   }
