@@ -221,9 +221,12 @@ return false;
     return std::numeric_limits<float>::quiet_NaN();
   }
 
-  /// A 14 bit ADC channel reads close to its full scale ( 0x3FFF ) when there is
-  /// nothing to measure on it. Values from here up are not treated as a reading.
-  static constexpr std::size_t adc_invalid_min = 16375;
+  /// A 14 bit ADC channel sits at the top of its range when there is nothing to measure
+  /// on it, so a reading within this margin of full scale is not treated as a value.
+  /// A channel that does have an input reads far below the margin; measured on a CoreS3,
+  /// the closest was TS at 5563, while VBUS with nothing connected read 16372.
+  static constexpr std::size_t adc_full_scale  = 0x3FFF;
+  static constexpr std::size_t adc_invalid_min = adc_full_scale - 32;
 
   float AXP2101_Class::getACINVoltage(void)
   { // The AXP2101 takes its input from VBUS. ( see getVBUSVoltage )
