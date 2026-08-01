@@ -633,40 +633,73 @@ namespace m5
         int ch_diff = ch_info->diff;
         size_t ch_index = ch_info->index;
 
-        wav_info_t* current_wav = &(ch_info->wavinfo[!ch_info->flip]);
-        wav_info_t* next_wav    = &(ch_info->wavinfo[ ch_info->flip]);
+        wav_info_t* current_wav = &(ch_info->current);
+        bool flip = ch_info->flip.load(std::memory_order_relaxed);
+        uint8_t next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
 
         size_t idx = 0;
 
-        if (current_wav->repeat == 0 || next_wav->stop_current)
+        if (current_wav->repeat == 0
+         || ((next_state & (wav_phase_mask | wav_state_stop_current)) == (wav_phase_published | wav_state_stop_current)))
         {
 label_next_wav:
-          bool clear_idx = (next_wav->repeat == 0
-                        || !next_wav->no_clear_index
-                        || (next_wav->data != current_wav->data));
-          current_wav->clear();
-          ch_info->flip = !ch_info->flip;
+          next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
+          if ((next_state & wav_phase_mask) == wav_phase_published
+           && ch_info->wavinfo[flip].state.compare_exchange_strong(next_state
+              , (uint8_t)((next_state & ~wav_phase_mask) | wav_phase_playing)
+              , std::memory_order_acquire, std::memory_order_relaxed))
+          { // the claim above is what makes the payload of the slot readable.
+            wav_info_t& incoming = ch_info->wavinfo[flip].info;
+            bool clear_idx = ((next_state & wav_state_stop_marker)
+                          || !incoming.no_clear_index
+                          || (incoming.data != current_wav->data));
+            *current_wav = incoming;
+            if (next_state & wav_state_stop_marker)
+            { // a pure stop: nothing to play. The slot itself is retired
+              // further below, once flip has moved off of it - freeing it
+              // here would let a writer claim it while flip still points at
+              // it, and the later retirement would wipe that claim out.
+              current_wav->clear();
+            }
+            // the finished (or cut) request goes back to the writers before
+            // flip moves, so a claim through the fresh flip cannot miss it;
+            // the wakeup comes last so a woken writer finds flip already moved.
+            ch_info->wavinfo[!flip].state.store(wav_phase_empty, std::memory_order_release);
+            ch_info->flip.store(!flip, std::memory_order_relaxed);
+            flip = !flip;
 #if !defined (SDL_h_)
-          xSemaphoreGive(self->_task_semaphore);
+            xSemaphoreGive(self->_task_semaphore);
 #endif
-          std::swap(current_wav, next_wav);
 
-          if (clear_idx)
-          {
-            ch_index = 0;
-            if (current_wav->repeat == 0)
+            if (clear_idx)
             {
-              self->_play_channel_bits.fetch_and(~(1 << ch));
-              if (current_wav->repeat == 0)
-              {
-                ch_info->diff = 0;
-                ch_info->index = 0;
-                continue;
-              }
-              self->_play_channel_bits.fetch_or(1 << ch);
+              ch_index = 0;
             }
           }
+          else if (current_wav->repeat != 0)
+          { // a writer snatched the request away first: the current sound
+            // stays until whatever they are publishing arrives.
+            goto label_play;
+          }
+          if (current_wav->repeat == 0)
+          {
+            ch_info->wavinfo[!flip].state.store(wav_phase_empty, std::memory_order_release);
+#if !defined (SDL_h_)
+            xSemaphoreGive(self->_task_semaphore);
+#endif
+            self->_play_channel_bits.fetch_and(~(1 << ch));
+            next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
+            if ((next_state & wav_phase_mask) != wav_phase_published)
+            { // nothing to do; a writer caught mid-publish raises the bit itself.
+              ch_info->diff = 0;
+              ch_info->index = 0;
+              continue;
+            }
+            self->_play_channel_bits.fetch_or(1 << ch);
+            goto label_next_wav;
+          }
         }
+label_play:
         auto data = (const uint8_t*)current_wav->data;
         const bool in_stereo = current_wav->is_stereo;
         const int32_t in_rate = current_wav->sample_rate_x256;
@@ -958,8 +991,10 @@ label_continue_sample:
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     if (_task_running)
     {
+      // No stop() here: it would publish markers and notify a task that may
+      // already be tearing its handle down. The slots are reset below once
+      // the task is gone, which is all the stop would have achieved.
       _task_running = false;
-      stop();
       if (_task_handle)
       {
 #if defined (SDL_h_)
@@ -975,8 +1010,11 @@ label_continue_sample:
     for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
       auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[0].clear();
-      chinfo->wavinfo[1].clear();
+      chinfo->wavinfo[0].info.clear();
+      chinfo->wavinfo[0].state.store(wav_phase_empty);
+      chinfo->wavinfo[1].info.clear();
+      chinfo->wavinfo[1].state.store(wav_phase_empty);
+      chinfo->current.clear();
     }
 #if !defined (SDL_h_)
     _i2s_driver_uninstall(_cfg.i2s_port);
@@ -987,10 +1025,10 @@ label_continue_sample:
   {
     wav_info_t tmp;
     tmp.stop_current = 1;
+    uint8_t bits = _play_channel_bits.load();
     for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
-      auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[chinfo->flip] = tmp;
+      if (bits & (1 << ch)) { _set_next_wav(ch, tmp); }
     }
   }
 
@@ -1000,12 +1038,11 @@ label_continue_sample:
     {
       stop();
     }
-    else
+    else if (_play_channel_bits.load() & (1 << ch))
     {
       wav_info_t tmp;
       tmp.stop_current = 1;
-      auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[chinfo->flip] = tmp;
+      _set_next_wav(ch, tmp);
     }
   }
 
@@ -1022,25 +1059,55 @@ label_continue_sample:
   {
     auto chinfo = &_ch_info[ch];
     uint8_t chmask = 1 << ch;
-    if (!wav.stop_current)
+    const uint8_t claimed = wav_phase_writing | ((wav.repeat == 0) ? wav_state_stop_marker : 0);
+    for (;;)
     {
-      while ((_play_channel_bits.load() & chmask) && (chinfo->wavinfo[chinfo->flip].repeat))
+      bool f = chinfo->flip.load(std::memory_order_relaxed);
+      auto slot = &(chinfo->wavinfo[f]);
+      uint8_t st = slot->state.load(std::memory_order_relaxed);
+      uint8_t phase = st & wav_phase_mask;
+      // a preempting request may take a queued one's place; anything else
+      // needs the slot back from the task first.
+      if (phase == wav_phase_empty || (wav.stop_current && phase == wav_phase_published))
       {
-        if (chinfo->wavinfo[!chinfo->flip].repeat == ~0u) { return false; }
+        if (slot->state.compare_exchange_strong(st, claimed
+            , std::memory_order_acquire, std::memory_order_relaxed))
+        {
+          // holding the claim pins flip: the task cannot adopt a slot in
+          // writing. So if flip already points elsewhere, this was the stale
+          // slot - put it back exactly as found and take the fresh target.
+          if (chinfo->flip.load(std::memory_order_relaxed) != f)
+          {
+            slot->state.store(st, std::memory_order_release);
+            continue;
+          }
+          slot->info = wav;
+          slot->state.store(wav_phase_published
+                          | (wav.stop_current      ? wav_state_stop_current : 0)
+                          | (wav.repeat == ~0u     ? wav_state_infinite     : 0)
+                          | (wav.repeat == 0       ? wav_state_stop_marker  : 0)
+                          , std::memory_order_release);
+          _play_channel_bits.fetch_or(chmask);
 #if !defined (SDL_h_)
-        xSemaphoreTake(_task_semaphore, 1);
-#else
-        SDL_Delay(1);
+          xTaskNotifyGive(_task_handle);
 #endif
+          return true;
+        }
+        continue; // lost the claim to whoever changed the state; they made
+                  // progress, so trying again right away cannot spin for long.
       }
-    }
-    chinfo->wavinfo[chinfo->flip] = wav;
-    _play_channel_bits.fetch_or(chmask);
-
+      if (!wav.stop_current
+       && ((chinfo->wavinfo[!f].state.load(std::memory_order_relaxed)
+            & (wav_phase_mask | wav_state_infinite)) == (wav_phase_playing | wav_state_infinite)))
+      { // never a turn behind an endless request.
+        return false;
+      }
 #if !defined (SDL_h_)
-    xTaskNotifyGive(_task_handle);
+      xSemaphoreTake(_task_semaphore, 1);
+#else
+      SDL_Delay(1);
 #endif
-    return true;
+    }
   }
 
   bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
