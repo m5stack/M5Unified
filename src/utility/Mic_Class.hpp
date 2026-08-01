@@ -23,6 +23,7 @@
 #endif
 
 #include <stdint.h>
+#include <atomic>
 
 #ifndef I2S_PIN_NO_CHANGE
 #define I2S_PIN_NO_CHANGE (-1)
@@ -114,7 +115,7 @@ namespace m5
 
     /// now in recording or not.
     /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
-    size_t isRecording(void) const volatile { return ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length); }
+    size_t isRecording(void) const volatile { return ((bool)_rec_info[0].length.load(std::memory_order_acquire)) + ((bool)_rec_info[1].length.load(std::memory_order_acquire)); }
 
     /// set recording sampling rate.
     /// @param sample_rate the sampling rate (Hz)
@@ -163,14 +164,23 @@ namespace m5
     struct recording_info_t
     {
       void* data = nullptr;
-      size_t length = 0;
+      /// The task takes a slot as soon as this is set, so it is stored last
+      /// with a release and loaded first with an acquire: that is what makes
+      /// the fields above visible to the task, and the recorded samples
+      /// visible to whoever waits for the slot to come back empty. It is also
+      /// why the slot cannot be copied as a whole.
+      std::atomic<size_t> length { 0 };
       size_t index = 0;
       bool is_stereo = false;
       bool is_16bit = false;
+
+      void clear(void);
     };
 
     recording_info_t _rec_info[2];
-    volatile bool _rec_flip = false;
+    /// Which of the two slots the next request goes into. The task moves it;
+    /// a writer picks it up once and stays with that slot.
+    std::atomic<bool> _rec_flip { false };
 
     static void mic_task(void* args);
 
