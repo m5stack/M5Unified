@@ -584,7 +584,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         dst_remain = current_rec->length;
         if (dst_remain == 0)
         {
-          self->_is_recording = false;
           ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
           src_idx = ~0u;
           src_len = 0;
@@ -593,7 +592,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           continue;
         }
       }
-      self->_is_recording = true;
 
       for (;;)
       {
@@ -702,7 +700,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         }
       }
     }
-    self->_is_recording = false;
     _i2s_stop(self->_cfg.i2s_port);
 
     self->_task_handle = nullptr;
@@ -757,6 +754,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       if (_task_handle) { xTaskNotifyGive(_task_handle); }
       do { vTaskDelay(1); } while (_task_handle);
     }
+
+    // an unfinished request would otherwise keep isRecording() reporting a recording.
+    _rec_info[0] = recording_info_t();
+    _rec_info[1] = recording_info_t();
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     _i2s_driver_uninstall(_cfg.i2s_port);

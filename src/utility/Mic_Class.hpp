@@ -114,7 +114,7 @@ namespace m5
 
     /// now in recording or not.
     /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
-    size_t isRecording(void) const { return _is_recording ? ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length) : 0; }
+    size_t isRecording(void) const volatile { return ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length); }
 
     /// set recording sampling rate.
     /// @param sample_rate the sampling rate (Hz)
@@ -186,7 +186,6 @@ namespace m5
 
     int32_t _offset = 0;
     volatile bool _task_running = false;
-    volatile bool _is_recording = false;
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else
