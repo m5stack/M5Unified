@@ -584,7 +584,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         dst_remain = current_rec->length;
         if (dst_remain == 0)
         {
-          self->_is_recording = false;
           ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
           src_idx = ~0u;
           src_len = 0;
@@ -593,7 +592,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           continue;
         }
       }
-      self->_is_recording = true;
 
       for (;;)
       {
@@ -702,7 +700,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         }
       }
     }
-    self->_is_recording = false;
     _i2s_stop(self->_cfg.i2s_port);
 
     self->_task_handle = nullptr;
@@ -736,13 +733,16 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+        res = (pdPASS == xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
+        res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
+      // end() takes the driver and the callback back down; it still sees the
+      // class as running, which is what lets it do that.
+      if (!res) { end(); }
     }
 
     return res;
@@ -757,6 +757,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       if (_task_handle) { xTaskNotifyGive(_task_handle); }
       do { vTaskDelay(1); } while (_task_handle);
     }
+
+    // an unfinished request would otherwise keep isRecording() reporting a recording.
+    _rec_info[0] = recording_info_t();
+    _rec_info[1] = recording_info_t();
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     _i2s_driver_uninstall(_cfg.i2s_port);

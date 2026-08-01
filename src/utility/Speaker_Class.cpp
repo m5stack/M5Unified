@@ -930,20 +930,24 @@ label_continue_sample:
       _task_running = true;
 #if defined (SDL_h_)
       _task_handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
+      res = (_task_handle != nullptr);
 #else
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
 
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+        res = (pdPASS == xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
+        res = (pdPASS == xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
 #endif
+      // end() takes the driver and the callback back down; it still sees the
+      // class as running, which is what lets it do that.
+      if (!res) { end(); }
     }
 
     return res;
