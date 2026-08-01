@@ -110,7 +110,7 @@ namespace m5
     /// now in playing or not.
     /// @param channel virtual channel number. (0~7), (default = automatically selected)
     /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
-    size_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? ((bool)_ch_info[channel].wavinfo[0].repeat) + ((bool)_ch_info[channel].wavinfo[1].repeat) : 0; }
+    size_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? _slot_occupied(_ch_info[channel].wavinfo[0]) + _slot_occupied(_ch_info[channel].wavinfo[1]) : 0; }
 
     /// Get the number of channels that are playing.
     /// @return number of channels that are playing.
@@ -243,13 +243,13 @@ namespace m5
 
     struct wav_info_t
     {
-      volatile uint32_t repeat = 0;   /// -1 mean infinity repeat
+      uint32_t repeat = 0;   /// -1 mean infinity repeat
       uint32_t sample_rate_x256 = 0;
       const void* data = nullptr;
       size_t length = 0;
       union
       {
-        volatile uint8_t flg = 0;
+        uint8_t flg = 0;
         struct
         {
           uint8_t is_stereo      : 1;
@@ -262,13 +262,43 @@ namespace m5
       void clear(void);
     };
 
+    // A slot moves empty -> writing -> published (owned by a writer), then
+    // published -> playing -> empty (owned by the task). Both claims are a CAS
+    // on the state byte, so no one ever reads or writes the payload of a slot
+    // someone else holds. The flags of the request ride along in the same byte
+    // for the decisions that must not look at the payload: cutting the current
+    // sound, refusing to queue behind an endless one, counting isPlaying().
+    static constexpr uint8_t wav_phase_mask         = 0x03;
+    static constexpr uint8_t wav_phase_empty        = 0x00;
+    static constexpr uint8_t wav_phase_writing      = 0x01;
+    static constexpr uint8_t wav_phase_published    = 0x02;
+    static constexpr uint8_t wav_phase_playing      = 0x03;
+    static constexpr uint8_t wav_state_stop_current = 0x04;
+    static constexpr uint8_t wav_state_infinite     = 0x08;
+    static constexpr uint8_t wav_state_stop_marker  = 0x10;
+
+    struct wav_slot_t
+    {
+      wav_info_t info;
+      std::atomic<uint8_t> state { 0 };
+    };
+
+    static bool _slot_occupied(const volatile wav_slot_t& slot)
+    {
+      uint8_t s = slot.state.load(std::memory_order_relaxed);
+      return ((s & wav_phase_mask) != wav_phase_empty) && !(s & wav_state_stop_marker);
+    }
+
     struct channel_info_t
     {
-      wav_info_t wavinfo[2]; // current/next flip info.
+      wav_slot_t wavinfo[2]; // request queue slots.
+      wav_info_t current;    // the request being played; only the task touches it.
       size_t index = 0;
       int diff = 0;
       volatile uint8_t volume = 255; // channel volume (not master volume)
-      volatile bool flip = false;
+      /// Which slot the next request goes into. The task moves it as it adopts
+      /// a request; a writer reloads it whenever its claim fails.
+      std::atomic<bool> flip { false };
 
       float liner_buf[2][2] = { { 0, 0 }, { 0, 0 } };
     };
@@ -289,6 +319,12 @@ namespace m5
 
     volatile bool _task_running = false;
     std::atomic<uint16_t> _play_channel_bits = { 0 };
+    /// begin() runs from whichever task touches the speaker first, and setup
+    /// starts by tearing the port down - so only one call may go through.
+    std::atomic<bool> _begin_lock { false };
+    /// True only once begin() has fully finished; the lock-free early return
+    /// keys on this, so a caller can never see a half-built port as ready.
+    std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else
