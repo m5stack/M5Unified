@@ -948,7 +948,23 @@ label_continue_sample:
 
   bool Speaker_Class::begin(void)
   {
-    if (_task_running) { return true; }
+    if (_begun.load(std::memory_order_acquire)) { return true; }
+
+    // Playback calls begin() lazily from whichever task gets there first,
+    // and _setup_i2s starts by uninstalling the port: two of these racing
+    // rip the live channel out from under the playback task. One caller
+    // goes through at a time; the others wait and find the work done.
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
+      vTaskDelay(1);
+#endif
+    }
+    if (_begun.load(std::memory_order_acquire)) { _begin_lock.store(false); return true; }
 
 #if !defined (SDL_h_)
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
@@ -981,13 +997,16 @@ label_continue_sample:
       // end() takes the driver and the callback back down; it still sees the
       // class as running, which is what lets it do that.
       if (!res) { end(); }
+      else { _begun.store(true, std::memory_order_release); }
     }
+    _begin_lock.store(false);
 
     return res;
   }
 
   void Speaker_Class::end(void)
   {
+    _begun.store(false, std::memory_order_release);
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     if (_task_running)
     {

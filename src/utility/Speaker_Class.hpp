@@ -319,6 +319,12 @@ namespace m5
 
     volatile bool _task_running = false;
     std::atomic<uint16_t> _play_channel_bits = { 0 };
+    /// begin() runs from whichever task touches the speaker first, and setup
+    /// starts by tearing the port down - so only one call may go through.
+    std::atomic<bool> _begin_lock { false };
+    /// True only once begin() has fully finished; the lock-free early return
+    /// keys on this, so a caller can never see a half-built port as ready.
+    std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else

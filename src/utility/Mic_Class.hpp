@@ -185,6 +185,7 @@ namespace m5
     static void mic_task(void* args);
 
     uint32_t _calc_rec_rate(void) const;
+    bool _begin_locked(void);
     esp_err_t _setup_i2s(void);
     bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool stereo);
 
@@ -196,6 +197,12 @@ namespace m5
 
     int32_t _offset = 0;
     volatile bool _task_running = false;
+    /// begin() runs from whichever task records first, and setup starts by
+    /// tearing the port down - so only one call may go through.
+    std::atomic<bool> _begin_lock { false };
+    /// True only once begin() has fully finished; the lock-free early return
+    /// keys on this, so a caller can never see a half-built port as ready.
+    std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else

@@ -708,18 +708,46 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   bool Mic_Class::begin(void)
   {
+    // _rec_sample_rate was written before _begun was released, so the
+    // acquire load makes this pair of reads safe without the lock.
+    if (_begun.load(std::memory_order_acquire) && _rec_sample_rate == _calc_rec_rate()) { return true; }
+
+    // record() calls begin() lazily from whichever task gets there first,
+    // and both the setup and the sample-rate change tear the port down: two
+    // of these racing rip the live channel out from under the running task.
+    // One caller goes through at a time; the others wait for its outcome.
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+      vTaskDelay(1);
+    }
+
+    bool res = true;
     if (_task_running)
     {
       auto rate = _calc_rec_rate();
-      if (_rec_sample_rate == rate)
+      if (_rec_sample_rate != rate)
       {
-        return true;
+        do { vTaskDelay(1); } while (isRecording());
+        end();
+        _rec_sample_rate = rate;
       }
-      do { vTaskDelay(1); } while (isRecording());
-      end();
-      _rec_sample_rate = rate;
     }
+    if (!_task_running)
+    {
+      // Record the rate the port is being built for; without this the next
+      // begin() at the very same rate tears the port down and rebuilds it.
+      _rec_sample_rate = _calc_rec_rate();
+      res = _begin_locked();
+    }
+    _begin_lock.store(false);
 
+    return res;
+  }
+
+  bool Mic_Class::_begin_locked(void)
+  {
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
 
     bool res = true;
@@ -743,6 +771,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       // end() takes the driver and the callback back down; it still sees the
       // class as running, which is what lets it do that.
       if (!res) { end(); }
+      else { _begun.store(true, std::memory_order_release); }
     }
 
     return res;
@@ -750,6 +779,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   void Mic_Class::end(void)
   {
+    _begun.store(false, std::memory_order_release);
     if (!_task_running) { return; }
     _task_running = false;
     if (_task_handle)
