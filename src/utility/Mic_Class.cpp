@@ -48,6 +48,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <atomic>
 
 namespace m5
 {
@@ -570,18 +571,18 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     while (self->_task_running)
     {
-      bool rec_flip = self->_rec_flip;
+      bool rec_flip = self->_rec_flip.load(std::memory_order_relaxed);
       recording_info_t* current_rec = &(self->_rec_info[!rec_flip]);
       recording_info_t* next_rec    = &(self->_rec_info[ rec_flip]);
 
-      size_t dst_remain = current_rec->length;
+      size_t dst_remain = current_rec->length.load(std::memory_order_acquire);
       if (dst_remain == 0)
       {
         rec_flip = !rec_flip;
-        self->_rec_flip = rec_flip;
+        self->_rec_flip.store(rec_flip, std::memory_order_relaxed);
         xSemaphoreGive(self->_task_semaphore);
         std::swap(current_rec, next_rec);
-        dst_remain = current_rec->length;
+        dst_remain = current_rec->length.load(std::memory_order_acquire);
         if (dst_remain == 0)
         {
           ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
@@ -592,7 +593,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           continue;
         }
       }
-
       for (;;)
       {
         if (src_idx >= src_len)
@@ -695,7 +695,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         dst_remain -= output_num;
         if ((int32_t)dst_remain <= 0)
         {
-          current_rec->length = 0;
+          current_rec->length.store(0, std::memory_order_release);
           break;
         }
       }
@@ -759,27 +759,48 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
 
     // an unfinished request would otherwise keep isRecording() reporting a recording.
-    _rec_info[0] = recording_info_t();
-    _rec_info[1] = recording_info_t();
+    _rec_info[0].clear();
+    _rec_info[1].clear();
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     _i2s_driver_uninstall(_cfg.i2s_port);
   }
 
+  void Mic_Class::recording_info_t::clear(void)
+  {
+    data = nullptr;
+    index = 0;
+    is_stereo = false;
+    is_16bit = false;
+    length.store(0, std::memory_order_release);
+  }
+
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
   {
-    recording_info_t info;
-    info.data = recdata;
-    info.length = array_len;
-    info.is_16bit = flg_16bit;
-    info.is_stereo = flg_stereo;
-
     _cfg.sample_rate = sample_rate;
 
     if (!begin()) { return false; }
     if (array_len == 0) { return true; }
-    while (_rec_info[_rec_flip].length) { xSemaphoreTake(_task_semaphore, 1); }
-    _rec_info[_rec_flip] = info;
+    // The task moves the flip as it finishes a slot, so settle on one only
+    // once its own length says it is free, and keep that slot below.
+    bool flip;
+    for (;;)
+    {
+      flip = _rec_flip.load(std::memory_order_relaxed);
+      if (_rec_info[flip].length.load(std::memory_order_acquire) == 0) { break; }
+      xSemaphoreTake(_task_semaphore, 1);
+    }
+
+    // Assigning the whole struct would let the length reach the task ahead of
+    // the fields describing the data, and the task acts on a slot the moment
+    // the length is there. Fill those in first and publish with the length.
+    auto& slot = _rec_info[flip];
+    slot.data = recdata;
+    slot.index = 0;
+    slot.is_stereo = flg_stereo;
+    slot.is_16bit = flg_16bit;
+    slot.length.store(array_len, std::memory_order_release);
+
     if (this->_task_handle)
     {
       xTaskNotifyGive(this->_task_handle);
