@@ -733,13 +733,16 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+        res = (pdPASS == xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
+        res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
+      // end() takes the driver and the callback back down; it still sees the
+      // class as running, which is what lets it do that.
+      if (!res) { end(); }
     }
 
     return res;
