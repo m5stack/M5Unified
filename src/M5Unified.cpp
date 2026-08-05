@@ -124,6 +124,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
+{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  }, // PortA は内部バスと同一 (レベルシフタ経由の物理分配)
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -157,6 +158,7 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5    , GPIO_NUM_1 ,GPIO_NUM_6  , GPIO_NUM_12,GPIO_NUM_11 },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
@@ -206,6 +208,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5    , GPIO_NUM_9 , GPIO_NUM_7 , GPIO_NUM_8 , 255        , 255        , GPIO_NUM_10 },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, 255        , 255        , GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, 255        , 255        , GPIO_NUM_4  },
@@ -1775,6 +1778,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     i2c_port_t ex_port = I2C_NUM_0;
 #if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
+// M5GFX が LP_I2C 対応をコンパイルする条件と同一に保つこと
+// (条件を満たさない SDK では LP ポートを開けないため HP のまま運用する)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) && defined ( SOC_LP_I2C_NUM ) && ( SOC_LP_I2C_NUM > 0 ) \
+ && __has_include ( <driver/i2c_master.h> ) && defined ( ESP_IDF_VERSION_VAL ) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+    if (board == board_t::board_M5ToughC5)
+    { /// 内部バス (G2/G3) は LP_I2C の固定パッドと一致するため LP ポートへ割り当てる。
+      /// PortA も同じバスの物理分配なので Ex_I2C は同ポートを共有し (初代 BASIC と
+      /// 同じ形)、HP の I2C0 は丸ごと空く。
+      in_port = LP_I2C_NUM_0;
+      ex_port = LP_I2C_NUM_0;
+    }
+#endif
 #else
     i2c_port_t in_port = I2C_NUM_1;
     if (in_scl == ex_scl && in_sda == ex_sda) {
@@ -2933,6 +2948,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       {
       case board_t::board_M5StackCore2:
       case board_t::board_M5Tough:
+      case board_t::board_M5ToughC5:
       case board_t::board_M5StackCoreS3SE:
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackChan:
@@ -3241,7 +3257,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
     }
 
-#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     if (_use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
@@ -3267,6 +3283,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
+    case board_t::board_M5ToughC5:
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackChan:

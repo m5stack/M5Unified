@@ -167,6 +167,8 @@ namespace m5
                              = board_t::board_M5StampC3;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
                              = board_t::board_M5Tab5;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+                             = board_t::board_M5StampC5;
 #elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
                              = board_t::board_M5AtomLite;
 #else

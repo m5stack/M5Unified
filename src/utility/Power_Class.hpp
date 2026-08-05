@@ -240,6 +240,10 @@ namespace m5
     // secondery INA3221 for M5Station.
     INA3221_Class Ina3221[2] = { { 0x40 }, { 0x41 } };
 
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    M5PM1_Class M5pm1;
+#endif
+
 #endif
 
   private:

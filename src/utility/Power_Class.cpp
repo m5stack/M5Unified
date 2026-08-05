@@ -217,6 +217,24 @@ namespace m5
       break;
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+
+    /// setup power management ic
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_M5ToughC5:
+      _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_4;
+      M5pm1.setBatteryCharge(true);
+      M5pm1.setDCDCOutput(true);
+      M5pm1.setLDOOutput(true);
+      M5pm1.setLedEnLevel(true);
+      break;
+    }
+
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
 
     /// setup power management ic
@@ -672,7 +690,7 @@ namespace m5
 
 #endif
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C61)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
     if (_pmic == pmic_t::pmic_m5pm1)
     {
       M5pm1.begin();
@@ -747,6 +765,14 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
       M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      if (_pmic == pmic_t::pmic_m5pm1)
+      {
+        M5pm1.setExtOutput(enable);
+      }
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
@@ -922,6 +948,11 @@ namespace m5
     case board_t::board_M5StampS3Bat:
       return M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio1);
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return M5pm1.getExtOutput();
+      break;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       return m5gfx::gpio_in(M5Paper_EXT5V_ENABLE_PIN);
@@ -1163,7 +1194,7 @@ namespace m5
         }
         break;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
       case pmic_t::pmic_m5pm1:
         if (!withTimer) {
           M5pm1.powerOff();
@@ -1629,7 +1660,7 @@ namespace m5
       f = Axp2101.getVBUSVoltage();
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       f = M5pm1.getVBUSVoltage() / 1000.0f;
       break;
@@ -1674,7 +1705,7 @@ namespace m5
     case pmic_t::pmic_axp2101:
       return Axp2101.getBatteryVoltage() * 1000;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       return M5pm1.getBatteryVoltage();
 #endif
@@ -1739,7 +1770,7 @@ namespace m5
       return Axp2101.getBatteryLevel();
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       {
         // Get battery voltage in mV
@@ -1812,12 +1843,13 @@ namespace m5
       Axp2101.setBatteryCharge(enable);
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
         // M5PaperColor does not support charge control
         if (M5.getBoard() == board_t::board_M5PaperColor) {
-            return;
+          return;
         }
         // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
         if (M5.getBoard() == board_t::board_M5PaperMono) {
@@ -1829,6 +1861,7 @@ namespace m5
           set_papermono_ip2315_enabled(false);
           return;
         }
+#endif
         M5pm1.setBatteryCharge(enable);
       }
       return;
@@ -2217,7 +2250,7 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 
