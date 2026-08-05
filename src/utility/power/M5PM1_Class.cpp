@@ -38,8 +38,10 @@ namespace m5
   static constexpr const uint8_t M5PM1_REG_IRQ_MASK3   = 0x45;
 
   static constexpr const uint8_t M5PM1_PWR_CFG_CHG_EN   = 1 << 0;
+  static constexpr const uint8_t M5PM1_PWR_CFG_DCDC_EN  = 1 << 1;
   static constexpr const uint8_t M5PM1_PWR_CFG_LDO_EN   = 1 << 2;
   static constexpr const uint8_t M5PM1_PWR_CFG_BOOST_EN = 1 << 3;
+  static constexpr const uint8_t M5PM1_PWR_CFG_LED_EN   = 1 << 4;
   static constexpr const uint8_t M5PM1_SYS_CMD_SHUTDOWN = 0xA1;
 
   static constexpr bool is_valid_gpio(M5PM1_Class::gpio_t pin)
@@ -83,6 +85,16 @@ namespace m5
   {
     return enable ? bitOn(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_LDO_EN)
                   : bitOff(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_LDO_EN);
+  }
+  bool M5PM1_Class::setDCDCOutput(bool enable)
+  {
+    return enable ? bitOn(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_DCDC_EN)
+                  : bitOff(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_DCDC_EN);
+  }
+  bool M5PM1_Class::setLedEnLevel(bool level)
+  {
+    return level ? bitOn(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_LED_EN)
+                 : bitOff(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_LED_EN);
   }
 
   M5PM1_Class::pwr_src_t M5PM1_Class::getPowerSource(void)

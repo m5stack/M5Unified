@@ -74,6 +74,14 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setLDOOutput(bool enable);
 
+    /// set PM1 5V DCDC output enable.
+    /// @param enable true=enable / false=disable
+    bool setDCDCOutput(bool enable);
+
+    /// set the default level of the PM1 LED_EN pin.
+    /// @param level true=high / false=low
+    bool setLedEnLevel(bool level);
+
     /// get current PM1 power source.
     pwr_src_t getPowerSource(void);
 
