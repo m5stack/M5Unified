@@ -49,6 +49,12 @@ namespace m5
         break;
 #endif
 
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+      case board_t::board_M5ToughC5:
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
+        break;
+#endif
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub:
         instance.reset(new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000));
