@@ -1778,6 +1778,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     i2c_port_t ex_port = I2C_NUM_0;
 #if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
+// M5GFX が LP_I2C 対応をコンパイルする条件と同一に保つこと
+// (条件を満たさない SDK では LP ポートを開けないため HP のまま運用する)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) && defined ( SOC_LP_I2C_NUM ) && ( SOC_LP_I2C_NUM > 0 ) \
+ && __has_include ( <driver/i2c_master.h> ) && defined ( ESP_IDF_VERSION_VAL ) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+    if (board == board_t::board_M5ToughC5)
+    { /// 内部バス (G2/G3) は LP_I2C の固定パッドと一致するため LP ポートへ割り当てる。
+      /// PortA も同じバスの物理分配なので Ex_I2C は同ポートを共有し (初代 BASIC と
+      /// 同じ形)、HP の I2C0 は丸ごと空く。
+      in_port = LP_I2C_NUM_0;
+      ex_port = LP_I2C_NUM_0;
+    }
+#endif
 #else
     i2c_port_t in_port = I2C_NUM_1;
     if (in_scl == ex_scl && in_sda == ex_sda) {
