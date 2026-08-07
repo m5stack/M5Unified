@@ -1855,6 +1855,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         _io_expander[0].reset(ioexp);
       }
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      { /// LCD 電源/リセット/バックライトのほか TF 電源 (PYG6) と
+        /// TF カード検出 (PYG14) がこの IOE にぶら下がる
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
 #endif
     default:
       break;
