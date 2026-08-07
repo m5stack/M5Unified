@@ -1855,6 +1855,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         _io_expander[0].reset(ioexp);
       }
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      { /// LCD 電源/リセット/バックライトのほか TF 電源 (PYG6) と
+        /// TF カード検出 (PYG14) がこの IOE にぶら下がる
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
 #endif
     default:
       break;
@@ -2885,6 +2894,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         // any change, leaving the wakeup source dead.
         uint8_t buf[2];
         In_I2C.readRegister(aw9523_i2c_addr, 0x00, buf, sizeof(buf), 400000);
+      }
+      break;
+
+    default:
+      break;
+    }
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    switch (getBoard())
+    {
+    case board_t::board_M5ToughC5:
+      { // TOUCH_INT や RTC_INT は PM1 に集約され、PM1 の IRQ 出力 -> GPIO4 が
+        // 唯一の wakeup ピンになる。IRQ 出力は IRQ ステータス (0x40-0x42) が
+        // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
+        // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
+        // され続けるので、先に WAKE_SRC を消す。
+        Power.M5pm1.clearWakeSource();
+        Power.M5pm1.clearIRQStatus();
       }
       break;
 

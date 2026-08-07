@@ -232,6 +232,25 @@ namespace m5
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
       M5pm1.setLedEnLevel(true);
+      /// PM1 GPIO1 は ESP32 の G4 へ配線された IRQ 出力。IRQ ピンを設定して
+      /// おかないと PM1 が IRQ ステータス (0x40-0x42) を自動クリアしてしまい、
+      /// 電源ボタンや RTC アラームの IRQ 検出が機能しない。
+      /// IRQ 機能へ切り替える前に push-pull 出力の High として設定しておき、
+      /// 解放時に能動的に High が駆動されるようにする。
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
+      /// PM1 GPIO3 は RX8130 の nIRQ 入力 (外部プルアップ・アクティブ Low)。
+      /// 入力にしておくと IRQ ピン設定時のレベル変化スキャン対象になり、
+      /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
+      /// PM1 の IRQ 出力を wakeup ピンとして読めるよう入力にしておく。
+      /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
+      /// 期待できないため、内部プルアップを有効にする。
+      m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       break;
     }
 
@@ -1199,6 +1218,27 @@ namespace m5
         if (!withTimer) {
           M5pm1.powerOff();
         }
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+        else if (_wakeupPin < GPIO_NUM_MAX)
+        { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
+          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) まで待って
+          /// から眠り、その Low 遷移で deep sleep から復帰できるようにする。
+          if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
+          {
+            M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
+          }
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+          if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
+          { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
+            /// RTC ドメインのプルアップで High を維持する
+            rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
+            rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
+          }
+#endif
+          int retry = 40;
+          while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
+        }
+#endif
         break;
 #endif
 
@@ -1345,7 +1385,7 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5) // || defined (CONFIG_IDF_TARGET_ESP32P4)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) // || defined (CONFIG_IDF_TARGET_ESP32P4)
 
 #else
 
@@ -1381,16 +1421,28 @@ namespace m5
  #endif
  #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         if (pin_wakeup_enabled)
-        { /// TODO: reconsider these pull settings.
-          // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
-          // and every board that reaches here now shares them.
-          // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
-          // without an external pull-up would wake up immediately. On CoreS3 this works
-          // only because I2C_INT has an external 10k pull-up, and it costs about 60uA
-          // through that divider for as long as the device sleeps.
-          // Check how the wakeup pin of M5Tab5 is wired before changing this.
-          rtc_gpio_pullup_dis((gpio_num_t)wpin);
-          rtc_gpio_pulldown_en((gpio_num_t)wpin);
+        {
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+          if (M5.getBoard() == board_t::board_M5ToughC5)
+          { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
+            // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
+            // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
+            rtc_gpio_pullup_en((gpio_num_t)wpin);
+            rtc_gpio_pulldown_dis((gpio_num_t)wpin);
+          }
+          else
+#endif
+          { /// TODO: reconsider these pull settings.
+            // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
+            // and every board that reaches here now shares them.
+            // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
+            // without an external pull-up would wake up immediately. On CoreS3 this works
+            // only because I2C_INT has an external 10k pull-up, and it costs about 60uA
+            // through that divider for as long as the device sleeps.
+            // Check how the wakeup pin of M5Tab5 is wired before changing this.
+            rtc_gpio_pullup_dis((gpio_num_t)wpin);
+            rtc_gpio_pulldown_en((gpio_num_t)wpin);
+          }
         }
  #endif
       }
