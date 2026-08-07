@@ -2891,6 +2891,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     default:
       break;
     }
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    switch (getBoard())
+    {
+    case board_t::board_M5ToughC5:
+      { // TOUCH_INT や RTC_INT は PM1 に集約され、PM1 の IRQ 出力 -> GPIO4 が
+        // 唯一の wakeup ピンになる。IRQ 出力は IRQ ステータス (0x40-0x42) が
+        // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
+        // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
+        // され続けるので、先に WAKE_SRC を消す。
+        Power.M5pm1.clearWakeSource();
+        Power.M5pm1.clearIRQStatus();
+      }
+      break;
+
+    default:
+      break;
+    }
 #endif
   }
 
