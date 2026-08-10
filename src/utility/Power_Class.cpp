@@ -1403,14 +1403,19 @@ namespace m5
     _powerOff(true);
   }
 
-  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin)
+  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
   {
+    // clear_comm_ok は「割り込み要因のクリア通信が一度でも成功したか」を返す。
+    // ピンが解放されない理由が「要因がまだ生きている (指が触れている等)」なのか
+    // 「デバイスと通信できない (回復見込みなし)」なのかを呼び出し元が区別できる。
+    bool comm_ok = false;
     for (int retry = 8; retry > 0; --retry)
     {
-      if (m5gfx::gpio_in(wakeup_pin)) { return true; }
-      M5._clearWakeupInterrupt();
+      if (m5gfx::gpio_in(wakeup_pin)) { if (clear_comm_ok) { *clear_comm_ok = true; } return true; }
+      comm_ok |= M5._clearWakeupInterrupt();
       m5gfx::delay(5);
     }
+    if (clear_comm_ok) { *clear_comm_ok = comm_ok; }
     return m5gfx::gpio_in(wakeup_pin);
   }
 
@@ -1494,8 +1499,17 @@ namespace m5
 #endif
       if (pin_wakeup_enabled)
       {
-        while (!_releaseWakeupPin(wpin))
+        bool clear_comm_ok = true;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
+          if (!clear_comm_ok)
+          { // 割り込み要因のクリア通信自体が失敗している。解放されない線を
+            // ANY_LOW で待つ構成のまま眠ると即時復帰の再起動ループになるため、
+            // 眠らずに戻る。( 要因が生きているだけなら従来通り解放を待つ )
+            M5_LOGE("deepSleep: cannot release the wakeup pin. not sleeping.");
+            M5.Display.wakeup();
+            return;
+          }
           // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
           M5.update();
           m5gfx::delay(10);
@@ -1581,7 +1595,17 @@ namespace m5
       }
       if (pin_wakeup_enabled)
       { // Wait until the wakeup pin is released, otherwise the sleep request is rejected.
-        while (!_releaseWakeupPin(wpin)) { m5gfx::delay(10); }
+        bool clear_comm_ok = true;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
+        {
+          if (!clear_comm_ok)
+          { // クリア通信自体が失敗している場合は解放を待たない。light sleep は
+            // 即時復帰しても実行が戻るだけなので deep sleep と違い眠って構わない
+            M5_LOGE("lightSleep: cannot release the wakeup pin.");
+            break;
+          }
+          m5gfx::delay(10);
+        }
       }
       else
       {

@@ -2900,8 +2900,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
   }
 
-  void M5Unified::_clearWakeupInterrupt(void)
+  bool M5Unified::_clearWakeupInterrupt(void)
   {
+    bool res = true;
     // A touch panel holds its INT asserted until the touch data is read. Every board that
     // uses the touch INT as its wakeup pin therefore has to consume the data here.
     // ( M5Paper = GPIO36 , M5PaperS3 = GPIO48 , Core2 / Tough = GPIO39 , CoreS3 = via AW9523 )
@@ -2922,7 +2923,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         // its input would stay in the touched state and a later touch would not produce
         // any change, leaving the wakeup source dead.
         uint8_t buf[2];
-        In_I2C.readRegister(aw9523_i2c_addr, 0x00, buf, sizeof(buf), 400000);
+        res = In_I2C.readRegister(aw9523_i2c_addr, 0x00, buf, sizeof(buf), 400000);
       }
       break;
 
@@ -2938,8 +2939,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
         // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
         // され続けるので、先に WAKE_SRC を消す。
-        Power.M5pm1.clearWakeSource();
-        Power.M5pm1.clearIRQStatus();
+        res  = Power.M5pm1.clearWakeSource();
+        res &= Power.M5pm1.clearIRQStatus();
       }
       break;
 
@@ -2955,8 +2956,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         // IRQ status bit is cleared, so clear them here to release the pin.
         // Clear WAKE_SRC first: while it is set, the WAKEUP bit of IRQ status 3
         // keeps getting re-asserted.
-        Power.M5pm1.clearWakeSource();
-        Power.M5pm1.clearIRQStatus();
+        res  = Power.M5pm1.clearWakeSource();
+        res &= Power.M5pm1.clearIRQStatus();
       }
       break;
 
@@ -2964,6 +2965,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
     }
 #endif
+    return res;
   }
 
   bool M5Unified::_begin_rtc_imu(const config_t& cfg)
