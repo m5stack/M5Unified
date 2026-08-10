@@ -157,6 +157,12 @@ namespace m5
     return readRegister8(M5PM1_REG_GPIO_IN) & (1 << gpio_num(pin));
   }
 
+  bool M5PM1_Class::getGPIOInputBits(std::uint8_t* bits)
+  {
+    if (!_init || bits == nullptr) { return false; }
+    return readRegister(M5PM1_REG_GPIO_IN, bits, 1);
+  }
+
   bool M5PM1_Class::getGPIOOutputLatch(gpio_t pin)
   {
     if (!_init || !is_valid_gpio(pin)) { return false; }

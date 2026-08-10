@@ -103,6 +103,9 @@ namespace m5
     /// get PM1 GPIO input level.
     bool getGPIOInput(gpio_t pin);
 
+    /// read all GPIO input levels at once. returns false on I2C failure.
+    bool getGPIOInputBits(std::uint8_t* bits);
+
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
 

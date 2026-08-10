@@ -206,14 +206,29 @@ namespace m5
 
     case board_t::board_M5CoreMatrix:
       _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_2;
+      /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
-      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
-      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::input);
       M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::input);
+      /// PM1 GPIO4 is the BMI270 INT1 input (motion wakeup)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::input);
+      /// PM1 GPIO3 is the IRQ output wired to ESP32 G2. Without an IRQ pin
+      /// configured the PM1 auto-clears its IRQ status (0x40-0x42) and the
+      /// power button / wake events cannot be detected.
+      /// Configure it as a push-pull high output before switching to the IRQ
+      /// function, so the released line is actively driven high.
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
-      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
       M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::irq);
+      /// make the PM1 IRQ output readable as the wakeup pin
+      m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       break;
     }
 
@@ -247,7 +262,7 @@ namespace m5
       /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
-      /// PM1 の IRQ 出力を wakeup ピンとして読めるよう入力にしておく。
+      /// make the PM1 IRQ output readable as the wakeup pin。
       /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
       /// 期待できないため、内部プルアップを有効にする。
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
