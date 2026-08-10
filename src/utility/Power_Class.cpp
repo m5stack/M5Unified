@@ -257,6 +257,14 @@ namespace m5
     case board_t::board_M5ToughC5:
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_4;
+      /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
+      /// いたファームの設定に依存しないよう IRQ 関連を初期化する
+      M5pm1.clearWakeSource();
+      M5pm1.clearIRQStatus();
+      M5pm1.setGPIOIRQMaskBits(0x16);  // enable GPIO0(TP INT)/GPIO3(RTC nIRQ), disable other GPIO IRQ
+      /// PM1 GPIO0 は TP INT 入力。
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
       M5pm1.setBatteryCharge(true);
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
