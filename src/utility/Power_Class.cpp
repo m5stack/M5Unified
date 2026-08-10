@@ -1259,31 +1259,58 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
       case pmic_t::pmic_m5pm1:
+      {
+        bool arm_wakeup = withTimer;
         if (!withTimer) {
-          M5pm1.powerOff();
+          int retry = 3;
+          while (!M5pm1.powerOff() && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          { /// 電源を落とせないまま wake source 無しで眠ると、電源ボタンの単押しや
+            /// IRQ では復帰できなくなる (PM1 の二重クリックや USB 再接続による
+            /// 電源サイクルは可能)。単押しで復帰できるよう IRQ ピンを残して眠る
+            M5_LOGE("_powerOff: M5PM1 powerOff failed.");
+            arm_wakeup = true;
+          }
         }
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
-        else if (_wakeupPin < GPIO_NUM_MAX)
+        if (arm_wakeup && _wakeupPin < GPIO_NUM_MAX)
         { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
-          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) まで待って
-          /// から眠り、その Low 遷移で deep sleep から復帰できるようにする。
-          if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
-          {
-            M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
-          }
-#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
-          if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
-          { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
-            /// RTC ドメインのプルアップで High を維持する
-            rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
-            rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
-          }
-#endif
+          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) のを確認して
+          /// から ANY_LOW を武装して眠り、その Low 遷移で deep sleep から復帰
+          /// できるようにする。
           int retry = 40;
           while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          {
+            if (withTimer)
+            { /// 解放されない線を ANY_LOW で武装したまま眠ると即時復帰の
+              /// 再起動ループになるため、wake 経路を確保できなければ眠らない
+              M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
+              M5.Display.wakeup();
+              return;
+            }
+            /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
+            M5_LOGE("_powerOff: cannot release the wakeup pin.");
+          }
+          else
+          {
+            if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
+            {
+              M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
+            }
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
+            { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
+              /// RTC ドメインのプルアップで High を維持する
+              rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
+              rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
+            }
+#endif
+          }
         }
 #endif
         break;
+      }
 #endif
 
       case pmic_t::pmic_unknown:
