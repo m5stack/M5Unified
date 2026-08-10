@@ -257,6 +257,14 @@ namespace m5
     case board_t::board_M5ToughC5:
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_4;
+      /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
+      /// いたファームの設定に依存しないよう IRQ 関連を初期化する
+      M5pm1.clearWakeSource();
+      M5pm1.clearIRQStatus();
+      M5pm1.setGPIOIRQMaskBits(0x16);  // enable GPIO0(TP INT)/GPIO3(RTC nIRQ), disable other GPIO IRQ
+      /// PM1 GPIO0 は TP INT 入力。
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
       M5pm1.setBatteryCharge(true);
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
@@ -1259,31 +1267,58 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
       case pmic_t::pmic_m5pm1:
+      {
+        bool arm_wakeup = withTimer;
         if (!withTimer) {
-          M5pm1.powerOff();
+          int retry = 3;
+          while (!M5pm1.powerOff() && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          { /// 電源を落とせないまま wake source 無しで眠ると、電源ボタンの単押しや
+            /// IRQ では復帰できなくなる (PM1 の二重クリックや USB 再接続による
+            /// 電源サイクルは可能)。単押しで復帰できるよう IRQ ピンを残して眠る
+            M5_LOGE("_powerOff: M5PM1 powerOff failed.");
+            arm_wakeup = true;
+          }
         }
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
-        else if (_wakeupPin < GPIO_NUM_MAX)
+        if (arm_wakeup && _wakeupPin < GPIO_NUM_MAX)
         { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
-          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) まで待って
-          /// から眠り、その Low 遷移で deep sleep から復帰できるようにする。
-          if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
-          {
-            M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
-          }
-#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
-          if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
-          { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
-            /// RTC ドメインのプルアップで High を維持する
-            rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
-            rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
-          }
-#endif
+          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) のを確認して
+          /// から ANY_LOW を武装して眠り、その Low 遷移で deep sleep から復帰
+          /// できるようにする。
           int retry = 40;
           while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          {
+            if (withTimer)
+            { /// 解放されない線を ANY_LOW で武装したまま眠ると即時復帰の
+              /// 再起動ループになるため、wake 経路を確保できなければ眠らない
+              M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
+              M5.Display.wakeup();
+              return;
+            }
+            /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
+            M5_LOGE("_powerOff: cannot release the wakeup pin.");
+          }
+          else
+          {
+            if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
+            {
+              M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
+            }
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
+            { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
+              /// RTC ドメインのプルアップで High を維持する
+              rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
+              rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
+            }
+#endif
+          }
         }
 #endif
         break;
+      }
 #endif
 
       case pmic_t::pmic_unknown:
@@ -1403,14 +1438,19 @@ namespace m5
     _powerOff(true);
   }
 
-  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin)
+  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
   {
+    // clear_comm_ok は「この呼び出し内でクリア通信が一度でも成功したか」を返す。
+    // ピンが解放されない理由が「要因がまだ生きている (指が触れている等)」なのか
+    // 「デバイスと通信できない (回復見込みなし)」なのかを呼び出し元が区別できる。
+    bool comm_ok = false;
     for (int retry = 8; retry > 0; --retry)
     {
-      if (m5gfx::gpio_in(wakeup_pin)) { return true; }
-      M5._clearWakeupInterrupt();
+      if (m5gfx::gpio_in(wakeup_pin)) { if (clear_comm_ok) { *clear_comm_ok = true; } return true; }
+      comm_ok |= M5._clearWakeupInterrupt();
       m5gfx::delay(5);
     }
+    if (clear_comm_ok) { *clear_comm_ok = comm_ok; }
     return m5gfx::gpio_in(wakeup_pin);
   }
 
@@ -1494,8 +1534,24 @@ namespace m5
 #endif
       if (pin_wakeup_enabled)
       {
-        while (!_releaseWakeupPin(wpin))
+        bool clear_comm_ok = true;
+        int comm_fail = 0;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
+          if (!clear_comm_ok)
+          { // 割り込み要因のクリア通信自体が失敗している。解放されない線を
+            // ANY_LOW で待つ構成のまま眠ると即時復帰の再起動ループになるため、
+            // 失敗が連続する場合は眠らずに戻る。一時的な失敗 (デバイスの
+            // ビジー等) は許容し、成功が挟まれば数え直す。
+            // ( 要因が生きているだけなら従来通り解放を待つ )
+            if (++comm_fail >= 3)
+            {
+              M5_LOGE("deepSleep: cannot release the wakeup pin. not sleeping.");
+              M5.Display.wakeup();
+              return;
+            }
+          }
+          else { comm_fail = 0; }
           // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
           M5.update();
           m5gfx::delay(10);
@@ -1581,7 +1637,22 @@ namespace m5
       }
       if (pin_wakeup_enabled)
       { // Wait until the wakeup pin is released, otherwise the sleep request is rejected.
-        while (!_releaseWakeupPin(wpin)) { m5gfx::delay(10); }
+        bool clear_comm_ok = true;
+        int comm_fail = 0;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
+        {
+          if (!clear_comm_ok)
+          { // クリア通信の失敗が連続する場合は解放を待たない。light sleep は
+            // 即時復帰しても実行が戻るだけなので deep sleep と違い眠って構わない
+            if (++comm_fail >= 3)
+            {
+              M5_LOGE("lightSleep: cannot release the wakeup pin.");
+              break;
+            }
+          }
+          else { comm_fail = 0; }
+          m5gfx::delay(10);
+        }
       }
       else
       {

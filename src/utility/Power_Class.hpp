@@ -261,7 +261,7 @@ namespace m5
 
     /// Release the wakeup pin so that it can be asserted again while sleeping.
     /// @return true if the pin is released ( high ).
-    bool _releaseWakeupPin(std::uint_fast8_t wakeup_pin);
+    bool _releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok = nullptr);
     float _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;
