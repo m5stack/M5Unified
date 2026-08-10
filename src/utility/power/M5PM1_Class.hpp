@@ -137,6 +137,11 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setBatteryCharge(bool enable);
 
+    /// get battery charge enable state with I2C error reporting.
+    /// @param enabled output parameter, receives the charge enable state.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
+
     /// set battery charge current
     /// @param max_mA milli ampere. (8 - 512).
     bool setChargeCurrent(std::uint16_t max_mA);
@@ -167,6 +172,11 @@ namespace m5
     /// get battery voltage.
     /// @return milli volt. 0=read failed
     std::uint16_t getBatteryVoltage(void);
+
+    /// get battery voltage with I2C error reporting.
+    /// @param millivolt output parameter, receives the battery voltage [mV].
+    /// @return false on I2C failure.
+    bool getBatteryVoltage(std::uint16_t* millivolt);
 
     /// get 5V output voltage.
     /// @return milli volt. 0=read failed

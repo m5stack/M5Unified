@@ -1777,6 +1777,40 @@ namespace m5
     return -1;
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+  /// CoreMatrix: with no battery attached, the PM1 VBAT ADC reads the
+  /// AW32901 charger float voltage (~4.2V), which is indistinguishable from
+  /// a fully charged battery. Distinguish them by briefly pausing the
+  /// charger: without a battery VBAT collapses well below 2V, while a real
+  /// battery holds its voltage. The PM1 refreshes the VBAT register on an
+  /// internal ~1 second ADC cycle, so the pause must cover one full cycle.
+  /// Only the first call blocks (~1.2s); the result is cached.
+  /// An I2C failure during the probe is not cached, so a later call retries
+  /// and the battery APIs can report the bus error instead of a wrong state.
+  std::int8_t Power_Class::_batteryPresent(void)
+  {
+    if (_batt_present < 0)
+    {
+      bool chg_enabled = true;
+      std::uint16_t pre_mv = 0, post_mv = 0;
+      bool ok = M5pm1.getBatteryCharge(&chg_enabled)
+             && M5pm1.getBatteryVoltage(&pre_mv)
+             && M5pm1.setBatteryCharge(false);
+      if (ok)
+      { /// wait only when the charger pause actually took effect
+        m5gfx::delay(1200);
+        ok = M5pm1.getBatteryVoltage(&post_mv);
+      }
+      M5pm1.setBatteryCharge(chg_enabled);
+      if (ok)
+      {
+        _batt_present = (post_mv > 2000) && ((std::int32_t)pre_mv - (std::int32_t)post_mv < 500);
+      }
+    }
+    return _batt_present;
+  }
+#endif
+
   int16_t Power_Class::getBatteryVoltage(void)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
@@ -1789,6 +1823,8 @@ namespace m5
       return Bq27220.getVoltage_mV();
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
+      /// 0 = no battery attached or read failure (see _batteryPresent)
+      if (_batteryPresent() != 1) { return 0; }
       return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
@@ -2187,6 +2223,13 @@ namespace m5
       /// CoreMatrix: the AW32901 CHG_STAT is wired to IOE1 G8 (low = charging)
       if (M5.getBoard() == board_t::board_M5CoreMatrix)
       {
+        /// With no battery the charger retries periodically and CHG_STAT
+        /// blips low for a moment; report "not charging" instead.
+        {
+          std::int8_t present = _batteryPresent();
+          if (present < 0) { return is_charging_t::charge_unknown; }
+          if (present == 0) { return is_charging_t::is_discharging; }
+        }
         bool level;
         if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
         { /// do not report an I2C failure as "charging"
