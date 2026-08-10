@@ -2946,6 +2946,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     default:
       break;
     }
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    switch (getBoard())
+    {
+    case board_t::board_M5CoreMatrix:
+      { // KEY and IMU wake events are funneled into the PM1, whose IRQ output
+        // (GPIO2) is the only wakeup pin. The IRQ output stays low until every
+        // IRQ status bit is cleared, so clear them here to release the pin.
+        // Clear WAKE_SRC first: while it is set, the WAKEUP bit of IRQ status 3
+        // keeps getting re-asserted.
+        Power.M5pm1.clearWakeSource();
+        Power.M5pm1.clearIRQStatus();
+      }
+      break;
+
+    default:
+      break;
+    }
 #endif
   }
 

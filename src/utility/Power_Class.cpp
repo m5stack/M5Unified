@@ -227,6 +227,12 @@ namespace m5
       M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_up);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::irq);
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+      /// After an EXT1 wakeup the pin is still owned by the RTC IO mux and the
+      /// digital GPIO input reads low forever (the release wait on the next
+      /// sleep entry would never finish). Return it to the digital function.
+      rtc_gpio_deinit((gpio_num_t)_wakeupPin);
+#endif
       /// make the PM1 IRQ output readable as the wakeup pin
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       /// charge detect input (IOE1 G8 = AW32901 CHG_STAT, low = charging)
@@ -1460,8 +1466,9 @@ namespace m5
  #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         if (pin_wakeup_enabled)
         {
-#if defined (CONFIG_IDF_TARGET_ESP32C5)
-          if (M5.getBoard() == board_t::board_M5ToughC5)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+          if (M5.getBoard() == board_t::board_M5ToughC5
+           || M5.getBoard() == board_t::board_M5CoreMatrix)
           { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
             // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
             // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
