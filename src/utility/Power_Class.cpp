@@ -229,6 +229,14 @@ namespace m5
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::irq);
       /// make the PM1 IRQ output readable as the wakeup pin
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
+      /// charge detect input (IOE1 G8 = AW32901 CHG_STAT, low = charging)
+      M5.getIOExpander(0).setDirection(M5IOE1_Class::gpio8, false);
+      { /// TF card power (IOE1 G1) is off at reset; enable it so the SD card is usable
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio1, true);
+      }
       break;
     }
 
@@ -809,6 +817,16 @@ namespace m5
       }
       break;
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      { /// IOE1 G5 gates the Grove port power (both the 3.3V rail and the 5V boost)
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+        ioe1.setDirection(M5IOE1_Class::gpio5, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+      }
+      break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -985,6 +1003,11 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
       return M5pm1.getExtOutput();
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio5);
       break;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1758,6 +1781,8 @@ namespace m5
     case pmic_t::pmic_aw32001:
       return Bq27220.getVoltage_mV();
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1821,6 +1846,16 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Get battery voltage in mV
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1; // Error reading voltage
+        }
+        mv = bat_mv;
+      }
+      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -2141,6 +2176,18 @@ namespace m5
       return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      /// CoreMatrix: the AW32901 CHG_STAT is wired to IOE1 G8 (low = charging)
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      {
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
+        { /// do not report an I2C failure as "charging"
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
+      return is_charging_t::charge_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)

@@ -102,6 +102,15 @@ namespace m5
     return (readRegister8(_regForPin(M5IOE1_REG_GPIO_IN_L, pin)) & _bitForPin(pin)) != 0;
   }
 
+  bool M5IOE1_Class::getInputLevel(uint8_t pin, bool* level)
+  {
+    if (!_isValidPin(pin) || level == nullptr) { return false; }
+    std::uint8_t v;
+    if (!readRegister(_regForPin(M5IOE1_REG_GPIO_IN_L, pin), &v, 1)) { return false; }
+    *level = (v & _bitForPin(pin)) != 0;
+    return true;
+  }
+
   void M5IOE1_Class::setPwmFrequency(std::uint16_t frequency)
   {
     std::uint8_t data[2] = { static_cast<std::uint8_t>(frequency & 0xFF), static_cast<std::uint8_t>(frequency >> 8) };
