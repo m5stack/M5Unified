@@ -206,14 +206,43 @@ namespace m5
 
     case board_t::board_M5CoreMatrix:
       _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_2;
+      /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
-      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
-      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::input);
       M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::input);
+      /// PM1 GPIO4 is the BMI270 INT1 input (motion wakeup)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::input);
+      /// PM1 GPIO3 is the IRQ output wired to ESP32 G2. Without an IRQ pin
+      /// configured the PM1 auto-clears its IRQ status (0x40-0x42) and the
+      /// power button / wake events cannot be detected.
+      /// Configure it as a push-pull high output before switching to the IRQ
+      /// function, so the released line is actively driven high.
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
-      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
       M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::irq);
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+      /// After an EXT1 wakeup the pin is still owned by the RTC IO mux and the
+      /// digital GPIO input reads low forever (the release wait on the next
+      /// sleep entry would never finish). Return it to the digital function.
+      rtc_gpio_deinit((gpio_num_t)_wakeupPin);
+#endif
+      /// make the PM1 IRQ output readable as the wakeup pin
+      m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
+      /// charge detect input (IOE1 G8 = AW32901 CHG_STAT, low = charging)
+      M5.getIOExpander(0).setDirection(M5IOE1_Class::gpio8, false);
+      { /// TF card power (IOE1 G1) is off at reset; enable it so the SD card is usable
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio1, true);
+      }
       break;
     }
 
@@ -247,7 +276,7 @@ namespace m5
       /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
-      /// PM1 の IRQ 出力を wakeup ピンとして読めるよう入力にしておく。
+      /// make the PM1 IRQ output readable as the wakeup pin。
       /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
       /// 期待できないため、内部プルアップを有効にする。
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
@@ -794,6 +823,16 @@ namespace m5
       }
       break;
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      { /// IOE1 G5 gates the Grove port power (both the 3.3V rail and the 5V boost)
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+        ioe1.setDirection(M5IOE1_Class::gpio5, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+      }
+      break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -970,6 +1009,11 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
       return M5pm1.getExtOutput();
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio5);
       break;
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1422,8 +1466,9 @@ namespace m5
  #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         if (pin_wakeup_enabled)
         {
-#if defined (CONFIG_IDF_TARGET_ESP32C5)
-          if (M5.getBoard() == board_t::board_M5ToughC5)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+          if (M5.getBoard() == board_t::board_M5ToughC5
+           || M5.getBoard() == board_t::board_M5CoreMatrix)
           { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
             // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
             // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
@@ -1732,6 +1777,40 @@ namespace m5
     return -1;
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+  /// CoreMatrix: with no battery attached, the PM1 VBAT ADC reads the
+  /// AW32901 charger float voltage (~4.2V), which is indistinguishable from
+  /// a fully charged battery. Distinguish them by briefly pausing the
+  /// charger: without a battery VBAT collapses well below 2V, while a real
+  /// battery holds its voltage. The PM1 refreshes the VBAT register on an
+  /// internal ~1 second ADC cycle, so the pause must cover one full cycle.
+  /// Only the first call blocks (~1.2s); the result is cached.
+  /// An I2C failure during the probe is not cached, so a later call retries
+  /// and the battery APIs can report the bus error instead of a wrong state.
+  std::int8_t Power_Class::_batteryPresent(void)
+  {
+    if (_batt_present < 0)
+    {
+      bool chg_enabled = true;
+      std::uint16_t pre_mv = 0, post_mv = 0;
+      bool ok = M5pm1.getBatteryCharge(&chg_enabled)
+             && M5pm1.getBatteryVoltage(&pre_mv)
+             && M5pm1.setBatteryCharge(false);
+      if (ok)
+      { /// wait only when the charger pause actually took effect
+        m5gfx::delay(1200);
+        ok = M5pm1.getBatteryVoltage(&post_mv);
+      }
+      M5pm1.setBatteryCharge(chg_enabled);
+      if (ok)
+      {
+        _batt_present = (post_mv > 2000) && ((std::int32_t)pre_mv - (std::int32_t)post_mv < 500);
+      }
+    }
+    return _batt_present;
+  }
+#endif
+
   int16_t Power_Class::getBatteryVoltage(void)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
@@ -1743,6 +1822,10 @@ namespace m5
     case pmic_t::pmic_aw32001:
       return Bq27220.getVoltage_mV();
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      /// 0 = no battery attached or read failure (see _batteryPresent)
+      if (_batteryPresent() != 1) { return 0; }
+      return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1806,6 +1889,16 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Get battery voltage in mV
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1; // Error reading voltage
+        }
+        mv = bat_mv;
+      }
+      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -2126,6 +2219,25 @@ namespace m5
       return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      /// CoreMatrix: the AW32901 CHG_STAT is wired to IOE1 G8 (low = charging)
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      {
+        /// With no battery the charger retries periodically and CHG_STAT
+        /// blips low for a moment; report "not charging" instead.
+        {
+          std::int8_t present = _batteryPresent();
+          if (present < 0) { return is_charging_t::charge_unknown; }
+          if (present == 0) { return is_charging_t::is_discharging; }
+        }
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
+        { /// do not report an I2C failure as "charging"
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
+      return is_charging_t::charge_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)

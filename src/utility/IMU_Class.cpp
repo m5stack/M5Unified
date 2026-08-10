@@ -108,6 +108,12 @@ namespace m5
           _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
           _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
         }
+#elif defined(CONFIG_IDF_TARGET_ESP32C61)
+        if (board == m5::board_t::board_M5CoreMatrix)
+        { // CoreMatrix BMI270 : X=+Y, Y=-X, Z=+Z (90-degree rotation about Z)
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
+        }
 #endif
 
       }

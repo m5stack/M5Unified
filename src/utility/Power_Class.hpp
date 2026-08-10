@@ -251,6 +251,14 @@ namespace m5
     void _powerOff(bool withTimer);
     void _timerSleep(void);
 
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+    /// Check whether a battery is actually attached.
+    /// @return 1=present / 0=absent / -1=unknown (I2C failure, not cached)
+    std::int8_t _batteryPresent(void);
+    /// Cached result of the battery presence probe. -1 = not yet probed.
+    std::int8_t _batt_present = -1;
+#endif
+
     /// Release the wakeup pin so that it can be asserted again while sleeping.
     /// @return true if the pin is released ( high ).
     bool _releaseWakeupPin(std::uint_fast8_t wakeup_pin);

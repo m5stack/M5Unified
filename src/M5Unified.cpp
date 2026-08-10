@@ -115,6 +115,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5NanoC6     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_1 ,GPIO_NUM_0  }, // Grove shares the internal bus (level-shifted)
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
@@ -204,6 +206,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix , GPIO_NUM_25, GPIO_NUM_27, GPIO_NUM_26, 255        , 255        , GPIO_NUM_28 },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
@@ -354,6 +357,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix,
+  255        , GPIO_NUM_3 ,
+  255        , GPIO_NUM_4 ,
+  255        , 255        ,
+  GPIO_NUM_27, GPIO_NUM_5 ,
+  GPIO_NUM_26, GPIO_NUM_6 ,
+  GPIO_NUM_25, 255        ,
+  GPIO_NUM_10, GPIO_NUM_11,
+  GPIO_NUM_7 , GPIO_NUM_8 ,
+  GPIO_NUM_0 , GPIO_NUM_1 ,
+  GPIO_NUM_0 , GPIO_NUM_1 ,
+  GPIO_NUM_23, GPIO_NUM_22,
+  GPIO_NUM_24, GPIO_NUM_9 ,
+  255        , GPIO_NUM_29,
+  255        , 255        ,
+  255        , 255        ,
+},
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 #else
@@ -1864,6 +1884,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         _io_expander[0].reset(ioexp);
       }
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      { /// Controls the LED matrix / TF / Grove / buzzer power rails,
+        /// the charge current selector and the buzzer PWM.
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
 #endif
     default:
       break;
@@ -2917,6 +2946,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     default:
       break;
     }
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    switch (getBoard())
+    {
+    case board_t::board_M5CoreMatrix:
+      { // KEY and IMU wake events are funneled into the PM1, whose IRQ output
+        // (GPIO2) is the only wakeup pin. The IRQ output stays low until every
+        // IRQ status bit is cleared, so clear them here to release the pin.
+        // Clear WAKE_SRC first: while it is set, the WAKEUP bit of IRQ status 3
+        // keeps getting re-asserted.
+        Power.M5pm1.clearWakeSource();
+        Power.M5pm1.clearIRQStatus();
+      }
+      break;
+
+    default:
+      break;
+    }
 #endif
   }
 
@@ -3273,6 +3319,28 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+
+    switch (_board)
+    {
+    case board_t::board_M5CoreMatrix:
+      /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW), not to the ESP,
+      /// so they are read by I2C polling. Skip the update on an I2C failure so
+      /// a bus error is not reported as a button press.
+      {
+        uint8_t in;
+        if (Power.M5pm1.getGPIOInputBits(&in))
+        {
+          use_rawstate_bits = 0b00111;
+          btn_rawstate_bits = (~in) & 0b00111;
+        }
+      }
+      break;
+
+    default:
+      break;
+    }
+
 #endif
 
     if (use_rawstate_bits) {
@@ -3283,7 +3351,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
     }
 
-#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
+#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
     if (_use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;

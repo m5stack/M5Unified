@@ -157,6 +157,12 @@ namespace m5
     return readRegister8(M5PM1_REG_GPIO_IN) & (1 << gpio_num(pin));
   }
 
+  bool M5PM1_Class::getGPIOInputBits(std::uint8_t* bits)
+  {
+    if (!_init || bits == nullptr) { return false; }
+    return readRegister(M5PM1_REG_GPIO_IN, bits, 1);
+  }
+
   bool M5PM1_Class::getGPIOOutputLatch(gpio_t pin)
   {
     if (!_init || !is_valid_gpio(pin)) { return false; }
@@ -210,6 +216,15 @@ namespace m5
   {
     return enable ? bitOn(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_CHG_EN)
                   : bitOff(M5PM1_REG_PWR_CFG, M5PM1_PWR_CFG_CHG_EN);
+  }
+
+  bool M5PM1_Class::getBatteryCharge(bool* enabled)
+  {
+    if (!_init) { return false; }
+    std::uint8_t cfg = 0;
+    if (!readRegister(M5PM1_REG_PWR_CFG, &cfg, 1)) { return false; }
+    *enabled = cfg & M5PM1_PWR_CFG_CHG_EN;
+    return true;
   }
 
   bool M5PM1_Class::setChargeCurrent(std::uint16_t max_mA)
@@ -274,9 +289,17 @@ namespace m5
 
   std::uint16_t M5PM1_Class::getBatteryVoltage(void)
   {
-    if (!_init) { return 0; }
+    std::uint16_t mv = 0;
+    return getBatteryVoltage(&mv) ? mv : 0;
+  }
+
+  bool M5PM1_Class::getBatteryVoltage(std::uint16_t* millivolt)
+  {
+    if (!_init) { return false; }
     std::uint8_t buf[2] = {};
-    return readRegister(M5PM1_REG_VBAT_L, buf, sizeof(buf)) ? (buf[1] << 8) | buf[0] : 0;
+    if (!readRegister(M5PM1_REG_VBAT_L, buf, sizeof(buf))) { return false; }
+    *millivolt = (buf[1] << 8) | buf[0];
+    return true;
   }
 
   std::uint16_t M5PM1_Class::get5VoutVoltage(void)

@@ -33,6 +33,15 @@ namespace m5
 
     virtual bool digitalRead(uint8_t pin) = 0;
 
+    /// digitalRead with I2C error reporting. returns false on I2C failure
+    /// or when the expander driver does not implement error detection.
+    virtual bool getInputLevel(uint8_t pin, bool* level)
+    {
+      (void)pin;
+      (void)level;
+      return false;
+    }
+
     virtual void resetIrq() = 0;
 
     virtual void disableIrq() = 0;
