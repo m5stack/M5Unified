@@ -161,6 +161,7 @@ namespace m5
 
     /// set battery charge current
     /// @param max_mA milli ampere.
+    /// @note CoreMatrix selects the nearest supported maximum: 180 mA below 650 mA, otherwise 650 mA.
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     void setChargeCurrent(std::uint16_t max_mA);
 
@@ -175,7 +176,7 @@ namespace m5
 
     /// Get VBUS voltage
     /// @return VBUS voltage [mV] / -1=not supported model
-    /// @attention Only for models with AXP192 or AXP2101
+    /// @attention Only for models with AXP192, AXP2101, or M5PM1 VBUS monitoring
     int16_t getVBUSVoltage(void);
 
     /// Get battery voltage
