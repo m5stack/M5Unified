@@ -72,6 +72,7 @@ static void test_power(void)
   M5.Power.setExtPower(true);
   M5.Power.setBatteryCharge(true);
   M5.Power.setChargeCurrent(500);
+  (void)M5.Power.getVBUSVoltage();
   (void)M5.Power.getBatteryLevel();
   (void)M5.Power.getBatteryVoltage();
   (void)M5.Power.isCharging();

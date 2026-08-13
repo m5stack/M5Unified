@@ -1814,6 +1814,8 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getVBUSVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -2042,6 +2044,9 @@ namespace m5
       Aw32001.setBatteryCharge(enable);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      M5pm1.setBatteryCharge(enable);
+      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -2115,6 +2120,24 @@ namespace m5
       Aw32001.setChargeCurrent(max_mA);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        if (max_mA >= 650)
+        {
+          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
+          ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
+          ioe1.setDirection(M5IOE1_Class::gpio3, true);
+        }
+        else
+        {
+          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setDirection(M5IOE1_Class::gpio3, false);
+        }
+      }
+      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -2298,8 +2321,8 @@ namespace m5
         /// blips low for a moment; report "not charging" instead.
         {
           std::int8_t present = _batteryPresent();
-          if (present < 0) { return is_charging_t::charge_unknown; }
-          if (present == 0) { return is_charging_t::is_discharging; }
+        if (present < 0) { return is_charging_t::charge_unknown; }
+        if (present == 0) { return is_charging_t::is_discharging; }
         }
         bool level;
         if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
