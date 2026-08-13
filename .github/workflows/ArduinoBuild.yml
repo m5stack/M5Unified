@@ -12,6 +12,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# supersede queued/running builds of the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.board }} (${{ matrix.esp32_version }})
@@ -44,6 +49,11 @@ jobs:
           - board: esp32:esp32:esp32c3
             esp32_version: 3.1.1
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          # ESP32-C5 (v3.3+ only)
+          - board: esp32:esp32:esp32c5
+            esp32_version: 3.3.11
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
           # ESP32-C6 (v3 only)
           - board: esp32:esp32:esp32c6
             esp32_version: 3.1.1
