@@ -104,6 +104,13 @@ namespace m5
     return src <= static_cast<std::uint8_t>(battery) ? static_cast<pwr_src_t>(src) : unknown;
   }
 
+  bool M5PM1_Class::getVbatNodePowered(bool* powered)
+  {
+    if (!_init || powered == nullptr) { return false; }
+    *powered = readRegister8(M5PM1_REG_PWR_SRC) & 0x04;
+    return true;
+  }
+
   bool M5PM1_Class::setGPIOFunction(gpio_t pin, gpio_function_t function)
   {
     if (!is_valid_gpio(pin)) { return false; }

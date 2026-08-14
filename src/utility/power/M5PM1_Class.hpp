@@ -85,6 +85,10 @@ namespace m5
     /// get current PM1 power source.
     pwr_src_t getPowerSource(void);
 
+    /// get whether PWR_SRC reports the VBAT node rail as powered.
+    /// note: this tracks the node voltage, not physical battery presence.
+    bool getVbatNodePowered(bool* powered);
+
     /// set PM1 GPIO mux function.
     bool setGPIOFunction(gpio_t pin, gpio_function_t function);
 
