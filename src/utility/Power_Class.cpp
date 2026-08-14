@@ -207,6 +207,8 @@ namespace m5
     case board_t::board_M5CoreMatrix:
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_2;
+      /// bring up the PM1 early so its status registers are readable below.
+      M5pm1.begin();
       /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
@@ -237,6 +239,8 @@ namespace m5
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       /// charge detect input (IOE1 G8 = AW32901 CHG_STAT, low = charging)
       M5.getIOExpander(0).setDirection(M5IOE1_Class::gpio8, false);
+      /// settle battery presence early (the charger may still be idle).
+      _batteryPresent();
       { /// TF card power (IOE1 G1) is off at reset; enable it so the SD card is usable
         auto& ioe1 = M5.getIOExpander(0);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
@@ -257,6 +261,8 @@ namespace m5
     case board_t::board_M5ToughC5:
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_4;
+      /// bring up the PM1 early so its status registers are readable below.
+      M5pm1.begin();
       /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
       /// いたファームの設定に依存しないよう IRQ 関連を初期化する
       M5pm1.clearWakeSource();
@@ -265,6 +271,8 @@ namespace m5
       /// PM1 GPIO0 は TP INT 入力。
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+      /// settle battery presence early (the charger may still be idle).
+      _batteryPresent();
       M5pm1.setBatteryCharge(true);
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
@@ -1850,35 +1858,140 @@ namespace m5
     return -1;
   }
 
-#if defined (CONFIG_IDF_TARGET_ESP32C61)
-  /// CoreMatrix: with no battery attached, the PM1 VBAT ADC reads the
-  /// AW32901 charger float voltage (~4.2V), which is indistinguishable from
-  /// a fully charged battery. Distinguish them by briefly pausing the
-  /// charger: without a battery VBAT collapses well below 2V, while a real
-  /// battery holds its voltage. The PM1 refreshes the VBAT register on an
-  /// internal ~1 second ADC cycle, so the pause must cover one full cycle.
-  /// Only the first call blocks (~1.2s); the result is cached.
-  /// An I2C failure during the probe is not cached, so a later call retries
-  /// and the battery APIs can report the bus error instead of a wrong state.
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+  /// read the raw charger CHG_STAT line (low = charging).
+  bool Power_Class::_readChargeStat(bool* level)
+  {
+    switch (M5.getBoard())
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, level);
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, level);
+#endif
+    default:
+      return false;
+    }
+  }
+
+  /// A batteryless charger can hold CHG_STAT low against a collapsed node,
+  /// so a low CHG_STAT alone does not prove charge current (ToughC5 only;
+  /// the CoreMatrix retry blips are filtered by the 100ms streak below).
+  bool Power_Class::_vbatNodeDown(void)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    bool powered;
+    return M5pm1.getVbatNodePowered(&powered) && !powered;
+#else
+    return false;
+#endif
+  }
+
+  /// CoreMatrix / ToughC5: with no battery attached, the PM1 VBAT ADC follows
+  /// whatever the charger does to the empty node, so presence cannot be read
+  /// directly. It is resolved without blocking:
+  /// - charging disabled: a collapsed node decides "none" at once; a high
+  ///   reading counts as a battery once the node has settled after charging
+  ///   stopped (a reset also stops charging, so begin() reuses this path).
+  /// - charging enabled: a sustained low CHG_STAT with the VBAT node held up
+  ///   counts as present; a VBAT peak above any real battery, or a collapse
+  ///   held across samples, counts as absent; steady samples point to a
+  ///   battery. Flipping an existing verdict needs a longer streak than the
+  ///   initial one, and instability alone never revokes "present".
+  /// Until the first verdict, -1 (unknown) is reported and the battery APIs
+  /// pass that on instead of guessing. (On the CoreMatrix a detach while
+  /// charging can go unnoticed until charging is disabled.)
   std::int8_t Power_Class::_batteryPresent(void)
   {
+    bool chg_enabled = true;
+    if (M5pm1.getBatteryCharge(&chg_enabled) && !chg_enabled)
+    { /// with the charger idle there is no float voltage: a collapsed node
+      /// proves "no battery" at once. A high reading is trusted as "present"
+      /// only once the node has settled after charging stopped (the initial
+      /// _chg_off_ms = 0 gives a boot the same settle window); until then it
+      /// only seeds the sampling.
+      std::uint16_t mv = 0;
+      if (M5pm1.getBatteryVoltage(&mv))
+      {
+        if (mv <= 2600) { _batt_present = 0; }
+        else if ((m5gfx::millis() - _chg_off_ms) > 1500) { _batt_present = 1; }
+        else if (_bp_last_ms == 0)
+        { /// not settled yet: only seed the first sampling baseline.
+          auto t = m5gfx::millis();
+          _bp_last_ms = t ? t : 1;
+          _bp_last_mv = mv;
+        }
+      }
+      return _batt_present;
+    }
+
+    std::uint32_t now = m5gfx::millis();
+
+    bool chg_stat;
+    if (_readChargeStat(&chg_stat))
+    {
+      if (!chg_stat && !_vbatNodeDown())
+      { /// low = charging into a live node; require a >=100ms streak so a
+        /// batteryless retry blip cannot pass as real charge current.
+        if (_bp_chg_low_ms == 0) { _bp_chg_low_ms = now ? now : 1; }
+        else if ((now - _bp_chg_low_ms) >= 100)
+        {
+          _batt_present = 1;
+        }
+        /// real charge current: skip the VBAT rules (a deeply discharged
+        /// battery can sit below the collapse threshold while charging).
+        return _batt_present;
+      }
+      /// otherwise fall through and let the VBAT rules decide.
+      _bp_chg_low_ms = 0;
+    }
+
+    std::uint16_t mv = 0;
+    if (!M5pm1.getBatteryVoltage(&mv)) { return _batt_present; }
+
+    if (mv > 4450)
+    { /// only the batteryless sawtooth peaks above any real battery
+      _batt_present = 0;
+      _bp_stable = 0;
+      _bp_unstable = 0;
+      _bp_low = 0;
+      return _batt_present;
+    }
+
+    if (_bp_last_ms == 0)
+    {
+      _bp_last_ms = now ? now : 1;
+      _bp_last_mv = mv;
+      return _batt_present;
+    }
+    if ((now - _bp_last_ms) < 1250) { return _batt_present; }
+
+    /// the register has refreshed since the previous sample
+    std::int32_t diff = (std::int32_t)mv - (std::int32_t)_bp_last_mv;
+    if (diff < 0) { diff = -diff; }
+    _bp_last_ms = now ? now : 1;
+    _bp_last_mv = mv;
+
+    if (mv < 2600) { ++_bp_low; } else { _bp_low = 0; }
+    if (diff > 300) { ++_bp_unstable; _bp_stable = 0; }
+    else            { ++_bp_stable; _bp_unstable = 0; }
+
     if (_batt_present < 0)
     {
-      bool chg_enabled = true;
-      std::uint16_t pre_mv = 0, post_mv = 0;
-      bool ok = M5pm1.getBatteryCharge(&chg_enabled)
-             && M5pm1.getBatteryVoltage(&pre_mv)
-             && M5pm1.setBatteryCharge(false);
-      if (ok)
-      { /// wait only when the charger pause actually took effect
-        m5gfx::delay(1200);
-        ok = M5pm1.getBatteryVoltage(&post_mv);
-      }
-      M5pm1.setBatteryCharge(chg_enabled);
-      if (ok)
-      {
-        _batt_present = (post_mv > 2000) && ((std::int32_t)pre_mv - (std::int32_t)post_mv < 500);
-      }
+      if (_bp_low >= 2 || _bp_unstable >= 2) { _batt_present = 0; }
+      else if (_bp_stable >= 2 && mv >= 2600) { _batt_present = 1; }
+    }
+    else if (_batt_present == 0)
+    { /// a battery attached later holds the node steady in the plausible
+      /// range; the sawtooth cannot hold still this long. (also catches an
+      /// attached full battery, which never asserts CHG_STAT.)
+      if (_bp_stable >= 4 && mv >= 2600) { _batt_present = 1; }
+    }
+    else
+    { /// present is revoked only by a collapsed node held across samples
+      if (_bp_low >= 2) { _batt_present = 0; }
     }
     return _batt_present;
   }
@@ -1896,8 +2009,10 @@ namespace m5
       return Bq27220.getVoltage_mV();
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
-      /// 0 = no battery attached or read failure (see _batteryPresent)
-      if (_batteryPresent() != 1) { return 0; }
+      { /// 0 = no battery / -1 = not yet determined (see _batteryPresent)
+        std::int8_t bp = _batteryPresent();
+        if (bp <= 0) { return bp; }
+      }
       return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
@@ -1915,6 +2030,12 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+      { /// 0 = no battery / -1 = not yet determined (see _batteryPresent)
+        std::int8_t bp = _batteryPresent();
+        if (bp <= 0) { return bp; }
+      }
+#endif
       return M5pm1.getBatteryVoltage();
 #endif
 
@@ -2045,6 +2166,8 @@ namespace m5
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
+      /// the presence check must not read VBAT before the node collapses
+      if (!enable) { _chg_off_ms = m5gfx::millis(); }
       M5pm1.setBatteryCharge(enable);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
@@ -2082,6 +2205,10 @@ namespace m5
           set_papermono_ip2315_enabled(false);
           return;
         }
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+        /// the presence check must not read VBAT before the node collapses
+        if (!enable) { _chg_off_ms = m5gfx::millis(); }
 #endif
         M5pm1.setBatteryCharge(enable);
       }
@@ -2410,6 +2537,25 @@ namespace m5
       case board_t::board_M5Tab5:
         return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
           ? is_charging_t::is_charging : is_charging_t::is_discharging;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+      case board_t::board_M5ToughC5:
+      {
+        // The LGS4056 CHG_STAT is wired to IOE1 G3, low=charging / high=not charging.
+        // Near full charge it alternates with the charger's top-off cycle (~10-20s).
+        { /// with no battery the charger can still assert CHG_STAT briefly;
+          /// report "not charging" instead.
+          std::int8_t present = _batteryPresent();
+          if (present < 0) { return is_charging_t::charge_unknown; }
+          if (present == 0) { return is_charging_t::is_discharging; }
+        }
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, &level))
+        { // do not report an I2C failure as "charging"
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
 #endif
       default:
         return is_charging_t::charge_unknown;

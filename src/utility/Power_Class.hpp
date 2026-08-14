@@ -181,6 +181,9 @@ namespace m5
 
     /// Get battery voltage
     /// @return battery voltage [mV]
+    /// @attention Models with battery detection ( ex. CoreMatrix , ToughC5 )
+    /// return 0 when no battery is attached and -1 while the presence has
+    /// not been determined yet (shortly after boot).
     int16_t getBatteryVoltage(void);
 
     /// get battery current
@@ -252,12 +255,26 @@ namespace m5
     void _powerOff(bool withTimer);
     void _timerSleep(void);
 
-#if defined (CONFIG_IDF_TARGET_ESP32C61)
-    /// Check whether a battery is actually attached.
-    /// @return 1=present / 0=absent / -1=unknown (I2C failure, not cached)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+    /// Check whether a battery is actually attached (non-blocking).
+    /// @return 1=present / 0=absent / -1=not yet determined
     std::int8_t _batteryPresent(void);
-    /// Cached result of the battery presence probe. -1 = not yet probed.
+    /// Read the raw charger CHG_STAT line. @return false=not readable
+    bool _readChargeStat(bool* level);
+    /// Whether the VBAT node is confirmed collapsed (false when unreadable).
+    bool _vbatNodeDown(void);
+    /// Battery presence. -1 = not yet determined.
     std::int8_t _batt_present = -1;
+    /// Tick when charging last stopped (0 = at reset, which clears PWR_CFG).
+    std::uint32_t _chg_off_ms = 0;
+    /// Presence sampling state: last VBAT sample, CHG_STAT low since,
+    /// and evidence counters. 0 in the tick fields = no sample yet.
+    std::uint16_t _bp_last_mv = 0;
+    std::uint32_t _bp_last_ms = 0;
+    std::uint32_t _bp_chg_low_ms = 0;
+    std::uint8_t _bp_stable = 0;
+    std::uint8_t _bp_unstable = 0;
+    std::uint8_t _bp_low = 0;
 #endif
 
     /// Release the wakeup pin so that it can be asserted again while sleeping.
