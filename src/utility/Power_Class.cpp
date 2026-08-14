@@ -273,6 +273,16 @@ namespace m5
       M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
       /// settle battery presence early (the charger may still be idle).
       _batteryPresent();
+      { /// normalize the charger lines on the IO expander (a previous firmware
+        /// may have left them in another state):
+        /// CHG_PROG (IOE1 G1) is a resistor-network charge-rate setting that
+        /// must stay released, and CHG_STAT (IOE1 G3) is an input.
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setDirection(M5IOE1_Class::gpio1, false);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, true);
+        ioe1.enablePull(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio3, false);
+      }
       M5pm1.setBatteryCharge(true);
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
