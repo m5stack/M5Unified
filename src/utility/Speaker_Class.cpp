@@ -57,6 +57,8 @@
 #include <driver/rtc_io.h>
 #endif
 
+#include "m5unified_i2s.h"
+
 #endif
 
 #include <math.h>
@@ -99,7 +101,7 @@ namespace m5
 
 #if __has_include(<driver/i2s_std.h>)
 
-  static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
+  static i2s_chan_handle_t _i2s_handle[M5UNIFIED_I2S_PORT_COUNT] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
     if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
@@ -418,12 +420,12 @@ namespace m5
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
     auto dev = &I2S0;
-#if SOC_I2S_NUM >= 2
-    if (i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
-#if SOC_I2S_NUM >= 3
-    else if (i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
-#if SOC_I2S_NUM >= 4
-    else if (i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 2
+    if (i2s_port == (i2s_port_t)I2S_NUM_1) { dev = &I2S1; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 3
+    else if (i2s_port == (i2s_port_t)I2S_NUM_2) { dev = &I2S2; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 4
+    else if (i2s_port == (i2s_port_t)I2S_NUM_3) { dev = &I2S3; }
 #endif
 #endif
 #endif

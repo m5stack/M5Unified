@@ -32,11 +32,15 @@ jobs:
             idf_version: "5.3"
           - target: esp32
             idf_version: "5.1.6"
+          - target: esp32
+            idf_version: "6.0.2"
           # ESP32-S3
           - target: esp32s3
             idf_version: "5.3"
           - target: esp32s3
             idf_version: "5.1.6"
+          - target: esp32s3
+            idf_version: "6.0.2"
           # ESP32-C3
           - target: esp32c3
             idf_version: "5.3"
