@@ -419,7 +419,9 @@ namespace m5
       if (limit) {
         uint32_t min_m = (uint32_t)((PLL_D2_CLK + limit - 1) / limit);
         if (div_m < min_m) {
-          div_m = (min_m < 63) ? min_m : 63; // BCK 分周レジスタの上限 (6bit) でクランプ
+          /// 63 は HW v1 (6bit フィールドに生値格納、最大 63) と HW v2 (divisor-1 を
+          /// 格納、単独なら 64 まで表現可) の両 raw レジスタ経路で安全な共通上限。
+          div_m = (min_m < 63) ? min_m : 63;
         }
       }
     }
