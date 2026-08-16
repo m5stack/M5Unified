@@ -93,7 +93,7 @@ namespace m5
     uint8_t task_pinned_core = -1;
 
     /// I2S port
-    i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
+    i2s_port_t i2s_port = (i2s_port_t)I2S_NUM_0;
   };
 
   class Mic_Class

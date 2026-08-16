@@ -33,6 +33,8 @@
  #endif
 #endif
 
+#include "m5unified_i2s.h"
+
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
@@ -90,7 +92,7 @@ namespace m5
 
 #if __has_include(<driver/i2s_std.h>)
 
-  static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
+  static i2s_chan_handle_t _i2s_handle[M5UNIFIED_I2S_PORT_COUNT] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
     return i2s_channel_enable(_i2s_handle[port]);
@@ -448,12 +450,12 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
 
     auto dev = &I2S0;
-#if SOC_I2S_NUM >= 2
-    if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
-#if SOC_I2S_NUM >= 3
-    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
-#if SOC_I2S_NUM >= 4
-    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 2
+    if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_1) { dev = &I2S1; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 3
+    else if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_2) { dev = &I2S2; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 4
+    else if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_3) { dev = &I2S3; }
 #endif
 #endif
 #endif

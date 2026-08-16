@@ -11,6 +11,9 @@
 #include <soc/soc.h>
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
+#if __has_include (<soc/io_mux_reg.h>)
+#include <soc/io_mux_reg.h>
+#endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
 #include <esp_chip_info.h>
@@ -36,6 +39,8 @@
  #endif
 
 #endif
+
+#include "utility/m5unified_i2s.h"
 
 #include "utility/led/LED_Strip_Class.hpp"
 #include "utility/led/LED_PMIC_Class.hpp"
@@ -1189,60 +1194,78 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   }
 
 #if defined (CONFIG_IDF_TARGET_ESP32) && SOC_TOUCH_SENSOR_SUPPORTED
-  static void _read_touch_pad(uint32_t* results, const touch_pad_t* channel, const size_t channel_count)
+  /// @param channel touch channel ids. (ESP-IDF v6 removed the touch_pad_t enum, so plain integers are used here)
+  /// @return true = all channels were read successfully.
+  static bool _read_touch_pad(uint32_t* results, const int* channel, const size_t channel_count)
   {
+    for (size_t i = 0; i < channel_count; ++i) { results[i] = 0; }
 #if defined ( TOUCH_SENSOR_DEFAULT_FILTER_CONFIG )
-    /* Handles of touch sensor */
-    touch_sensor_handle_t sens_handle = nullptr;
-    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM];
+    if (channel_count > TOUCH_TOTAL_CHAN_NUM) { return false; }
 
     /* Step 1: Create a new touch sensor controller handle with default sample configuration */
-    touch_sensor_sample_config_t sample_cfg;
+    touch_sensor_sample_config_t sample_cfg = {};
     sample_cfg.charge_duration_ms = 5.0f;
     sample_cfg.charge_volt_lim_h = TOUCH_VOLT_LIM_H_1V7;
     sample_cfg.charge_volt_lim_l = TOUCH_VOLT_LIM_L_0V5;
 
-    touch_sensor_config_t sens_cfg;
+    touch_sensor_config_t sens_cfg = {};
     sens_cfg.power_on_wait_us = 256;
     sens_cfg.meas_interval_us = 320.0;
     sens_cfg.intr_trig_mode = TOUCH_INTR_TRIG_ON_BELOW_THRESH;
     sens_cfg.intr_trig_group = TOUCH_INTR_TRIG_GROUP_BOTH;
     sens_cfg.sample_cfg_num = 1;
     sens_cfg.sample_cfg = &sample_cfg;
-    touch_sensor_new_controller(&sens_cfg, &sens_handle);
+    touch_sensor_handle_t sens_handle = nullptr;
+    if (touch_sensor_new_controller(&sens_cfg, &sens_handle) != ESP_OK) { return false; }
 
-    touch_channel_config_t chan_cfg;
+    touch_channel_config_t chan_cfg = {};
     chan_cfg.abs_active_thresh[0] = 1024;
     chan_cfg.charge_speed = TOUCH_CHARGE_SPEED_7;
     chan_cfg.init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT;
     chan_cfg.group = TOUCH_CHAN_TRIG_GROUP_BOTH;
-    for (int i = 0; i < channel_count; i++) {
-      touch_sensor_new_channel(sens_handle, channel[i], &chan_cfg, &chan_handle[i]);
+    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM] = { nullptr, };
+    size_t created = 0;
+    while (created < channel_count
+        && touch_sensor_new_channel(sens_handle, channel[created], &chan_cfg, &chan_handle[created]) == ESP_OK) {
+      ++created;
     }
-    touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
-    touch_sensor_config_filter(sens_handle, &filter_cfg);
-    touch_sensor_enable(sens_handle);
-    touch_sensor_trigger_oneshot_scanning(sens_handle, 64);
-    touch_sensor_disable(sens_handle);
-
-    for (int i = 0; i < channel_count; i++) {
-      touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]);
+    bool result = false;
+    if (created == channel_count) {
+      touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+      if (touch_sensor_config_filter(sens_handle, &filter_cfg) == ESP_OK) {
+        bool scanned = false;
+        if (touch_sensor_enable(sens_handle) == ESP_OK) {
+          scanned = (touch_sensor_trigger_oneshot_scanning(sens_handle, 64) == ESP_OK);
+          touch_sensor_disable(sens_handle);
+        }
+        if (scanned) {
+          result = true;
+          for (size_t i = 0; i < channel_count; i++) {
+            result &= (touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]) == ESP_OK);
+          }
+        }
+        // Passing nullptr releases the software filter timer. (del_controller does not)
+        touch_sensor_config_filter(sens_handle, nullptr);
+      }
     }
-    for (int i = 0; i < channel_count; i++) {
-      touch_sensor_del_channel(chan_handle[i]);
+    while (created) {
+      touch_sensor_del_channel(chan_handle[--created]);
     }
     touch_sensor_del_controller(sens_handle);
+    return result;
 #else
-    touch_pad_init();
+    if (touch_pad_init() != ESP_OK) { return false; }
+    bool result = true;
     for (size_t i = 0; i < channel_count; i++) {
-      touch_pad_config(channel[i], TOUCH_PAD_THRESHOLD_MAX);
+      result &= (touch_pad_config((touch_pad_t)channel[i], TOUCH_PAD_THRESHOLD_MAX) == ESP_OK);
     }
     for (size_t i = 0; i < channel_count; i++) {
-      uint16_t tmp;
-      touch_pad_read(channel[i], &tmp);
+      uint16_t tmp = 0;
+      result &= (touch_pad_read((touch_pad_t)channel[i], &tmp) == ESP_OK);
       results[i] = tmp;
     }
     touch_pad_deinit();
+    return result;
 #endif
   }
 #endif
@@ -1424,16 +1447,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
 */
               uint32_t results[2] = { 0, 0 };
-              static constexpr touch_pad_t s_channel_id[] = {
-                  TOUCH_PAD_NUM4, //Touch pad channel 4 is GPIO13(ESP32)
-                  TOUCH_PAD_NUM7, //Touch pad channel 7 is GPIO27(ESP32)
+              static constexpr int s_channel_id[] = {
+                  4, //Touch pad channel 4 is GPIO13(ESP32)
+                  7, //Touch pad channel 7 is GPIO27(ESP32)
               };
-              _read_touch_pad(results, s_channel_id, 2);
+              bool touch_ok = _read_touch_pad(results, s_channel_id, 2);
 
               int diff = (results[1] * 3 - results[0]);
               // M5_LOGV("G13 = %d / G27 = %d / diff = %d", results[0], results[1], diff);
-   // true==(Lite/ECHO) / false==AtomMatrix
-              if (diff >= 0)
+   // true==(Lite/ECHO) / false==AtomMatrix (on read failure, keep the AtomMatrix default)
+              if (touch_ok && diff >= 0)
 #else
 /*
   タッチセンサAPIが使えない場合の処理 (ESP-IDFのバージョンに依る)
@@ -2447,8 +2470,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       // set default speaker gain.
       spk_cfg.magnification = 16;
-#if defined SOC_I2S_NUM
-      spk_cfg.i2s_port = (i2s_port_t)(SOC_I2S_NUM - 1);
+#if defined M5UNIFIED_I2S_PORT_COUNT
+      spk_cfg.i2s_port = (i2s_port_t)(M5UNIFIED_I2S_PORT_COUNT - 1);
 #else
       spk_cfg.i2s_port = (i2s_port_t)(I2S_NUM_MAX - 1);
 #endif
