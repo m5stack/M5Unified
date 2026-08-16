@@ -289,6 +289,7 @@ namespace m5
 #if !defined (M5UNIFIED_PC_BUILD)
     uint8_t _batAdcCh;
     uint8_t _batAdcUnit;
+    uint8_t _batAdcPin = 255;
 #endif
   };
 }

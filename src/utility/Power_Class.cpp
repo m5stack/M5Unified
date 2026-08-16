@@ -36,6 +36,18 @@
 #endif
 #include <soc/adc_channel.h>
 
+// On Arduino builds the core owns the ADC driver (analogRead). Creating a
+// separate adc_oneshot unit for the battery ADC makes both owners fight over
+// the same unit and one side permanently reads 0, so the battery ADC must be
+// read through the Arduino API instead. (analogReadMilliVolts: core v2.0.0+)
+#if defined (ARDUINO) && __has_include (<esp_arduino_version.h>)
+ #include <esp_arduino_version.h>
+ #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(2, 0, 0)
+  #include <esp32-hal-adc.h>
+  #define M5UNIFIED_BATADC_USE_ARDUINO
+ #endif
+#endif
+
 #if __has_include (<esp_idf_version.h>)
  #include <esp_idf_version.h>
  #if ESP_IDF_VERSION_MAJOR >= 4
@@ -381,6 +393,7 @@ namespace m5
       m5gfx::pinMode(M5PaperS3_CHG_STAT_PIN, m5gfx::pin_mode_t::input);
       _batAdcCh = ADC1_GPIO3_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 3;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       _wakeupPin = GPIO_NUM_48; // touch panel INT
@@ -462,6 +475,7 @@ namespace m5
     case board_t::board_M5Capsule:
       _batAdcCh = ADC1_GPIO6_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 6;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -469,6 +483,7 @@ namespace m5
     case board_t::board_M5AirQ:
       _batAdcCh = ADC2_GPIO14_CHANNEL;
       _batAdcUnit = 2;
+      _batAdcPin = 14;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -478,6 +493,7 @@ namespace m5
     case board_t::board_M5CardputerADV:
       _batAdcCh = ADC1_GPIO10_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 10;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -516,6 +532,7 @@ namespace m5
       m5gfx::gpio_lo(TimerCam_LED_PIN);  // system LED off
       _batAdcCh = ADC1_GPIO38_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 38;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 1.513f;
       break;
@@ -525,6 +542,7 @@ namespace m5
       _rtcIntPin = GPIO_NUM_19;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 35;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
       break;
@@ -534,6 +552,7 @@ namespace m5
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 35;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -560,6 +579,7 @@ namespace m5
       m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
       _batAdcCh = ADC1_GPIO38_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 38;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -1754,20 +1774,32 @@ namespace m5
 #define ADC_RAW_ATTEN ADC_ATTEN_DB_11
 #endif
 
-#if __has_include (<esp_adc/adc_oneshot.h>)
+#if defined (M5UNIFIED_BATADC_USE_ARDUINO)
+
+    // The default attenuation (11dB) and calibration are owned consistently
+    // by the Arduino core; do not fight it with per-pin overrides here.
+    return analogReadMilliVolts(_batAdcPin);
+
+#elif __has_include (<esp_adc/adc_oneshot.h>)
 
     static adc_oneshot_unit_handle_t adc_handle;
     if (adc_handle == nullptr) {
       adc_oneshot_unit_init_cfg_t init_config;
       memset(&init_config, 0, sizeof(init_config));
       init_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
-      adc_oneshot_new_unit(&init_config, &adc_handle);
-      if (adc_handle == nullptr) { return 0; }
+      if (adc_oneshot_new_unit(&init_config, &adc_handle) != ESP_OK || adc_handle == nullptr) {
+        adc_handle = nullptr;
+        return 0;
+      }
 
       adc_oneshot_chan_cfg_t config;
       config.atten = ADC_RAW_ATTEN;
       config.bitwidth = ADC_BITWIDTH_12;
-      adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config);
+      if (adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config) != ESP_OK) {
+        adc_oneshot_del_unit(adc_handle);
+        adc_handle = nullptr;
+        return 0;
+      }
     }
     static adc_cali_handle_t adc_cali;
     if (adc_cali == nullptr) {
@@ -1787,11 +1819,15 @@ namespace m5
 #endif
     }
     int raw, volt;
-    adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw);
+    if (adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw) != ESP_OK) {
+      return 0;
+    }
     if (adc_cali == nullptr) {
       return raw;
     }
-    adc_cali_raw_to_voltage(adc_cali, raw, &volt);
+    if (adc_cali_raw_to_voltage(adc_cali, raw, &volt) != ESP_OK) {
+      return 0;
+    }
     return volt;
 
 #else
