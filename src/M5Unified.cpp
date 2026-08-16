@@ -750,19 +750,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       2,   49, 0x21,
       0
     };
-    static constexpr const uint8_t disabled_bulk_data[] = {
-      2,    8, 0x00, //set I2S slave mode
-      0
-    };
-    in_i2c_bulk_write(es8388_i2c_addr, enabled ? enabled_bulk_data : disabled_bulk_data);
-
     if (enabled)
-    { // AMP on
+    {
+      in_i2c_bulk_write(es8388_i2c_addr, enabled_bulk_data);
+      // AMP on
       M5.In_I2C.bitOn(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
     }
     else
-    { // AMP off
-      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
+    { // 正規の power-down シーケンス。end() は cb(false) を I2S 停止より先に呼ぶため、
+      // ここは MCLK/BCLK が生きているうちに実行される。旧実装 (reg8 のみ書き込み) では
+      // DAC 稼働状態のままクロックが絶たれ、次回 enable の reset が毎回異なる残留状態
+      // から行われて受信位相が begin ごとに不定になっていた。毎回同一の power-down
+      // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
+      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
+      M5.delay(1);                                                 // soft-ramp 遷移待ち
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
     }
 #endif
     return true;

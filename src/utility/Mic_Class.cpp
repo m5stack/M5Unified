@@ -95,9 +95,10 @@ namespace m5
     if (_i2s_handle[port] == nullptr) { return ESP_OK; }
     return i2s_channel_disable(_i2s_handle[port]);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms) {
     if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
-    return i2s_channel_read(_i2s_handle[port], buf, len, result, tick);
+    /// i2s_channel_read のタイムアウトはミリ秒 (旧 i2s_read の tick 数とは契約が異なる)
+    return i2s_channel_read(_i2s_handle[port], buf, len, result, timeout_ms);
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
@@ -225,9 +226,9 @@ namespace m5
   {
     return i2s_stop(port);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms)
   {
-    return i2s_read(port, buf, len, result, tick);
+    return i2s_read(port, buf, len, result, pdMS_TO_TICKS(timeout_ms));
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
@@ -334,8 +335,26 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    { // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (mic_task での raw 分周
+      // 上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
+      // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+      int os = _cfg.over_sampling;
+      if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
+      i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate * os;
+      i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+#if defined (I2S_LL_DEFAULT_CLK_FREQ)
+      // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
+      // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+      if ((uint64_t)i2s_config.clk_cfg.sample_rate_hz * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
+        i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
+      }
+#endif
+    }
+#else
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -433,6 +452,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
+    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    const bool skip_raw_clk = !use_pdm;
+#else
+    const bool skip_raw_clk = false;
+#endif
+
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
@@ -467,6 +494,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
+    if (!skip_raw_clk) {
+
 #if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_rx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
 #else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
@@ -522,6 +551,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_clkm_conf.rx_clk_active = 1;
 #endif
 
+    } // !skip_raw_clk
+
     // Latch the whole clock/format configuration at once. This is the same
     // sequence as the HAL's i2s_ll_rx_update (the function itself does not exist
     // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
@@ -571,11 +602,18 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     const bool in_stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
-    memset(src_buf, 0, dma_buf_len * sizeof(int16_t));
+    /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
+    /// dma_frame_num)。読み出しは descriptor 境界に整列する処理チャンク
+    /// (stereo 16bit なら 1 枚分、mono/PDM なら 2 枚分) を単位に行う。
+    /// これより小さい単位で読むと、IDF の i2s_channel_read はキュー逼迫時に
+    /// descriptor の未読部分を破棄するため、サンプル欠落による位相誤差
+    /// (可聴ノイズ) が生じる。
+    const size_t read_bytes = dma_buf_len * 2 * sizeof(int16_t);
+    int16_t* src_buf = (int16_t*)alloca(read_bytes);
+    memset(src_buf, 0, read_bytes);
 
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
 
     while (self->_task_running)
     {
@@ -598,6 +636,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           src_len = 0;
           sum_value[0] = 0;
           sum_value[1] = 0;
+          os_remain = oversampling;
           continue;
         }
       }
@@ -605,7 +644,19 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         if (src_idx >= src_len)
         {
-          _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
+          /// 有効なデータが得られるまで再試行する。ここで空のまま下の do-while に
+          /// 落ちると、直前バッファの先頭フレームを 1 枚余分に消費してしまい
+          /// (do は条件確認前に必ず 1 回実行される)、時間軸が入力 1 フレーム分
+          /// ずれて可聴の位相ノイズになる。
+          for (;;)
+          {
+            src_len = 0;
+            if (!self->_task_running) { break; }
+            if (ESP_OK == _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 100)
+             && src_len != 0 && 0 == (src_len & 3))
+            { break; }
+          }
+          if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
           src_len >>= 1;
           src_idx = 0;
         }
@@ -768,7 +819,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint16_t));
+      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
