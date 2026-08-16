@@ -542,18 +542,24 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
 #else
 
+#if !defined (CONFIG_IDF_TARGET_ESP32S2) // ESP32-S2 has no PDM support
     if (use_pdm)
     {
       dev->pdm_conf.rx_sinc_dsr_16_en = 1; // 0=DSR64 / 1=DSR128
       dev->pdm_conf.pdm2pcm_conv_en = 1;
       dev->pdm_conf.rx_pdm_en = 1;
     }
+#endif
 
     dev->sample_rate_conf.rx_bck_div_num = div_m;
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
+#if defined (CONFIG_IDF_TARGET_ESP32S2)
+    dev->clkm_conf.clk_sel = 2; // PLL_160M ( 1=APLL )
+#else
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+#endif
 
     // If RX is not reset here, BCK polarity may be inverted.
     dev->conf.rx_reset = 1;

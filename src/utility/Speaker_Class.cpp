@@ -492,7 +492,11 @@ namespace m5
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
+#if defined (CONFIG_IDF_TARGET_ESP32S2)
+    dev->clkm_conf.clk_sel = 2; // PLL_160M ( 1=APLL )
+#else
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+#endif
 
     // If TX is not reset here, BCK polarity may be inverted.
     dev->conf.tx_reset = 1;
