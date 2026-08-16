@@ -21,4 +21,11 @@
 #elif defined (ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0) && __has_include (<hal/i2s_ll.h>)
  #include <hal/i2s_ll.h>
  #define M5UNIFIED_I2S_PORT_COUNT I2S_LL_INST_NUM
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+ /// Cores that predate soc_caps.h (e.g. Arduino core 1.x) are always the classic ESP32.
+ #define M5UNIFIED_I2S_PORT_COUNT 2
+#elif defined (SOC_I2S_SUPPORTED)
+ /// The target declares I2S support but the port count cannot be resolved.
+ /// (Targets without I2S may include this header freely; they never reach here.)
+ #error "Cannot determine the number of I2S ports for this target"
 #endif

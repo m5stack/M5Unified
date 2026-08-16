@@ -131,7 +131,7 @@ namespace m5
       return true;
     }
 
-    if ((size_t)_config.pin_data >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)_config.pin_data)) {
+    if (_config.pin_data >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)_config.pin_data)) {
       return false;
     }
     // Normalize the data pin as push-pull output low before handing it to the RMT peripheral.
