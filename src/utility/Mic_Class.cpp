@@ -620,6 +620,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         if (os_remain) { continue; }
         os_remain = oversampling;
 
+// Swap the half-word pair order observed on the classic ESP32 RX FIFO
+// (the RX counterpart of the HW v1/v2 TX packing difference). ESP32-S2 is
+// also HW v1 and might need the same swap, but no S2 device with a mic
+// exists to verify, so only the verified classic ESP32 is handled here.
 #if defined (CONFIG_IDF_TARGET_ESP32)
         auto sv0 = sum_value[1];
         auto sv1 = sum_value[0];

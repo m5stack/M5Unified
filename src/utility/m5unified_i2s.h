@@ -43,10 +43,9 @@
 
 /// I2S register layout generation. Prefer the SoC capability macro (ESP-IDF v5+).
 /// On older ESP-IDF (v4.x / Arduino core 2.x) whose soc_caps.h predates
-/// SOC_I2S_HW_VERSION_x, the supported chip set is fixed: enumerate the HW v1
-/// targets (ESP32/ESP32-S2, plus targetless ancient cores = classic ESP32) and
-/// treat everything else as HW v2, since no future SoC will revert to the v1
-/// peripheral.
+/// SOC_I2S_HW_VERSION_x, the supported chip set is fixed (ESP32/S2/S3/C3, so the
+/// list below is final): enumerate the HW v1 targets (ESP32/ESP32-S2, plus
+/// targetless ancient cores = classic ESP32) and treat the rest as HW v2.
 #if defined (SOC_I2S_HW_VERSION_2) || defined (SOC_I2S_HW_VERSION_1)
  #if SOC_I2S_HW_VERSION_2
   #define M5UNIFIED_I2S_HW_V2 1
@@ -63,12 +62,22 @@
  #define M5UNIFIED_I2S_USE_LL 1
 #endif
 
-/// Source clock frequency assumed by the raw clock divider setup in the speaker/mic tasks.
-/// (per-chip PLL selection; this cannot be derived from a capability macro)
+/// Source clock frequency assumed by the raw clock divider setup in the speaker/mic
+/// tasks (the frequency selected by tx/rx_clk_sel = 1 on HW v2, PLL_160M on HW v1).
+/// This is a per-chip physical property that cannot be derived from a capability
+/// macro, so every known target is enumerated explicitly.
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
  #define M5UNIFIED_I2S_PLL_D2_HZ (120*1000*1000) // 240 MHz/2
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #define M5UNIFIED_I2S_PLL_D2_HZ (20*1000*1000)  // 20 MHz
+#elif defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32H4 )
+ #define M5UNIFIED_I2S_PLL_D2_HZ (96*1000*1000)  // PLL_F96M
 #else
+ /// Unknown I2S-capable targets fall back to the HW v1 value. The message below is
+ /// intentionally not #warning (which fails -Werror builds); it flags that the
+ /// frequency must be verified and added to the table above.
+ #if defined (M5UNIFIED_I2S_PORT_COUNT) && defined (CONFIG_IDF_TARGET) && !defined (CONFIG_IDF_TARGET_ESP32) && !defined (CONFIG_IDF_TARGET_ESP32S2)
+  #pragma message ("M5Unified: unknown target, assuming a 80 MHz I2S source clock. Verify it and extend the table in m5unified_i2s.h")
+ #endif
  #define M5UNIFIED_I2S_PLL_D2_HZ (80*1000*1000)  // 160 MHz/2
 #endif
