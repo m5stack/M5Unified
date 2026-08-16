@@ -41,13 +41,17 @@
  #define M5UNIFIED_I2S_ADC_DAC 1
 #endif
 
-/// I2S register layout generation. Prefer the SoC capability macro; fall back to a
-/// target list for cores whose soc_caps.h predates SOC_I2S_HW_VERSION_x (e.g. ESP-IDF v4).
+/// I2S register layout generation. Prefer the SoC capability macro (ESP-IDF v5+).
+/// On older ESP-IDF (v4.x / Arduino core 2.x) whose soc_caps.h predates
+/// SOC_I2S_HW_VERSION_x, the supported chip set is fixed: enumerate the HW v1
+/// targets (ESP32/ESP32-S2, plus targetless ancient cores = classic ESP32) and
+/// treat everything else as HW v2, since no future SoC will revert to the v1
+/// peripheral.
 #if defined (SOC_I2S_HW_VERSION_2) || defined (SOC_I2S_HW_VERSION_1)
  #if SOC_I2S_HW_VERSION_2
   #define M5UNIFIED_I2S_HW_V2 1
  #endif
-#elif defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#elif defined (CONFIG_IDF_TARGET) && !defined (CONFIG_IDF_TARGET_ESP32) && !defined (CONFIG_IDF_TARGET_ESP32S2)
  #define M5UNIFIED_I2S_HW_V2 1
 #endif
 
