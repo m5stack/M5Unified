@@ -204,8 +204,25 @@ namespace m5
 #else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (spk_task での raw 分周
+    // 上書きを行わない)。ここで実レートを渡すことで、begin 中のクロック遷移が
+    // 一度きりになり、外付け codec (Tab5=ES8388) のロック失敗を防ぐ。
+    // クロック源既定 (minimum supported revision < 3 のビルドは XTAL 40MHz /
+    // rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+    i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate;
+    i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+#if defined (I2S_LL_DEFAULT_CLK_FREQ)
+    // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
+    // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+    if ((uint64_t)_cfg.sample_rate * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
+      i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
+    }
+#endif
+#else
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -380,6 +397,12 @@ namespace m5
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // クロックは _setup_i2s でドライバ管理により最終値に設定済み (実レート +
+    // 256fs、40MHz source ビルドの高レートのみ 128fs)。
+    // ドライバの分数分周 (a/b ≤ 511) は十分高精度のため、レート換算は公称値でよい。
+    const int32_t spk_sample_rate_x256 = self->_cfg.sample_rate * SAMPLERATE_MUL;
+#else
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
     uint32_t bits = (self->_cfg.use_dac) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
@@ -388,6 +411,7 @@ namespace m5
     if ((uint_fast16_t)self->_cfg.pin_mck < GPIO_NUM_MAX) {
       div_m = 8;
     }
+
 
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK, div_m * bits * self->_cfg.sample_rate);
 
@@ -497,6 +521,7 @@ namespace m5
     dev->conf.tx_fifo_reset = 0;
 
 #endif
+#endif // !CONFIG_IDF_TARGET_ESP32P4 (raw クロック設定ブロック全体)
     // i2s_zero_dma_buffer(i2s_port);
 
     enum spk_i2s_state

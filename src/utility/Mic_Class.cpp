@@ -334,8 +334,26 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    { // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (mic_task での raw 分周
+      // 上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
+      // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+      int os = _cfg.over_sampling;
+      if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
+      i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate * os;
+      i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+#if defined (I2S_LL_DEFAULT_CLK_FREQ)
+      // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
+      // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+      if ((uint64_t)i2s_config.clk_cfg.sample_rate_hz * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
+        i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
+      }
+#endif
+    }
+#else
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -433,6 +451,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
+    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    const bool skip_raw_clk = !use_pdm;
+#else
+    const bool skip_raw_clk = false;
+#endif
+
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
@@ -467,6 +493,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
+    if (!skip_raw_clk) {
+
 #if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_rx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
 #else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
@@ -521,6 +549,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->tx_clkm_conf.clk_en = 1;       // I2S module common clock gate (physically located in the TX register)
     dev->rx_clkm_conf.rx_clk_active = 1;
 #endif
+
+    } // !skip_raw_clk
 
     // Latch the whole clock/format configuration at once. This is the same
     // sequence as the HAL's i2s_ll_rx_update (the function itself does not exist
