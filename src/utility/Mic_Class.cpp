@@ -25,17 +25,9 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
- #if __has_include(<driver/i2s_std.h>)
-  #if __has_include(<hal/i2s_ll.h>)
-   #include <hal/i2s_ll.h>
-  #endif
- #endif
-#endif
-
 #include "m5unified_i2s.h"
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wconversion"
@@ -95,26 +87,29 @@ namespace m5
   static i2s_chan_handle_t _i2s_handle[M5UNIFIED_I2S_PORT_COUNT] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
+    if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
     return i2s_channel_enable(_i2s_handle[port]);
   }
   static esp_err_t _i2s_stop(i2s_port_t port)
   {
+    if (_i2s_handle[port] == nullptr) { return ESP_OK; }
     return i2s_channel_disable(_i2s_handle[port]);
   }
   static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
+    if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
     return i2s_channel_read(_i2s_handle[port], buf, len, result, tick);
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
     if (_i2s_handle[port] != nullptr) {
       auto res = i2s_del_channel(_i2s_handle[port]);
-      _i2s_handle[port] = nullptr;
+      /// Keep the handle when the deletion fails. (e.g. the channel is still running)
+      if (res == ESP_OK) { _i2s_handle[port] = nullptr; }
       return res;
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
-
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   struct adc_digi_pattern_table_t {
       union {
           struct {
@@ -238,7 +233,7 @@ namespace m5
   {
     return i2s_driver_uninstall(port);
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_adc(i2s_port_t port, gpio_num_t pin_data_in) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してADCモードの設定を有効にする ;
@@ -306,8 +301,9 @@ namespace m5
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(_cfg.i2s_port, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = _cfg.dma_buf_count;
     chan_cfg.dma_frame_num = _cfg.dma_buf_len;
-    _i2s_driver_uninstall(_cfg.i2s_port);
-    esp_err_t err = i2s_new_channel(&chan_cfg, nullptr, &_i2s_handle[_cfg.i2s_port]);
+    esp_err_t err = _i2s_driver_uninstall(_cfg.i2s_port);
+    if (err != ESP_OK) { return err; }
+    err = i2s_new_channel(&chan_cfg, nullptr, &_i2s_handle[_cfg.i2s_port]);
     if (err != ESP_OK) { return err; }
 
 #if SOC_I2S_SUPPORTS_PDM_RX
@@ -360,11 +356,17 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.gpio_cfg.din  = (gpio_num_t)_cfg.pin_data_in;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
 }
+    if (err != ESP_OK)
+    {
+      _i2s_driver_uninstall(_cfg.i2s_port);
+      return err;
+    }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
+      if (err != ESP_OK) { _i2s_driver_uninstall(_cfg.i2s_port); }
     }
 #endif
 
@@ -404,7 +406,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
     if (err != ESP_OK) { return err; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
@@ -431,13 +433,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
-    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
-#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
-#else
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
-#endif
+    static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
@@ -460,7 +456,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (M5UNIFIED_I2S_HW_V2)
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
@@ -471,11 +467,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
-    dev->rx_conf.rx_update = 1;
-
-#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    dev->rx_conf.rx_bck_div_num = div_m - 1;
-#else
+#if defined (M5UNIFIED_I2S_USE_LL)
+    i2s_ll_rx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
+#else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
 #endif
 
@@ -500,7 +494,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       }
     }
 
-#if __has_include(<driver/i2s_std.h>)
+#if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
 #endif
 
@@ -524,27 +518,39 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_clkm_div_conf.rx_clkm_div_yn1 = yn1;
     dev->rx_clkm_conf.rx_clkm_div_num = div_n;
     dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
-    dev->tx_clkm_conf.clk_en = 1;
+    dev->tx_clkm_conf.clk_en = 1;       // I2S module common clock gate (physically located in the TX register)
     dev->rx_clkm_conf.rx_clk_active = 1;
-
-    dev->rx_conf.rx_update = 1;
-    dev->rx_conf.rx_update = 0;
 #endif
+
+    // Latch the whole clock/format configuration at once. This is the same
+    // sequence as the HAL's i2s_ll_rx_update (the function itself does not exist
+    // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
+    // been synchronized into the I2S clock domain. The wait is deliberately
+    // unbounded to match the HAL implementation; the module clocks are already
+    // enabled by the driver at this point, so the bit always clears.
+    dev->rx_conf.rx_update = 1;
+    while (dev->rx_conf.rx_update) {} // wait for the hardware to clear the update bit
 
 #else
 
+#if !defined (CONFIG_IDF_TARGET_ESP32S2) // ESP32-S2 has no PDM support
     if (use_pdm)
     {
       dev->pdm_conf.rx_sinc_dsr_16_en = 1; // 0=DSR64 / 1=DSR128
       dev->pdm_conf.pdm2pcm_conv_en = 1;
       dev->pdm_conf.rx_pdm_en = 1;
     }
+#endif
 
     dev->sample_rate_conf.rx_bck_div_num = div_m;
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
+#if defined (CONFIG_IDF_TARGET_ESP32S2)
+    dev->clkm_conf.clk_sel = 2; // PLL_160M ( 1=APLL )
+#else
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+#endif
 
     // If RX is not reset here, BCK polarity may be inverted.
     dev->conf.rx_reset = 1;
@@ -614,6 +620,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         if (os_remain) { continue; }
         os_remain = oversampling;
 
+// Swap the half-word pair order observed on the classic ESP32 RX FIFO
+// (the RX counterpart of the HW v1/v2 TX packing difference). ESP32-S2 is
+// also HW v1 and might need the same swap, but no S2 device with a mic
+// exists to verify, so only the verified classic ESP32 is handled here.
 #if defined (CONFIG_IDF_TARGET_ESP32)
         auto sv0 = sum_value[1];
         auto sv1 = sum_value[0];
