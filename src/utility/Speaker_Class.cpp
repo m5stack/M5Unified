@@ -25,6 +25,24 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
+#if __has_include (<soc/soc_caps.h>)
+ #include <soc/soc_caps.h>
+#endif
+
+/// Identify the I2S peripheral generation.
+/// Prefer the soc_caps capability macro (available on ESP-IDF v5 or later).
+/// On older ESP-IDF (v4.x / Arduino core 2.x) whose soc_caps.h predates
+/// SOC_I2S_HW_VERSION_x, the supported chip set is fixed (ESP32/S2/S3/C3, so the
+/// list below is final): enumerate the HW v1 targets (ESP32/ESP32-S2) and treat
+/// the rest as HW v2.
+#if defined (SOC_I2S_HW_VERSION_2) || defined (SOC_I2S_HW_VERSION_1)
+ #if SOC_I2S_HW_VERSION_2
+  #define M5UNIFIED_I2S_HW_V2 1
+ #endif
+#elif defined (CONFIG_IDF_TARGET) && !defined (CONFIG_IDF_TARGET_ESP32) && !defined (CONFIG_IDF_TARGET_ESP32S2)
+ #define M5UNIFIED_I2S_HW_V2 1
+#endif
+
 #if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #if __has_include(<driver/i2s_std.h>)
   #if __has_include(<hal/i2s_ll.h>)
@@ -910,7 +928,17 @@ label_continue_sample:
             if (v2 < INT16_MIN) { v2 = INT16_MIN; }
             else if (v2 > INT16_MAX) { v2 = INT16_MAX; }
 
-            sound_buf32[idx >> 1] = v1 << 16 | (uint16_t)v2;
+#if defined (M5UNIFIED_I2S_HW_V2)
+            // I2S HW v2 (e.g. ESP32-S3) transmits the lower half-word of each 32-bit
+            // word first (memory order), so the earlier sample v1 goes to the lower
+            // half. Using the HW v1 layout here would swap every pair of samples on
+            // the wire, producing audible fs/2 image noise. (For mono output this
+            // corrupts the sample order; for stereo it swaps the L/R channels.)
+            sound_buf32[idx >> 1] = (int32_t)(((uint32_t)(uint16_t)v2 << 16) | (uint16_t)v1);
+#else
+            // I2S HW v1 (ESP32/ESP32-S2) transmits the upper half-word first.
+            sound_buf32[idx >> 1] = (int32_t)(((uint32_t)(uint16_t)v1 << 16) | (uint16_t)v2);
+#endif
           } while (++idx < data_length);
         }
 
