@@ -30,6 +30,17 @@
  #error "Cannot determine the number of I2S ports for this target"
 #endif
 
+/// I2S built-in ADC/DAC capability (classic ESP32 only).
+/// SOC_I2S_SUPPORTS_DAC was removed in ESP-IDF v6 (the HAL provides I2S_LL_ADC_DAC_CAPABLE
+/// instead). Ancient cores may lack soc_caps.h entirely; the classic ESP32 is then
+/// identified by being targetless or by CONFIG_IDF_TARGET_ESP32 (e.g. Arduino core 1.x
+/// defines the target macro but has none of the capability macros).
+/// (capability macros are tested for value as well: a defined-but-zero macro must not
+/// enable the path)
+#if (defined (SOC_I2S_SUPPORTS_DAC) && SOC_I2S_SUPPORTS_DAC) || (defined (I2S_LL_ADC_DAC_CAPABLE) && I2S_LL_ADC_DAC_CAPABLE) || !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+ #define M5UNIFIED_I2S_ADC_DAC 1
+#endif
+
 /// I2S register layout generation. Prefer the SoC capability macro; fall back to a
 /// target list for cores whose soc_caps.h predates SOC_I2S_HW_VERSION_x (e.g. ESP-IDF v4).
 #if defined (SOC_I2S_HW_VERSION_2) || defined (SOC_I2S_HW_VERSION_1)
@@ -38,6 +49,14 @@
  #endif
 #elif defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #define M5UNIFIED_I2S_HW_V2 1
+#endif
+
+/// The HW v2 raw register setup uses the HAL LL helpers where the header is
+/// available (ESP-IDF v5+). ESP-IDF v4 has no C++-includable i2s_ll.h and writes
+/// the registers directly. The include and every use site share this condition.
+#if defined (M5UNIFIED_I2S_HW_V2) && __has_include (<driver/i2s_std.h>) && __has_include (<hal/i2s_ll.h>)
+ #include <hal/i2s_ll.h>
+ #define M5UNIFIED_I2S_USE_LL 1
 #endif
 
 /// Source clock frequency assumed by the raw clock divider setup in the speaker/mic tasks.

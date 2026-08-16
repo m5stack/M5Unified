@@ -27,15 +27,7 @@
 
 #include "m5unified_i2s.h"
 
-#if defined (M5UNIFIED_I2S_HW_V2)
- #if __has_include(<driver/i2s_std.h>)
-  #if __has_include(<hal/i2s_ll.h>)
-   #include <hal/i2s_ll.h>
-  #endif
- #endif
-#endif
-
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wconversion"
@@ -117,8 +109,7 @@ namespace m5
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
-
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   struct adc_digi_pattern_table_t {
       union {
           struct {
@@ -242,7 +233,7 @@ namespace m5
   {
     return i2s_driver_uninstall(port);
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_adc(i2s_port_t port, gpio_num_t pin_data_in) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してADCモードの設定を有効にする ;
@@ -371,7 +362,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       return err;
     }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
@@ -415,7 +406,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
     if (err != ESP_OK) { return err; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
@@ -476,9 +467,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
-#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    dev->rx_conf.rx_bck_div_num = div_m - 1;
-#else
+#if defined (M5UNIFIED_I2S_USE_LL)
+    i2s_ll_rx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
+#else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
 #endif
 
@@ -503,7 +494,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       }
     }
 
-#if __has_include(<driver/i2s_std.h>)
+#if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
 #endif
 

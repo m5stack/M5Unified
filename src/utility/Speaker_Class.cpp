@@ -27,14 +27,6 @@
 
 #include "m5unified_i2s.h"
 
-#if defined (M5UNIFIED_I2S_HW_V2)
- #if __has_include(<driver/i2s_std.h>)
-  #if __has_include(<hal/i2s_ll.h>)
-   #include <hal/i2s_ll.h>
-  #endif
- #endif
-#endif
-
 #if __has_include (<hal/dac_ll.h>)
 #include <hal/dac_types.h>
 #include <hal/dac_ll.h>
@@ -107,7 +99,7 @@ namespace m5
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// DACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
@@ -163,7 +155,7 @@ namespace m5
   {
     return i2s_driver_uninstall(port);
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してDACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
@@ -190,7 +182,7 @@ namespace m5
   {
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     /// DACが使用できるのはI2Sポート0のみ。;
     if (_cfg.use_dac && _cfg.i2s_port != I2S_NUM_0) { return ESP_FAIL; }
 #endif
@@ -240,7 +232,7 @@ namespace m5
       return err;
     }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_dac)
     {
       bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
@@ -289,7 +281,7 @@ namespace m5
     }
     if (err != ESP_OK) { return err; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_dac)
     {
       bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
@@ -422,9 +414,9 @@ namespace m5
       dev->tx_conf.tx_chan_equal = 1;
     }
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    dev->tx_conf.tx_bck_div_num = div_m - 1;
-#else
+#if defined (M5UNIFIED_I2S_USE_LL)
+    i2s_ll_tx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
+#else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
 #endif
 
@@ -449,7 +441,7 @@ namespace m5
       }
     }
 
-#if __has_include(<driver/i2s_std.h>)
+#if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_tx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
 #endif
 
@@ -578,7 +570,7 @@ namespace m5
 
           if (!retry)
           {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
             if (self->_cfg.use_dac)
             {
               flg_i2s_started = spk_i2s_stop;
@@ -608,7 +600,7 @@ namespace m5
       {
         if (flg_i2s_started == spk_i2s_stop)
         {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
           if (self->_cfg.use_dac)
           {
             bool left_en = out_stereo || (self->_cfg.pin_data_out == GPIO_NUM_26);
@@ -957,7 +949,7 @@ label_continue_sample:
     SDL_CloseAudio();
 #else
     _i2s_stop(i2s_port);
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (self->_cfg.use_dac)
     {
       _i2s_set_dac(i2s_port, false, false);
