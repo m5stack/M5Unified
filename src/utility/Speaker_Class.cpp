@@ -25,25 +25,9 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
-#if __has_include (<soc/soc_caps.h>)
- #include <soc/soc_caps.h>
-#endif
+#include "m5unified_i2s.h"
 
-/// Identify the I2S peripheral generation.
-/// Prefer the soc_caps capability macro (available on ESP-IDF v5 or later).
-/// On older ESP-IDF (v4.x / Arduino core 2.x) whose soc_caps.h predates
-/// SOC_I2S_HW_VERSION_x, the supported chip set is fixed (ESP32/S2/S3/C3, so the
-/// list below is final): enumerate the HW v1 targets (ESP32/ESP32-S2) and treat
-/// the rest as HW v2.
-#if defined (SOC_I2S_HW_VERSION_2) || defined (SOC_I2S_HW_VERSION_1)
- #if SOC_I2S_HW_VERSION_2
-  #define M5UNIFIED_I2S_HW_V2 1
- #endif
-#elif defined (CONFIG_IDF_TARGET) && !defined (CONFIG_IDF_TARGET_ESP32) && !defined (CONFIG_IDF_TARGET_ESP32S2)
- #define M5UNIFIED_I2S_HW_V2 1
-#endif
-
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (M5UNIFIED_I2S_HW_V2)
  #if __has_include(<driver/i2s_std.h>)
   #if __has_include(<hal/i2s_ll.h>)
    #include <hal/i2s_ll.h>
@@ -56,8 +40,6 @@
 #include <hal/dac_ll.h>
 #include <driver/rtc_io.h>
 #endif
-
-#include "m5unified_i2s.h"
 
 #endif
 
@@ -119,12 +101,13 @@ namespace m5
   {
     if (_i2s_handle[port] != nullptr) {
       auto res = i2s_del_channel(_i2s_handle[port]);
-      _i2s_handle[port] = nullptr;
+      /// Keep the handle when the deletion fails. (e.g. the channel is still running)
+      if (res == ESP_OK) { _i2s_handle[port] = nullptr; }
       return res;
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
   static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// DACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
@@ -217,8 +200,9 @@ namespace m5
     chan_cfg.dma_desc_num = _cfg.dma_buf_count;
     chan_cfg.dma_frame_num = _cfg.dma_buf_len;
     chan_cfg.auto_clear = true;
-    _i2s_driver_uninstall(_cfg.i2s_port);
-    esp_err_t err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
+    esp_err_t err = _i2s_driver_uninstall(_cfg.i2s_port);
+    if (err != ESP_OK) { return err; }
+    err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
     if (err != ESP_OK) { return err; }
 
     i2s_std_config_t i2s_config;
@@ -250,6 +234,11 @@ namespace m5
     i2s_config.gpio_cfg.mclk = (gpio_num_t)_cfg.pin_mck;
     i2s_config.gpio_cfg.din  = (gpio_num_t)I2S_PIN_NO_CHANGE;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
+    if (err != ESP_OK)
+    {
+      _i2s_driver_uninstall(_cfg.i2s_port);
+      return err;
+    }
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_cfg.use_dac)
@@ -257,6 +246,7 @@ namespace m5
       bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
       bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
       err = _i2s_set_dac(_cfg.i2s_port, left_en, right_en);
+      if (err != ESP_OK) { _i2s_driver_uninstall(_cfg.i2s_port); }
     }
 #endif
 
@@ -398,13 +388,7 @@ namespace m5
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
-    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
-#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
-#else
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
-#endif
+    static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
     uint32_t bits = (self->_cfg.use_dac) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
     uint32_t div_m = 32 / bits; /// MCLKを使用しない場合、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
@@ -430,7 +414,7 @@ namespace m5
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (M5UNIFIED_I2S_HW_V2)
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {
@@ -489,12 +473,18 @@ namespace m5
     dev->tx_clkm_div_conf.tx_clkm_div_yn1 = yn1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
-    dev->tx_clkm_conf.clk_en = 1;
+    dev->tx_clkm_conf.clk_en = 1;       // I2S module common clock gate (physically located in the TX register)
     dev->tx_clkm_conf.tx_clk_active = 1;
-
-    dev->tx_conf.tx_update = 1;
-    dev->tx_conf.tx_update = 0;
 #endif
+
+    // Latch the whole clock/format configuration at once. This is the same
+    // sequence as the HAL's i2s_ll_tx_update (the function itself does not exist
+    // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
+    // been synchronized into the I2S clock domain. The wait is deliberately
+    // unbounded to match the HAL implementation; the module clocks are already
+    // enabled by the driver at this point, so the bit always clears.
+    dev->tx_conf.tx_update = 1;
+    while (dev->tx_conf.tx_update) {} // wait for the hardware to clear the update bit
 
 #else
 
