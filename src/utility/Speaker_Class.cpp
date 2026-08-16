@@ -412,6 +412,17 @@ namespace m5
       div_m = 8;
     }
 
+    { /// 低サンプリングレートで分周値が n の上限 255 を超える場合、BCK 分周 (div_m) を
+      /// 引き上げてレンジ内に収める。これを行わないと n が飽和して実レートが大きく
+      /// ずれ (例: S3 の 12000Hz 指定で実 14649Hz)、リサンプラの補間歪みが生じる。
+      const uint64_t limit = 255ULL * bits * self->_cfg.sample_rate;
+      if (limit) {
+        uint32_t min_m = (uint32_t)((PLL_D2_CLK + limit - 1) / limit);
+        if (div_m < min_m) {
+          div_m = (min_m < 63) ? min_m : 63; // BCK 分周レジスタの上限 (6bit) でクランプ
+        }
+      }
+    }
 
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK, div_m * bits * self->_cfg.sample_rate);
 
