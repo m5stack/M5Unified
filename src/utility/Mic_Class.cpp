@@ -95,9 +95,10 @@ namespace m5
     if (_i2s_handle[port] == nullptr) { return ESP_OK; }
     return i2s_channel_disable(_i2s_handle[port]);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms) {
     if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
-    return i2s_channel_read(_i2s_handle[port], buf, len, result, tick);
+    /// i2s_channel_read のタイムアウトはミリ秒 (旧 i2s_read の tick 数とは契約が異なる)
+    return i2s_channel_read(_i2s_handle[port], buf, len, result, timeout_ms);
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
@@ -225,9 +226,9 @@ namespace m5
   {
     return i2s_stop(port);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms)
   {
-    return i2s_read(port, buf, len, result, tick);
+    return i2s_read(port, buf, len, result, pdMS_TO_TICKS(timeout_ms));
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
@@ -601,11 +602,18 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     const bool in_stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
-    memset(src_buf, 0, dma_buf_len * sizeof(int16_t));
+    /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
+    /// dma_frame_num)。読み出しは descriptor 境界に整列する処理チャンク
+    /// (stereo 16bit なら 1 枚分、mono/PDM なら 2 枚分) を単位に行う。
+    /// これより小さい単位で読むと、IDF の i2s_channel_read はキュー逼迫時に
+    /// descriptor の未読部分を破棄するため、サンプル欠落による位相誤差
+    /// (可聴ノイズ) が生じる。
+    const size_t read_bytes = dma_buf_len * 2 * sizeof(int16_t);
+    int16_t* src_buf = (int16_t*)alloca(read_bytes);
+    memset(src_buf, 0, read_bytes);
 
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
 
     while (self->_task_running)
     {
@@ -628,6 +636,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           src_len = 0;
           sum_value[0] = 0;
           sum_value[1] = 0;
+          os_remain = oversampling;
           continue;
         }
       }
@@ -635,7 +644,19 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         if (src_idx >= src_len)
         {
-          _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
+          /// 有効なデータが得られるまで再試行する。ここで空のまま下の do-while に
+          /// 落ちると、直前バッファの先頭フレームを 1 枚余分に消費してしまい
+          /// (do は条件確認前に必ず 1 回実行される)、時間軸が入力 1 フレーム分
+          /// ずれて可聴の位相ノイズになる。
+          for (;;)
+          {
+            src_len = 0;
+            if (!self->_task_running) { break; }
+            if (ESP_OK == _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 100)
+             && src_len != 0 && 0 == (src_len & 3))
+            { break; }
+          }
+          if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
           src_len >>= 1;
           src_idx = 0;
         }
@@ -798,7 +819,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint16_t));
+      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
