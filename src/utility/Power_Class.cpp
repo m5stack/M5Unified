@@ -2531,8 +2531,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
         case board_t::board_M5PaperMono:
         {
-          // Running from battery (no external power) -> not charging.
-          if (M5pm1.getPowerSource() == M5PM1_Class::battery) { return is_charging_t::is_discharging; }
+          // No external power -> not charging. PWR_SRC is a bitmap, and the battery bit may coexist with VIN.
+          auto sources = M5pm1.getPowerSource();
+          if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout))) { return is_charging_t::is_discharging; }
           // External power present. The IP2316 charger reports
           // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
           // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
