@@ -76,7 +76,7 @@ namespace m5
     ioe1.digitalWrite(ioe1_led_b_pin, b >= 2048);
 
     if (g > 4095) { g = 4095; }
-    ioe1.setPwmDuty(M5IOE1_Class::pwm_ch2, g, g > 0);
+    ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch2, g, pwm_polarity_t::normal, g > 0);
   }
 }
 

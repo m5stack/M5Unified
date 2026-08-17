@@ -117,15 +117,24 @@ namespace m5
     writeRegister(M5IOE1_REG_PWM_FREQ_L, data, sizeof(data));
   }
 
-  void M5IOE1_Class::setPwmDuty(std::uint8_t channel, std::uint16_t duty12, bool enable, bool polarity)
+  bool M5IOE1_Class::setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                                       pwm_polarity_t polarity, bool enable)
   {
-    if (channel > pwm_ch4) { return; }
-    duty12 &= 0x0FFF;
+    if (duty > 100) { return false; }
+    auto duty12 = duty * 0x0FFF / 100;
+    return setPwmDuty12bit(channel, duty12, polarity, enable);
+  }
+
+  bool M5IOE1_Class::setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                                     pwm_polarity_t polarity, bool enable)
+  {
+    if (channel > pwm_ch4 || duty12 > 0x0FFF) { return false; }
     std::uint8_t high = static_cast<std::uint8_t>(duty12 >> 8);
     if (enable) { high |= M5IOE1_PWM_ENABLE; }
-    if (polarity) { high |= M5IOE1_PWM_POLARITY; }
+    if (polarity == pwm_polarity_t::inverted) { high |= M5IOE1_PWM_POLARITY; }
     std::uint8_t data[2] = { static_cast<std::uint8_t>(duty12 & 0xFF), high };
-    writeRegister(static_cast<std::uint8_t>(M5IOE1_REG_PWM1_DUTY_L + channel * 2), data, sizeof(data));
+    auto reg = static_cast<std::uint8_t>(M5IOE1_REG_PWM1_DUTY_L + static_cast<std::uint8_t>(channel) * 2);
+    return writeRegister(reg, data, sizeof(data));
   }
 
   void M5IOE1_Class::resetIrq()
