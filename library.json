@@ -16,7 +16,7 @@
       "version": ">=0.2.27"
     }
   ],
-  "version": "0.2.20",
+  "version": "0.3.0",
   "frameworks": ["arduino", "espidf", "*"],
   "platforms": ["espressif32", "native"],
   "headers": "M5Unified.h"
