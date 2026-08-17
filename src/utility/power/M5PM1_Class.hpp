@@ -55,6 +55,12 @@ namespace m5
     , open_drain = 1
     };
 
+    /// PM1 PWM channel. Both channels share the same frequency setting.
+    enum pwm_channel_t : std::uint8_t
+    { pwm_ch0 = 0 // GPIO3; may be assigned to another function depending on the board.
+    , pwm_ch1 = 1 // GPIO4
+    };
+
     /// PM1 power source bitmap. Multiple values may be combined.
     enum pwr_src_t : std::uint8_t
     { none    = 0
@@ -114,6 +120,25 @@ namespace m5
 
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
+
+    /// set the PWM frequency in Hz.
+    /// @note The frequency is shared by both PWM channels, so changing it also
+    /// changes a channel that is already running.
+    bool setPwmFrequency(std::uint16_t frequency);
+
+    /// set PWM duty in percent.
+    /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
+    /// @param duty duty cycle in percent (0-100).
+    /// @param polarity false=normal / true=inverted.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty(pwm_channel_t channel, std::uint8_t duty, bool polarity = false, bool enable = true);
+
+    /// set PWM duty with 12-bit precision.
+    /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
+    /// @param duty12 duty cycle (0-4095).
+    /// @param polarity false=normal / true=inverted.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint16_t duty12, bool polarity = false, bool enable = true);
 
     /// clear PM1 wake source bits selected by mask.
     bool clearWakeSource(std::uint8_t mask = 0x7F);
