@@ -74,8 +74,20 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setLDOOutput(bool enable);
 
+    /// set PM1 5V DCDC output enable.
+    /// @param enable true=enable / false=disable
+    bool setDCDCOutput(bool enable);
+
+    /// set the default level of the PM1 LED_EN pin.
+    /// @param level true=high / false=low
+    bool setLedEnLevel(bool level);
+
     /// get current PM1 power source.
     pwr_src_t getPowerSource(void);
+
+    /// get whether PWR_SRC reports the VBAT node rail as powered.
+    /// note: this tracks the node voltage, not physical battery presence.
+    bool getVbatNodePowered(bool* powered);
 
     /// set PM1 GPIO mux function.
     bool setGPIOFunction(gpio_t pin, gpio_function_t function);
@@ -94,6 +106,9 @@ namespace m5
 
     /// get PM1 GPIO input level.
     bool getGPIOInput(gpio_t pin);
+
+    /// read all GPIO input levels at once. returns false on I2C failure.
+    bool getGPIOInputBits(std::uint8_t* bits);
 
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
@@ -126,6 +141,11 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setBatteryCharge(bool enable);
 
+    /// get battery charge enable state with I2C error reporting.
+    /// @param enabled output parameter, receives the charge enable state.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
+
     /// set battery charge current
     /// @param max_mA milli ampere. (8 - 512).
     bool setChargeCurrent(std::uint16_t max_mA);
@@ -156,6 +176,11 @@ namespace m5
     /// get battery voltage.
     /// @return milli volt. 0=read failed
     std::uint16_t getBatteryVoltage(void);
+
+    /// get battery voltage with I2C error reporting.
+    /// @param millivolt output parameter, receives the battery voltage [mV].
+    /// @return false on I2C failure.
+    bool getBatteryVoltage(std::uint16_t* millivolt);
 
     /// get 5V output voltage.
     /// @return milli volt. 0=read failed

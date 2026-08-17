@@ -131,6 +131,14 @@ namespace m5
       return true;
     }
 
+    if (_config.pin_data >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)_config.pin_data)) {
+      return false;
+    }
+    // Normalize the data pin as push-pull output low before handing it to the RMT peripheral.
+    // The RMT driver does not clear a stale open-drain pad flag. (ESP-IDF v6 removed io_od_mode)
+    m5gfx::gpio_lo(_config.pin_data);
+    m5gfx::pinMode(_config.pin_data, m5gfx::pin_mode_t::output);
+
     rmt_tx_channel_config_t rmt_tx;
     memset(&rmt_tx, 0, sizeof(rmt_tx));
     rmt_tx.resolution_hz = _config.frequency;

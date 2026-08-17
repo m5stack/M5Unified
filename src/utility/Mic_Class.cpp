@@ -25,15 +25,9 @@
 #include <esp_log.h>
 #include <math.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
- #if __has_include(<driver/i2s_std.h>)
-  #if __has_include(<hal/i2s_ll.h>)
-   #include <hal/i2s_ll.h>
-  #endif
- #endif
-#endif
+#include "m5unified_i2s.h"
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
 #if __has_include (<hal/adc_ll.h>)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wconversion"
@@ -48,6 +42,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <atomic>
 
 namespace m5
 {
@@ -89,29 +84,33 @@ namespace m5
 
 #if __has_include(<driver/i2s_std.h>)
 
-  static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
+  static i2s_chan_handle_t _i2s_handle[M5UNIFIED_I2S_PORT_COUNT] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
+    if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
     return i2s_channel_enable(_i2s_handle[port]);
   }
   static esp_err_t _i2s_stop(i2s_port_t port)
   {
+    if (_i2s_handle[port] == nullptr) { return ESP_OK; }
     return i2s_channel_disable(_i2s_handle[port]);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick) {
-    return i2s_channel_read(_i2s_handle[port], buf, len, result, tick);
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms) {
+    if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
+    /// i2s_channel_read のタイムアウトはミリ秒 (旧 i2s_read の tick 数とは契約が異なる)
+    return i2s_channel_read(_i2s_handle[port], buf, len, result, timeout_ms);
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
     if (_i2s_handle[port] != nullptr) {
       auto res = i2s_del_channel(_i2s_handle[port]);
-      _i2s_handle[port] = nullptr;
+      /// Keep the handle when the deletion fails. (e.g. the channel is still running)
+      if (res == ESP_OK) { _i2s_handle[port] = nullptr; }
       return res;
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
-
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   struct adc_digi_pattern_table_t {
       union {
           struct {
@@ -227,15 +226,15 @@ namespace m5
   {
     return i2s_stop(port);
   }
-  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, TickType_t tick)
+  static esp_err_t _i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms)
   {
-    return i2s_read(port, buf, len, result, tick);
+    return i2s_read(port, buf, len, result, pdMS_TO_TICKS(timeout_ms));
   }
   static esp_err_t _i2s_driver_uninstall(i2s_port_t port)
   {
     return i2s_driver_uninstall(port);
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_adc(i2s_port_t port, gpio_num_t pin_data_in) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してADCモードの設定を有効にする ;
@@ -303,8 +302,9 @@ namespace m5
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(_cfg.i2s_port, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = _cfg.dma_buf_count;
     chan_cfg.dma_frame_num = _cfg.dma_buf_len;
-    _i2s_driver_uninstall(_cfg.i2s_port);
-    esp_err_t err = i2s_new_channel(&chan_cfg, nullptr, &_i2s_handle[_cfg.i2s_port]);
+    esp_err_t err = _i2s_driver_uninstall(_cfg.i2s_port);
+    if (err != ESP_OK) { return err; }
+    err = i2s_new_channel(&chan_cfg, nullptr, &_i2s_handle[_cfg.i2s_port]);
     if (err != ESP_OK) { return err; }
 
 #if SOC_I2S_SUPPORTS_PDM_RX
@@ -335,8 +335,26 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    { // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (mic_task での raw 分周
+      // 上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
+      // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+      int os = _cfg.over_sampling;
+      if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
+      i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate * os;
+      i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+#if defined (I2S_LL_DEFAULT_CLK_FREQ)
+      // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
+      // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+      if ((uint64_t)i2s_config.clk_cfg.sample_rate_hz * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
+        i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
+      }
+#endif
+    }
+#else
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -357,11 +375,17 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_config.gpio_cfg.din  = (gpio_num_t)_cfg.pin_data_in;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
 }
+    if (err != ESP_OK)
+    {
+      _i2s_driver_uninstall(_cfg.i2s_port);
+      return err;
+    }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
+      if (err != ESP_OK) { _i2s_driver_uninstall(_cfg.i2s_port); }
     }
 #endif
 
@@ -401,7 +425,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
     if (err != ESP_OK) { return err; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_adc)
     {
       err = _i2s_set_adc(_cfg.i2s_port, (gpio_num_t)_cfg.pin_data_in);
@@ -428,13 +452,15 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
-    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
-#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
+    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    const bool skip_raw_clk = !use_pdm;
 #else
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
+    const bool skip_raw_clk = false;
 #endif
+
+    static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
@@ -447,17 +473,17 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
 
     auto dev = &I2S0;
-#if SOC_I2S_NUM >= 2
-    if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
-#if SOC_I2S_NUM >= 3
-    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
-#if SOC_I2S_NUM >= 4
-    else if (self->_cfg.i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 2
+    if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_1) { dev = &I2S1; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 3
+    else if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_2) { dev = &I2S2; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 4
+    else if (self->_cfg.i2s_port == (i2s_port_t)I2S_NUM_3) { dev = &I2S3; }
 #endif
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (M5UNIFIED_I2S_HW_V2)
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
@@ -468,11 +494,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
-    dev->rx_conf.rx_update = 1;
+    if (!skip_raw_clk) {
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    dev->rx_conf.rx_bck_div_num = div_m - 1;
-#else
+#if defined (M5UNIFIED_I2S_USE_LL)
+    i2s_ll_rx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
+#else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
     dev->rx_conf1.rx_bck_div_num = div_m - 1;
 #endif
 
@@ -497,7 +523,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       }
     }
 
-#if __has_include(<driver/i2s_std.h>)
+#if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_rx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
 #endif
 
@@ -521,27 +547,41 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_clkm_div_conf.rx_clkm_div_yn1 = yn1;
     dev->rx_clkm_conf.rx_clkm_div_num = div_n;
     dev->rx_clkm_conf.rx_clk_sel = 1;   // PLL_240M_CLK
-    dev->tx_clkm_conf.clk_en = 1;
+    dev->tx_clkm_conf.clk_en = 1;       // I2S module common clock gate (physically located in the TX register)
     dev->rx_clkm_conf.rx_clk_active = 1;
-
-    dev->rx_conf.rx_update = 1;
-    dev->rx_conf.rx_update = 0;
 #endif
+
+    } // !skip_raw_clk
+
+    // Latch the whole clock/format configuration at once. This is the same
+    // sequence as the HAL's i2s_ll_rx_update (the function itself does not exist
+    // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
+    // been synchronized into the I2S clock domain. The wait is deliberately
+    // unbounded to match the HAL implementation; the module clocks are already
+    // enabled by the driver at this point, so the bit always clears.
+    dev->rx_conf.rx_update = 1;
+    while (dev->rx_conf.rx_update) {} // wait for the hardware to clear the update bit
 
 #else
 
+#if !defined (CONFIG_IDF_TARGET_ESP32S2) // ESP32-S2 has no PDM support
     if (use_pdm)
     {
       dev->pdm_conf.rx_sinc_dsr_16_en = 1; // 0=DSR64 / 1=DSR128
       dev->pdm_conf.pdm2pcm_conv_en = 1;
       dev->pdm_conf.rx_pdm_en = 1;
     }
+#endif
 
     dev->sample_rate_conf.rx_bck_div_num = div_m;
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
+#if defined (CONFIG_IDF_TARGET_ESP32S2)
+    dev->clkm_conf.clk_sel = 2; // PLL_160M ( 1=APLL )
+#else
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+#endif
 
     // If RX is not reset here, BCK polarity may be inverted.
     dev->conf.rx_reset = 1;
@@ -562,44 +602,61 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     const bool in_stereo = self->_cfg.stereo;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    int16_t* src_buf = (int16_t*)alloca(dma_buf_len * sizeof(int16_t));
-    memset(src_buf, 0, dma_buf_len * sizeof(int16_t));
+    /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
+    /// dma_frame_num)。読み出しは descriptor 境界に整列する処理チャンク
+    /// (stereo 16bit なら 1 枚分、mono/PDM なら 2 枚分) を単位に行う。
+    /// これより小さい単位で読むと、IDF の i2s_channel_read はキュー逼迫時に
+    /// descriptor の未読部分を破棄するため、サンプル欠落による位相誤差
+    /// (可聴ノイズ) が生じる。
+    const size_t read_bytes = dma_buf_len * 2 * sizeof(int16_t);
+    int16_t* src_buf = (int16_t*)alloca(read_bytes);
+    memset(src_buf, 0, read_bytes);
 
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
-    _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, portTICK_PERIOD_MS);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
+    _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 10);
 
     while (self->_task_running)
     {
-      bool rec_flip = self->_rec_flip;
+      bool rec_flip = self->_rec_flip.load(std::memory_order_relaxed);
       recording_info_t* current_rec = &(self->_rec_info[!rec_flip]);
       recording_info_t* next_rec    = &(self->_rec_info[ rec_flip]);
 
-      size_t dst_remain = current_rec->length;
+      size_t dst_remain = current_rec->length.load(std::memory_order_acquire);
       if (dst_remain == 0)
       {
         rec_flip = !rec_flip;
-        self->_rec_flip = rec_flip;
+        self->_rec_flip.store(rec_flip, std::memory_order_relaxed);
         xSemaphoreGive(self->_task_semaphore);
         std::swap(current_rec, next_rec);
-        dst_remain = current_rec->length;
+        dst_remain = current_rec->length.load(std::memory_order_acquire);
         if (dst_remain == 0)
         {
-          self->_is_recording = false;
           ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
           src_idx = ~0u;
           src_len = 0;
           sum_value[0] = 0;
           sum_value[1] = 0;
+          os_remain = oversampling;
           continue;
         }
       }
-      self->_is_recording = true;
-
       for (;;)
       {
         if (src_idx >= src_len)
         {
-          _i2s_read(self->_cfg.i2s_port, src_buf, dma_buf_len, &src_len, 100 / portTICK_PERIOD_MS);
+          /// 有効なデータが得られるまで再試行する。ここで空のまま下の do-while に
+          /// 落ちると、直前バッファの先頭フレームを 1 枚余分に消費してしまい
+          /// (do は条件確認前に必ず 1 回実行される)、時間軸が入力 1 フレーム分
+          /// ずれて可聴の位相ノイズになる。
+          for (;;)
+          {
+            src_len = 0;
+            if (!self->_task_running) { break; }
+            if (ESP_OK == _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 100)
+             && src_len != 0 && 0 == (src_len & 3))
+            { break; }
+          }
+          if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
           src_len >>= 1;
           src_idx = 0;
         }
@@ -614,6 +671,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         if (os_remain) { continue; }
         os_remain = oversampling;
 
+// Swap the half-word pair order observed on the classic ESP32 RX FIFO
+// (the RX counterpart of the HW v1/v2 TX packing difference). ESP32-S2 is
+// also HW v1 and might need the same swap, but no S2 device with a mic
+// exists to verify, so only the verified classic ESP32 is handled here.
 #if defined (CONFIG_IDF_TARGET_ESP32)
         auto sv0 = sum_value[1];
         auto sv1 = sum_value[0];
@@ -697,12 +758,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         dst_remain -= output_num;
         if ((int32_t)dst_remain <= 0)
         {
-          current_rec->length = 0;
+          current_rec->length.store(0, std::memory_order_release);
           break;
         }
       }
     }
-    self->_is_recording = false;
     _i2s_stop(self->_cfg.i2s_port);
 
     self->_task_handle = nullptr;
@@ -711,18 +771,46 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   bool Mic_Class::begin(void)
   {
+    // _rec_sample_rate was written before _begun was released, so the
+    // acquire load makes this pair of reads safe without the lock.
+    if (_begun.load(std::memory_order_acquire) && _rec_sample_rate == _calc_rec_rate()) { return true; }
+
+    // record() calls begin() lazily from whichever task gets there first,
+    // and both the setup and the sample-rate change tear the port down: two
+    // of these racing rip the live channel out from under the running task.
+    // One caller goes through at a time; the others wait for its outcome.
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+      vTaskDelay(1);
+    }
+
+    bool res = true;
     if (_task_running)
     {
       auto rate = _calc_rec_rate();
-      if (_rec_sample_rate == rate)
+      if (_rec_sample_rate != rate)
       {
-        return true;
+        do { vTaskDelay(1); } while (isRecording());
+        end();
+        _rec_sample_rate = rate;
       }
-      do { vTaskDelay(1); } while (isRecording());
-      end();
-      _rec_sample_rate = rate;
     }
+    if (!_task_running)
+    {
+      // Record the rate the port is being built for; without this the next
+      // begin() at the very same rate tears the port down and rebuilds it.
+      _rec_sample_rate = _calc_rec_rate();
+      res = _begin_locked();
+    }
+    _begin_lock.store(false);
 
+    return res;
+  }
+
+  bool Mic_Class::_begin_locked(void)
+  {
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
 
     bool res = true;
@@ -731,18 +819,22 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint16_t));
+      size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+        res = (pdPASS == xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle);
+        res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
+      // end() takes the driver and the callback back down; it still sees the
+      // class as running, which is what lets it do that.
+      if (!res) { end(); }
+      else { _begun.store(true, std::memory_order_release); }
     }
 
     return res;
@@ -750,6 +842,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   void Mic_Class::end(void)
   {
+    _begun.store(false, std::memory_order_release);
     if (!_task_running) { return; }
     _task_running = false;
     if (_task_handle)
@@ -758,24 +851,49 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       do { vTaskDelay(1); } while (_task_handle);
     }
 
+    // an unfinished request would otherwise keep isRecording() reporting a recording.
+    _rec_info[0].clear();
+    _rec_info[1].clear();
+
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     _i2s_driver_uninstall(_cfg.i2s_port);
   }
 
+  void Mic_Class::recording_info_t::clear(void)
+  {
+    data = nullptr;
+    index = 0;
+    is_stereo = false;
+    is_16bit = false;
+    length.store(0, std::memory_order_release);
+  }
+
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
   {
-    recording_info_t info;
-    info.data = recdata;
-    info.length = array_len;
-    info.is_16bit = flg_16bit;
-    info.is_stereo = flg_stereo;
-
     _cfg.sample_rate = sample_rate;
 
     if (!begin()) { return false; }
     if (array_len == 0) { return true; }
-    while (_rec_info[_rec_flip].length) { xSemaphoreTake(_task_semaphore, 1); }
-    _rec_info[_rec_flip] = info;
+    // The task moves the flip as it finishes a slot, so settle on one only
+    // once its own length says it is free, and keep that slot below.
+    bool flip;
+    for (;;)
+    {
+      flip = _rec_flip.load(std::memory_order_relaxed);
+      if (_rec_info[flip].length.load(std::memory_order_acquire) == 0) { break; }
+      xSemaphoreTake(_task_semaphore, 1);
+    }
+
+    // Assigning the whole struct would let the length reach the task ahead of
+    // the fields describing the data, and the task acts on a slot the moment
+    // the length is there. Fill those in first and publish with the length.
+    auto& slot = _rec_info[flip];
+    slot.data = recdata;
+    slot.index = 0;
+    slot.is_stereo = flg_stereo;
+    slot.is_16bit = flg_16bit;
+    slot.length.store(array_len, std::memory_order_release);
+
     if (this->_task_handle)
     {
       xTaskNotifyGive(this->_task_handle);

@@ -57,6 +57,7 @@ namespace m5
     void digitalWrite(uint8_t pin, bool level) override;
 
     bool digitalRead(uint8_t pin) override;
+    bool getInputLevel(uint8_t pin, bool* level) override;
 
     void setPwmFrequency(std::uint16_t frequency);
 

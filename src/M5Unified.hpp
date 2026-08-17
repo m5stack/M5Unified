@@ -167,6 +167,8 @@ namespace m5
                              = board_t::board_M5StampC3;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
                              = board_t::board_M5Tab5;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+                             = board_t::board_M5StampC5;
 #elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
                              = board_t::board_M5AtomLite;
 #else
@@ -630,6 +632,18 @@ namespace m5
     IOExpander_Base& getIOExpander(size_t idx) { return *_io_expander[idx & 1]; };
 
   private:
+    /// Power_Class needs to release the interrupt path of the wakeup pin before sleeping,
+    /// which requires knowledge of how the board is wired. That knowledge lives here.
+    friend class Power_Class;
+
+    /// Release every interrupt source that drives the wakeup pin of this board.
+    /// A touch panel keeps its INT asserted until the touch data is read, and an
+    /// interrupt expander only reports changes, so both have to be consumed.
+    /// Otherwise the wakeup pin stays asserted and no further event can wake the device.
+    /// @attention For internal use. Called from Power_Class immediately before sleeping.
+    /// @return false when clearing required communication with a device and it failed.
+    bool _clearWakeupInterrupt(void);
+
     static constexpr std::size_t BTNPWR_MIN_UPDATE_MSEC = 4;
 
     Button_Class _buttons[5];

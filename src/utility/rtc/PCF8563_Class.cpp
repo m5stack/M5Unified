@@ -47,22 +47,49 @@ namespace m5
       return false;
     }
 
+    // Decode into locals and validate before committing, so that a corrupted
+    // register value (I2C glitch, uninitialized RTC) results in false instead
+    // of a bogus date such as 45:00:80 or year 2165.
     int idx = 0;
+    rtc_time_t t;
     if (time)
     {
-      time->seconds = bcd2ToByte(buf[idx++] & 0x7f);
-      time->minutes = bcd2ToByte(buf[idx++] & 0x7f);
-      time->hours   = bcd2ToByte(buf[idx++] & 0x3f);
+      std::uint8_t sec  = buf[idx++] & 0x7f;
+      std::uint8_t min  = buf[idx++] & 0x7f;
+      std::uint8_t hour = buf[idx++] & 0x3f;
+      if (!isValidBcd(sec) || !isValidBcd(min) || !isValidBcd(hour))
+      {
+        return false;
+      }
+      t.seconds = bcd2ToByte(sec);
+      t.minutes = bcd2ToByte(min);
+      t.hours   = bcd2ToByte(hour);
     }
 
+    rtc_date_t d;
     if (date)
     {
-      date->date    = bcd2ToByte(buf[idx++] & 0x3f);
-      date->weekDay = bcd2ToByte(buf[idx++] & 0x07);
-      date->month   = bcd2ToByte(buf[idx++] & 0x1f);
-      date->year    = bcd2ToByte(buf[idx] & 0xff)
-                    + ((0x80 & buf[idx - 1]) ? 1900 : 2000);
+      std::uint8_t dd = buf[idx++] & 0x3f;
+      std::uint8_t wd = buf[idx++] & 0x07;
+      std::uint8_t mo = buf[idx] & 0x1f;
+      bool century    = buf[idx++] & 0x80;
+      std::uint8_t yy = buf[idx];
+      if (!isValidBcd(dd) || !isValidBcd(mo) || !isValidBcd(yy))
+      {
+        return false;
+      }
+      d.date    = bcd2ToByte(dd);
+      d.weekDay = wd;
+      d.month   = bcd2ToByte(mo);
+      d.year    = bcd2ToByte(yy) + (century ? 1900 : 2000);
     }
+
+    if (!validateDateTime(date ? &d : nullptr, time ? &t : nullptr))
+    {
+      return false;
+    }
+    if (time) { *time = t; }
+    if (date) { *date = d; }
     return true;
   }
 

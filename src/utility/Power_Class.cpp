@@ -13,7 +13,40 @@
 #include <sdkconfig.h>
 
 #include <soc/soc_caps.h>
+
+// ESP-IDF v4 defines only the generic SOC_PM_SUPPORT_EXT_WAKEUP; the split into
+// SOC_PM_SUPPORT_EXT0_WAKEUP / SOC_PM_SUPPORT_EXT1_WAKEUP came later.
+// Without these fallbacks both wakeup branches below vanish when building with such an
+// ESP-IDF, and the wakeup pin is then silently ignored on every board.
+#if defined (SOC_PM_SUPPORT_EXT0_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT0 SOC_PM_SUPPORT_EXT0_WAKEUP
+#elif defined (SOC_PM_SUPPORT_EXT_WAKEUP) \
+   && (defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S2) || defined (CONFIG_IDF_TARGET_ESP32S3))
+ #define M5UNIFIED_PM_SUPPORT_EXT0 1
+#else
+ #define M5UNIFIED_PM_SUPPORT_EXT0 0
+#endif
+
+#if defined (SOC_PM_SUPPORT_EXT1_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT1 SOC_PM_SUPPORT_EXT1_WAKEUP
+#elif defined (SOC_PM_SUPPORT_EXT_WAKEUP)
+ #define M5UNIFIED_PM_SUPPORT_EXT1 1
+#else
+ #define M5UNIFIED_PM_SUPPORT_EXT1 0
+#endif
 #include <soc/adc_channel.h>
+
+// On Arduino builds the core owns the ADC driver (analogRead). Creating a
+// separate adc_oneshot unit for the battery ADC makes both owners fight over
+// the same unit and one side permanently reads 0, so the battery ADC must be
+// read through the Arduino API instead. (analogReadMilliVolts: core v2.0.0+)
+#if defined (ARDUINO) && __has_include (<esp_arduino_version.h>)
+ #include <esp_arduino_version.h>
+ #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(2, 0, 0)
+  #include <esp32-hal-adc.h>
+  #define M5UNIFIED_BATADC_USE_ARDUINO
+ #endif
+#endif
 
 #if __has_include (<esp_idf_version.h>)
  #include <esp_idf_version.h>
@@ -185,14 +218,106 @@ namespace m5
 
     case board_t::board_M5CoreMatrix:
       _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_2;
+      /// bring up the PM1 early so its status registers are readable below.
+      M5pm1.begin();
+      /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
-      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
-      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::input);
       M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::input);
+      /// PM1 GPIO4 is the BMI270 INT1 input (motion wakeup)
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::input);
+      /// PM1 GPIO3 is the IRQ output wired to ESP32 G2. Without an IRQ pin
+      /// configured the PM1 auto-clears its IRQ status (0x40-0x42) and the
+      /// power button / wake events cannot be detected.
+      /// Configure it as a push-pull high output before switching to the IRQ
+      /// function, so the released line is actively driven high.
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
-      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
       M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::irq);
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+      /// After an EXT1 wakeup the pin is still owned by the RTC IO mux and the
+      /// digital GPIO input reads low forever (the release wait on the next
+      /// sleep entry would never finish). Return it to the digital function.
+      rtc_gpio_deinit((gpio_num_t)_wakeupPin);
+#endif
+      /// make the PM1 IRQ output readable as the wakeup pin
+      m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
+      /// charge detect input (IOE1 G8 = AW32901 CHG_STAT, low = charging)
+      M5.getIOExpander(0).setDirection(M5IOE1_Class::gpio8, false);
+      /// settle battery presence early (the charger may still be idle).
+      _batteryPresent();
+      { /// TF card power (IOE1 G1) is off at reset; enable it so the SD card is usable
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio1, true);
+      }
+      break;
+    }
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+
+    /// setup power management ic
+    switch (M5.getBoard())
+    {
+    default:
+      break;
+
+    case board_t::board_M5ToughC5:
+      _pmic = pmic_t::pmic_m5pm1;
+      _wakeupPin = GPIO_NUM_4;
+      /// bring up the PM1 early so its status registers are readable below.
+      M5pm1.begin();
+      /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
+      /// いたファームの設定に依存しないよう IRQ 関連を初期化する
+      M5pm1.clearWakeSource();
+      M5pm1.clearIRQStatus();
+      M5pm1.setGPIOIRQMaskBits(0x16);  // enable GPIO0(TP INT)/GPIO3(RTC nIRQ), disable other GPIO IRQ
+      /// PM1 GPIO0 は TP INT 入力。
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
+      /// settle battery presence early (the charger may still be idle).
+      _batteryPresent();
+      { /// normalize the charger lines on the IO expander (a previous firmware
+        /// may have left them in another state):
+        /// CHG_PROG (IOE1 G1) is a resistor-network charge-rate setting that
+        /// must stay released, and CHG_STAT (IOE1 G3) is an input.
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setDirection(M5IOE1_Class::gpio1, false);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, true);
+        ioe1.enablePull(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio3, false);
+      }
+      M5pm1.setBatteryCharge(true);
+      M5pm1.setDCDCOutput(true);
+      M5pm1.setLDOOutput(true);
+      M5pm1.setLedEnLevel(true);
+      /// PM1 GPIO1 は ESP32 の G4 へ配線された IRQ 出力。IRQ ピンを設定して
+      /// おかないと PM1 が IRQ ステータス (0x40-0x42) を自動クリアしてしまい、
+      /// 電源ボタンや RTC アラームの IRQ 検出が機能しない。
+      /// IRQ 機能へ切り替える前に push-pull 出力の High として設定しておき、
+      /// 解放時に能動的に High が駆動されるようにする。
+      M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
+      M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
+      /// PM1 GPIO3 は RX8130 の nIRQ 入力 (外部プルアップ・アクティブ Low)。
+      /// 入力にしておくと IRQ ピン設定時のレベル変化スキャン対象になり、
+      /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
+      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
+      /// make the PM1 IRQ output readable as the wakeup pin。
+      /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
+      /// 期待できないため、内部プルアップを有効にする。
+      m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       break;
     }
 
@@ -222,6 +347,11 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
+      // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
+      // AXP2101 IRQ pin is shared with the RTC INT, so neither reaches the ESP32.
+      // Therefore touch is the only usable wakeup source on this board.
+      _wakeupPin = GPIO_NUM_21; // I2C_INT ( AW9523 INTN )
       break;
 
     case board_t::board_M5StickS3:
@@ -263,6 +393,7 @@ namespace m5
       m5gfx::pinMode(M5PaperS3_CHG_STAT_PIN, m5gfx::pin_mode_t::input);
       _batAdcCh = ADC1_GPIO3_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 3;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       _wakeupPin = GPIO_NUM_48; // touch panel INT
@@ -330,6 +461,12 @@ namespace m5
       M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio14, false); // Turn on SD card power
+        ioe1.setDirection(M5IOE1_Class::gpio14, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio14, true);
+      }
 
       // Keep IP2316 off the I2C bus until charge control/status is requested.
       init_papermono_ip2315_access();
@@ -338,6 +475,7 @@ namespace m5
     case board_t::board_M5Capsule:
       _batAdcCh = ADC1_GPIO6_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 6;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -345,6 +483,7 @@ namespace m5
     case board_t::board_M5AirQ:
       _batAdcCh = ADC2_GPIO14_CHANNEL;
       _batAdcUnit = 2;
+      _batAdcPin = 14;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -354,6 +493,7 @@ namespace m5
     case board_t::board_M5CardputerADV:
       _batAdcCh = ADC1_GPIO10_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 10;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -392,6 +532,7 @@ namespace m5
       m5gfx::gpio_lo(TimerCam_LED_PIN);  // system LED off
       _batAdcCh = ADC1_GPIO38_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 38;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 1.513f;
       break;
@@ -401,6 +542,7 @@ namespace m5
       _rtcIntPin = GPIO_NUM_19;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 35;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 25.1f / 5.1f;
       break;
@@ -410,6 +552,7 @@ namespace m5
       _wakeupPin = GPIO_NUM_36; // touch panel INT;
       _batAdcCh = ADC1_GPIO35_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 35;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -436,6 +579,7 @@ namespace m5
       m5gfx::pinMode(StickCPlus2_LED_PIN, m5gfx::pin_mode_t::output);
       _batAdcCh = ADC1_GPIO38_CHANNEL;
       _batAdcUnit = 1;
+      _batAdcPin = 38;
       _pmic = pmic_t::pmic_adc;
       _adc_ratio = 2.0f;
       break;
@@ -640,7 +784,7 @@ namespace m5
 
 #endif
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C61)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
     if (_pmic == pmic_t::pmic_m5pm1)
     {
       M5pm1.begin();
@@ -715,6 +859,24 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
       M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      if (_pmic == pmic_t::pmic_m5pm1)
+      {
+        M5pm1.setExtOutput(enable);
+      }
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      { /// IOE1 G5 gates the Grove port power (both the 3.3V rail and the 5V boost)
+        auto& ioe1 = M5.getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+        ioe1.setDirection(M5IOE1_Class::gpio5, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+      }
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
@@ -890,6 +1052,16 @@ namespace m5
     case board_t::board_M5StampS3Bat:
       return M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio1);
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return M5pm1.getExtOutput();
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio5);
+      break;
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       return m5gfx::gpio_in(M5Paper_EXT5V_ENABLE_PIN);
@@ -1131,12 +1303,60 @@ namespace m5
         }
         break;
 
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
       case pmic_t::pmic_m5pm1:
+      {
+        bool arm_wakeup = withTimer;
         if (!withTimer) {
-          M5pm1.powerOff();
+          int retry = 3;
+          while (!M5pm1.powerOff() && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          { /// 電源を落とせないまま wake source 無しで眠ると、電源ボタンの単押しや
+            /// IRQ では復帰できなくなる (PM1 の二重クリックや USB 再接続による
+            /// 電源サイクルは可能)。単押しで復帰できるよう IRQ ピンを残して眠る
+            M5_LOGE("_powerOff: M5PM1 powerOff failed.");
+            arm_wakeup = true;
+          }
         }
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+        if (arm_wakeup && _wakeupPin < GPIO_NUM_MAX)
+        { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
+          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) のを確認して
+          /// から ANY_LOW を武装して眠り、その Low 遷移で deep sleep から復帰
+          /// できるようにする。
+          int retry = 40;
+          while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
+          if (!retry)
+          {
+            if (withTimer)
+            { /// 解放されない線を ANY_LOW で武装したまま眠ると即時復帰の
+              /// 再起動ループになるため、wake 経路を確保できなければ眠らない
+              M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
+              M5.Display.wakeup();
+              return;
+            }
+            /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
+            M5_LOGE("_powerOff: cannot release the wakeup pin.");
+          }
+          else
+          {
+            if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
+            {
+              M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
+            }
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
+            { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
+              /// RTC ドメインのプルアップで High を維持する
+              rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
+              rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
+            }
+#endif
+          }
+        }
+#endif
         break;
+      }
 #endif
 
       case pmic_t::pmic_unknown:
@@ -1256,8 +1476,30 @@ namespace m5
     _powerOff(true);
   }
 
+  bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
+  {
+    // clear_comm_ok は「この呼び出し内でクリア通信が一度でも成功したか」を返す。
+    // ピンが解放されない理由が「要因がまだ生きている (指が触れている等)」なのか
+    // 「デバイスと通信できない (回復見込みなし)」なのかを呼び出し元が区別できる。
+    bool comm_ok = false;
+    for (int retry = 8; retry > 0; --retry)
+    {
+      if (m5gfx::gpio_in(wakeup_pin)) { if (clear_comm_ok) { *clear_comm_ok = true; } return true; }
+      comm_ok |= M5._clearWakeupInterrupt();
+      m5gfx::delay(5);
+    }
+    if (clear_comm_ok) { *clear_comm_ok = comm_ok; }
+    return m5gfx::gpio_in(wakeup_pin);
+  }
+
   void Power_Class::deepSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
+    if (micro_seconds == 0)
+    { // A wakeup time of zero means "do not sleep".
+      // ( This check comes before the display is put to sleep. )
+      M5_LOGW("deepSleep: micro_seconds is 0. not sleeping. ( use Power.sleep_no_timer to sleep without a timer wakeup )");
+      return;
+    }
     M5.Display.sleep();
     M5.Display.waitDisplay();
 #if defined (M5UNIFIED_PC_BUILD)
@@ -1265,7 +1507,7 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","deepSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5) // || defined (CONFIG_IDF_TARGET_ESP32P4)
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) // || defined (CONFIG_IDF_TARGET_ESP32P4)
 
 #else
 
@@ -1277,32 +1519,108 @@ namespace m5
 #endif
 
     uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && (M5.getBoard() == board_t::board_M5PaperMono))
+    {
+      wpin = GPIO_NUM_4;
+    }
+    bool pin_wakeup_enabled = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-#if SOC_PM_SUPPORT_EXT0_WAKEUP
-      esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
-#elif SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
-      const uint64_t ext_wakeup_pin_1_mask = 1ULL << _wakeupPin;
-      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
- #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
-      ESP_ERROR_CHECK(rtc_gpio_pullup_dis((gpio_num_t)_wakeupPin));
-      ESP_ERROR_CHECK(rtc_gpio_pulldown_en((gpio_num_t)_wakeupPin));
- #endif
-#endif
-      while (m5gfx::gpio_in(wpin) == false)
+#if M5UNIFIED_PM_SUPPORT_EXT0
+      pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
+#elif M5UNIFIED_PM_SUPPORT_EXT1 && SOC_RTCIO_PIN_COUNT > 0
+      if (rtc_gpio_is_valid_gpio((gpio_num_t)wpin))
       {
-        // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
-        M5.update();
-        m5gfx::delay(10);
+        const uint64_t ext_wakeup_pin_1_mask = 1ULL << wpin;
+        // SOC_PM_SUPPORT_EXT1_WAKEUP ( the old name is SOC_PM_SUPPORT_EXT_WAKEUP ) and
+        // esp_sleep_enable_ext1_wakeup_io() only exist in recent ESP-IDF. Without these
+        // fallbacks the whole branch disappears on older ESP-IDF, and the wakeup pin is
+        // then silently ignored on every target that has no EXT0. ( ESP32-S3 / P4 etc. )
+ #if defined (ESP_IDF_VERSION_VAL) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext1_wakeup_io(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+ #else
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+ #endif
+ #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+        if (pin_wakeup_enabled)
+        {
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+          if (M5.getBoard() == board_t::board_M5ToughC5
+           || M5.getBoard() == board_t::board_M5CoreMatrix)
+          { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
+            // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
+            // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
+            rtc_gpio_pullup_en((gpio_num_t)wpin);
+            rtc_gpio_pulldown_dis((gpio_num_t)wpin);
+          }
+          else
+#endif
+          { /// TODO: reconsider these pull settings.
+            // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
+            // and every board that reaches here now shares them.
+            // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
+            // without an external pull-up would wake up immediately. On CoreS3 this works
+            // only because I2C_INT has an external 10k pull-up, and it costs about 60uA
+            // through that divider for as long as the device sleeps.
+            // Check how the wakeup pin of M5Tab5 is wired before changing this.
+            rtc_gpio_pullup_dis((gpio_num_t)wpin);
+            rtc_gpio_pulldown_en((gpio_num_t)wpin);
+          }
+        }
+ #endif
+      }
+#endif
+      if (pin_wakeup_enabled)
+      {
+        bool clear_comm_ok = true;
+        int comm_fail = 0;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
+        {
+          if (!clear_comm_ok)
+          { // 割り込み要因のクリア通信自体が失敗している。解放されない線を
+            // ANY_LOW で待つ構成のまま眠ると即時復帰の再起動ループになるため、
+            // 失敗が連続する場合は眠らずに戻る。一時的な失敗 (デバイスの
+            // ビジー等) は許容し、成功が挟まれば数え直す。
+            // ( 要因が生きているだけなら従来通り解放を待つ )
+            if (++comm_fail >= 3)
+            {
+              M5_LOGE("deepSleep: cannot release the wakeup pin. not sleeping.");
+              M5.Display.wakeup();
+              return;
+            }
+          }
+          else { comm_fail = 0; }
+          // Issue #91, ( M5Paper wakes too soon from deep sleep when touch wakeup is enabled - with solution )
+          M5.update();
+          m5gfx::delay(10);
+        }
+      }
+      else
+      { // The wakeup pin is not an RTC IO. ( ex. M5PaperS3 touch INT = GPIO48 )
+        // Such a pin can wake up from light sleep, but not from deep sleep.
+        M5_LOGW("deepSleep: GPIO%d cannot be used as a deep sleep wakeup source.", (int)wpin);
       }
     }
-    if (micro_seconds > 0)
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("deepSleep: this device has no wakeup pin.");
+    }
+    if (micro_seconds != sleep_no_timer)
     {
       esp_sleep_enable_timer_wakeup(micro_seconds);
     }
     else
     {
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+      if (!pin_wakeup_enabled)
+      { // Neither a timer nor a wakeup pin was configured by this call.
+        // Unless another wakeup source has been set up, the device will not wake up until it is reset.
+        M5_LOGW("deepSleep: no timer or pin wakeup source is enabled.");
+      }
+    }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping. ( see lightSleep )
+      M5_LOGW("deepSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
     }
 #endif
     esp_deep_sleep_start();
@@ -1311,6 +1629,11 @@ namespace m5
 
   void Power_Class::lightSleep(std::uint64_t micro_seconds, bool touch_wakeup)
   {
+    if (micro_seconds == 0)
+    { // A wakeup time of zero means "do not sleep".
+      M5_LOGW("lightSleep: micro_seconds is 0. not sleeping. ( use Power.sleep_no_timer to sleep without a timer wakeup )");
+      return;
+    }
 #if defined (M5UNIFIED_PC_BUILD)
     (void)micro_seconds;
     (void)touch_wakeup;
@@ -1328,39 +1651,78 @@ namespace m5
 #endif
 
     uint_fast8_t wpin = _wakeupPin;
+    if (touch_wakeup && (M5.getBoard() == board_t::board_M5PaperMono))
+    {
+      wpin = GPIO_NUM_4;
+    }
+    bool pin_wakeup_enabled = false;
+    bool gpio_wakeup_used = false;
     if (touch_wakeup && wpin < GPIO_NUM_MAX)
     {
-      if (M5.getBoard() == board_t::board_M5PaperS3)
+#if M5UNIFIED_PM_SUPPORT_EXT0 && SOC_RTCIO_PIN_COUNT > 0
+      if (rtc_gpio_is_valid_gpio((gpio_num_t)wpin))
       {
-        // M5PaperS3 touch interrupt pin (GPIO48) is not RTC IO
-        // and therefore not supported in EXT0 wakeup
-        gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
-        esp_sleep_enable_gpio_wakeup();
+        pin_wakeup_enabled = (ESP_OK == esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false));
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
+      }
+#endif
+      if (!pin_wakeup_enabled)
+      { // A pin outside the RTC IO range ( ex. M5PaperS3 touch INT = GPIO48 ), or a target
+        // without EXT0, can still wake from light sleep by gpio wakeup.
+        gpio_wakeup_used = (ESP_OK == gpio_wakeup_enable((gpio_num_t)wpin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL))
+                        && (ESP_OK == esp_sleep_enable_gpio_wakeup());
+        pin_wakeup_enabled = gpio_wakeup_used;
+      }
+      if (pin_wakeup_enabled)
+      { // Wait until the wakeup pin is released, otherwise the sleep request is rejected.
+        bool clear_comm_ok = true;
+        int comm_fail = 0;
+        while (!_releaseWakeupPin(wpin, &clear_comm_ok))
+        {
+          if (!clear_comm_ok)
+          { // クリア通信の失敗が連続する場合は解放を待たない。light sleep は
+            // 即時復帰しても実行が戻るだけなので deep sleep と違い眠って構わない
+            if (++comm_fail >= 3)
+            {
+              M5_LOGE("lightSleep: cannot release the wakeup pin.");
+              break;
+            }
+          }
+          else { comm_fail = 0; }
+          m5gfx::delay(10);
+        }
       }
       else
       {
-#if SOC_PM_SUPPORT_EXT0_WAKEUP
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)wpin, false);
-        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_AUTO);
-#endif
-      }
-      while (m5gfx::gpio_in(wpin) == false)
-      {
-        m5gfx::delay(10);
+        M5_LOGW("lightSleep: wakeup by GPIO%d is not enabled.", (int)wpin);
       }
     }
-    if (micro_seconds > 0){
+    else if (touch_wakeup)
+    { // The board has no wakeup pin, so touch_wakeup cannot be honored.
+      M5_LOGW("lightSleep: this device has no wakeup pin.");
+    }
+    if (micro_seconds != sleep_no_timer){
       esp_sleep_enable_timer_wakeup(micro_seconds);
     }else{
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+      if (!pin_wakeup_enabled)
+      { // Neither a timer nor a wakeup pin was configured by this call.
+        M5_LOGW("lightSleep: no timer or pin wakeup source is enabled.");
+      }
+    }
+    if (pin_wakeup_enabled && !_releaseWakeupPin(wpin))
+    { // Must be done immediately before sleeping: an event that happens after the wait
+      // loop leaves the interrupt asserted, so the sleep request would be rejected or
+      // the wakeup source would be dead while sleeping.
+      M5_LOGW("lightSleep: wakeup pin GPIO%d is still asserted.", (int)wpin);
     }
     esp_light_sleep_start();
-    if (M5.getBoard() == board_t::board_M5PaperS3)
+    if (gpio_wakeup_used)
     {
       gpio_wakeup_disable((gpio_num_t)wpin);
     }
-#endif
-#endif
+#endif // CONFIG_IDF_TARGET_ESP32C3 / C6 / C5
+#endif // M5UNIFIED_PC_BUILD
   }
 
   void Power_Class::powerOff(void)
@@ -1412,20 +1774,32 @@ namespace m5
 #define ADC_RAW_ATTEN ADC_ATTEN_DB_11
 #endif
 
-#if __has_include (<esp_adc/adc_oneshot.h>)
+#if defined (M5UNIFIED_BATADC_USE_ARDUINO)
+
+    // The default attenuation (11dB) and calibration are owned consistently
+    // by the Arduino core; do not fight it with per-pin overrides here.
+    return analogReadMilliVolts(_batAdcPin);
+
+#elif __has_include (<esp_adc/adc_oneshot.h>)
 
     static adc_oneshot_unit_handle_t adc_handle;
     if (adc_handle == nullptr) {
       adc_oneshot_unit_init_cfg_t init_config;
       memset(&init_config, 0, sizeof(init_config));
       init_config.unit_id = _batAdcUnit == 1 ? ADC_UNIT_1 : ADC_UNIT_2;
-      adc_oneshot_new_unit(&init_config, &adc_handle);
-      if (adc_handle == nullptr) { return 0; }
+      if (adc_oneshot_new_unit(&init_config, &adc_handle) != ESP_OK || adc_handle == nullptr) {
+        adc_handle = nullptr;
+        return 0;
+      }
 
       adc_oneshot_chan_cfg_t config;
       config.atten = ADC_RAW_ATTEN;
       config.bitwidth = ADC_BITWIDTH_12;
-      adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config);
+      if (adc_oneshot_config_channel(adc_handle, (adc_channel_t)_batAdcCh, &config) != ESP_OK) {
+        adc_oneshot_del_unit(adc_handle);
+        adc_handle = nullptr;
+        return 0;
+      }
     }
     static adc_cali_handle_t adc_cali;
     if (adc_cali == nullptr) {
@@ -1445,11 +1819,18 @@ namespace m5
 #endif
     }
     int raw, volt;
-    adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw);
-    if (adc_cali == nullptr) {
-      return raw;
+    if (adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw) != ESP_OK) {
+      return 0;
     }
-    adc_cali_raw_to_voltage(adc_cali, raw, &volt);
+    // Callers treat the return value as millivolts; without a calibration
+    // scheme the raw count cannot be expressed in mV, so report 0 (unreadable)
+    // instead of a bogus value.
+    if (adc_cali == nullptr) {
+      return 0;
+    }
+    if (adc_cali_raw_to_voltage(adc_cali, raw, &volt) != ESP_OK) {
+      return 0;
+    }
     return volt;
 
 #else
@@ -1490,6 +1871,8 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getVBUSVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1504,7 +1887,7 @@ namespace m5
       f = Axp2101.getVBUSVoltage();
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       f = M5pm1.getVBUSVoltage() / 1000.0f;
       break;
@@ -1524,6 +1907,145 @@ namespace m5
     return -1;
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+  /// read the raw charger CHG_STAT line (low = charging).
+  bool Power_Class::_readChargeStat(bool* level)
+  {
+    switch (M5.getBoard())
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, level);
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, level);
+#endif
+    default:
+      return false;
+    }
+  }
+
+  /// A batteryless charger can hold CHG_STAT low against a collapsed node,
+  /// so a low CHG_STAT alone does not prove charge current (ToughC5 only;
+  /// the CoreMatrix retry blips are filtered by the 100ms streak below).
+  bool Power_Class::_vbatNodeDown(void)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    bool powered;
+    return M5pm1.getVbatNodePowered(&powered) && !powered;
+#else
+    return false;
+#endif
+  }
+
+  /// CoreMatrix / ToughC5: with no battery attached, the PM1 VBAT ADC follows
+  /// whatever the charger does to the empty node, so presence cannot be read
+  /// directly. It is resolved without blocking:
+  /// - charging disabled: a collapsed node decides "none" at once; a high
+  ///   reading counts as a battery once the node has settled after charging
+  ///   stopped (a reset also stops charging, so begin() reuses this path).
+  /// - charging enabled: a sustained low CHG_STAT with the VBAT node held up
+  ///   counts as present; a VBAT peak above any real battery, or a collapse
+  ///   held across samples, counts as absent; steady samples point to a
+  ///   battery. Flipping an existing verdict needs a longer streak than the
+  ///   initial one, and instability alone never revokes "present".
+  /// Until the first verdict, -1 (unknown) is reported and the battery APIs
+  /// pass that on instead of guessing. (On the CoreMatrix a detach while
+  /// charging can go unnoticed until charging is disabled.)
+  std::int8_t Power_Class::_batteryPresent(void)
+  {
+    bool chg_enabled = true;
+    if (M5pm1.getBatteryCharge(&chg_enabled) && !chg_enabled)
+    { /// with the charger idle there is no float voltage: a collapsed node
+      /// proves "no battery" at once. A high reading is trusted as "present"
+      /// only once the node has settled after charging stopped (the initial
+      /// _chg_off_ms = 0 gives a boot the same settle window); until then it
+      /// only seeds the sampling.
+      std::uint16_t mv = 0;
+      if (M5pm1.getBatteryVoltage(&mv))
+      {
+        if (mv <= 2600) { _batt_present = 0; }
+        else if ((m5gfx::millis() - _chg_off_ms) > 1500) { _batt_present = 1; }
+        else if (_bp_last_ms == 0)
+        { /// not settled yet: only seed the first sampling baseline.
+          auto t = m5gfx::millis();
+          _bp_last_ms = t ? t : 1;
+          _bp_last_mv = mv;
+        }
+      }
+      return _batt_present;
+    }
+
+    std::uint32_t now = m5gfx::millis();
+
+    bool chg_stat;
+    if (_readChargeStat(&chg_stat))
+    {
+      if (!chg_stat && !_vbatNodeDown())
+      { /// low = charging into a live node; require a >=100ms streak so a
+        /// batteryless retry blip cannot pass as real charge current.
+        if (_bp_chg_low_ms == 0) { _bp_chg_low_ms = now ? now : 1; }
+        else if ((now - _bp_chg_low_ms) >= 100)
+        {
+          _batt_present = 1;
+        }
+        /// real charge current: skip the VBAT rules (a deeply discharged
+        /// battery can sit below the collapse threshold while charging).
+        return _batt_present;
+      }
+      /// otherwise fall through and let the VBAT rules decide.
+      _bp_chg_low_ms = 0;
+    }
+
+    std::uint16_t mv = 0;
+    if (!M5pm1.getBatteryVoltage(&mv)) { return _batt_present; }
+
+    if (mv > 4450)
+    { /// only the batteryless sawtooth peaks above any real battery
+      _batt_present = 0;
+      _bp_stable = 0;
+      _bp_unstable = 0;
+      _bp_low = 0;
+      return _batt_present;
+    }
+
+    if (_bp_last_ms == 0)
+    {
+      _bp_last_ms = now ? now : 1;
+      _bp_last_mv = mv;
+      return _batt_present;
+    }
+    if ((now - _bp_last_ms) < 1250) { return _batt_present; }
+
+    /// the register has refreshed since the previous sample
+    std::int32_t diff = (std::int32_t)mv - (std::int32_t)_bp_last_mv;
+    if (diff < 0) { diff = -diff; }
+    _bp_last_ms = now ? now : 1;
+    _bp_last_mv = mv;
+
+    if (mv < 2600) { ++_bp_low; } else { _bp_low = 0; }
+    if (diff > 300) { ++_bp_unstable; _bp_stable = 0; }
+    else            { ++_bp_stable; _bp_unstable = 0; }
+
+    if (_batt_present < 0)
+    {
+      if (_bp_low >= 2 || _bp_unstable >= 2) { _batt_present = 0; }
+      else if (_bp_stable >= 2 && mv >= 2600) { _batt_present = 1; }
+    }
+    else if (_batt_present == 0)
+    { /// a battery attached later holds the node steady in the plausible
+      /// range; the sawtooth cannot hold still this long. (also catches an
+      /// attached full battery, which never asserts CHG_STAT.)
+      if (_bp_stable >= 4 && mv >= 2600) { _batt_present = 1; }
+    }
+    else
+    { /// present is revoked only by a collapsed node held across samples
+      if (_bp_low >= 2) { _batt_present = 0; }
+    }
+    return _batt_present;
+  }
+#endif
+
   int16_t Power_Class::getBatteryVoltage(void)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
@@ -1535,6 +2057,12 @@ namespace m5
     case pmic_t::pmic_aw32001:
       return Bq27220.getVoltage_mV();
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      { /// 0 = no battery / -1 = not yet determined (see _batteryPresent)
+        std::int8_t bp = _batteryPresent();
+        if (bp <= 0) { return bp; }
+      }
+      return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1549,8 +2077,14 @@ namespace m5
     case pmic_t::pmic_axp2101:
       return Axp2101.getBatteryVoltage() * 1000;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+      { /// 0 = no battery / -1 = not yet determined (see _batteryPresent)
+        std::int8_t bp = _batteryPresent();
+        if (bp <= 0) { return bp; }
+      }
+#endif
       return M5pm1.getBatteryVoltage();
 #endif
 
@@ -1598,6 +2132,16 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Get battery voltage in mV
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1; // Error reading voltage
+        }
+        mv = bat_mv;
+      }
+      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1614,7 +2158,7 @@ namespace m5
       return Axp2101.getBatteryLevel();
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       {
         // Get battery voltage in mV
@@ -1670,6 +2214,11 @@ namespace m5
       Aw32001.setBatteryCharge(enable);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      /// the presence check must not read VBAT before the node collapses
+      if (!enable) { _chg_off_ms = m5gfx::millis(); }
+      M5pm1.setBatteryCharge(enable);
+      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1687,12 +2236,13 @@ namespace m5
       Axp2101.setBatteryCharge(enable);
       break;
 
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
         // M5PaperColor does not support charge control
         if (M5.getBoard() == board_t::board_M5PaperColor) {
-            return;
+          return;
         }
         // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
         if (M5.getBoard() == board_t::board_M5PaperMono) {
@@ -1704,6 +2254,11 @@ namespace m5
           set_papermono_ip2315_enabled(false);
           return;
         }
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+        /// the presence check must not read VBAT before the node collapses
+        if (!enable) { _chg_off_ms = m5gfx::millis(); }
+#endif
         M5pm1.setBatteryCharge(enable);
       }
       return;
@@ -1741,6 +2296,24 @@ namespace m5
       Aw32001.setChargeCurrent(max_mA);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        if (max_mA >= 650)
+        {
+          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
+          ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
+          ioe1.setDirection(M5IOE1_Class::gpio3, true);
+        }
+        else
+        {
+          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setDirection(M5IOE1_Class::gpio3, false);
+        }
+      }
+      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1916,6 +2489,25 @@ namespace m5
       return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      /// CoreMatrix: the AW32901 CHG_STAT is wired to IOE1 G8 (low = charging)
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      {
+        /// With no battery the charger retries periodically and CHG_STAT
+        /// blips low for a moment; report "not charging" instead.
+        {
+          std::int8_t present = _batteryPresent();
+        if (present < 0) { return is_charging_t::charge_unknown; }
+        if (present == 0) { return is_charging_t::is_discharging; }
+        }
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
+        { /// do not report an I2C failure as "charging"
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
+      return is_charging_t::charge_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1994,6 +2586,25 @@ namespace m5
       case board_t::board_M5Tab5:
         return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
           ? is_charging_t::is_charging : is_charging_t::is_discharging;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+      case board_t::board_M5ToughC5:
+      {
+        // The LGS4056 CHG_STAT is wired to IOE1 G3, low=charging / high=not charging.
+        // Near full charge it alternates with the charger's top-off cycle (~10-20s).
+        { /// with no battery the charger can still assert CHG_STAT briefly;
+          /// report "not charging" instead.
+          std::int8_t present = _batteryPresent();
+          if (present < 0) { return is_charging_t::charge_unknown; }
+          if (present == 0) { return is_charging_t::is_discharging; }
+        }
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, &level))
+        { // do not report an I2C failure as "charging"
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
 #endif
       default:
         return is_charging_t::charge_unknown;
@@ -2092,7 +2703,7 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 

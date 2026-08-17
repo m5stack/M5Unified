@@ -12,6 +12,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# supersede queued/running builds of the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.target }} (IDF ${{ matrix.idf_version }})
@@ -27,16 +32,23 @@ jobs:
             idf_version: "5.3"
           - target: esp32
             idf_version: "5.1.6"
+          - target: esp32
+            idf_version: "6.0.2"
           # ESP32-S3
           - target: esp32s3
             idf_version: "5.3"
           - target: esp32s3
             idf_version: "5.1.6"
+          - target: esp32s3
+            idf_version: "6.0.2"
           # ESP32-C3
           - target: esp32c3
             idf_version: "5.3"
           - target: esp32c3
             idf_version: "5.1.6"
+          # ESP32-C5 (IDF 5.5+ only)
+          - target: esp32c5
+            idf_version: "5.5.2"
           # ESP32-C6 (IDF 5.3+ only)
           - target: esp32c6
             idf_version: "5.3"

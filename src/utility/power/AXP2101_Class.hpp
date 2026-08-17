@@ -122,15 +122,30 @@ namespace m5
     bool isVBUS(void);
     bool getBatState(void);
 
+    /// The ADC of the AXP2101 covers these measurement points:
+    ///   VBAT , TS , VBUS , VSYS , TDIE
+    /// The getters below that fall outside this set return NaN, so that a caller can
+    /// tell an unavailable reading from a real zero with std::isnan().
+    /// Current is measured by a dedicated sense IC where the board provides one
+    /// ( ex. INA3221 on Core2 v1.1 , INA226 on M5Tab5 ) , and Power_Class reads that IC.
+
     float getBatteryVoltage(void);
+    /// @return NaN. This reading is not provided by the AXP2101.
     float getBatteryDischargeCurrent(void);
+    /// @return NaN. This reading is not provided by the AXP2101.
     float getBatteryChargeCurrent(void);
+    /// @return NaN. Derived from the battery current, which the AXP2101 does not provide.
     float getBatteryPower(void);
+    /// @return NaN. The AXP2101 takes its input from VBUS. ( see getVBUSVoltage )
     float getACINVoltage(void);
+    /// @return NaN. The AXP2101 takes its input from VBUS.
     float getACINCurrent(void);
     float getVBUSVoltage(void);
+    /// @return NaN. This reading is not provided by the AXP2101.
     float getVBUSCurrent(void);
     float getTSVoltage(void);
+    /// The VSYS voltage is returned, which is the equivalent measurement point on the
+    /// AXP2101 of the APS rail of the AXP192.
     float getAPSVoltage(void);
     float getInternalTemperature(void);
 

@@ -25,13 +25,7 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined ( CONFIG_IDF_TARGET_ESP32C6 ) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
- #if __has_include(<driver/i2s_std.h>)
-  #if __has_include(<hal/i2s_ll.h>)
-   #include <hal/i2s_ll.h>
-  #endif
- #endif
-#endif
+#include "m5unified_i2s.h"
 
 #if __has_include (<hal/dac_ll.h>)
 #include <hal/dac_types.h>
@@ -81,7 +75,7 @@ namespace m5
 
 #if __has_include(<driver/i2s_std.h>)
 
-  static i2s_chan_handle_t _i2s_handle[SOC_I2S_NUM] = { nullptr, };
+  static i2s_chan_handle_t _i2s_handle[M5UNIFIED_I2S_PORT_COUNT] = { nullptr, };
 
   static esp_err_t _i2s_start(i2s_port_t port) {
     if (_i2s_handle[port] == nullptr) { return ESP_FAIL; }
@@ -99,12 +93,13 @@ namespace m5
   {
     if (_i2s_handle[port] != nullptr) {
       auto res = i2s_del_channel(_i2s_handle[port]);
-      _i2s_handle[port] = nullptr;
+      /// Keep the handle when the deletion fails. (e.g. the channel is still running)
+      if (res == ESP_OK) { _i2s_handle[port] = nullptr; }
       return res;
     }
     return ESP_OK;
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)  
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// DACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
@@ -160,7 +155,7 @@ namespace m5
   {
     return i2s_driver_uninstall(port);
   }
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
   static esp_err_t _i2s_set_dac(i2s_port_t port, bool left_en, bool right_en) {
     if (port == I2S_NUM_0)
     { /// レジスタを操作してDACモードの設定を有効にする(I2S0のみ。I2S1はDAC,ADC非対応) ;
@@ -187,7 +182,7 @@ namespace m5
   {
     if (_cfg.pin_data_out < 0) { return ESP_FAIL; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     /// DACが使用できるのはI2Sポート0のみ。;
     if (_cfg.use_dac && _cfg.i2s_port != I2S_NUM_0) { return ESP_FAIL; }
 #endif
@@ -197,8 +192,9 @@ namespace m5
     chan_cfg.dma_desc_num = _cfg.dma_buf_count;
     chan_cfg.dma_frame_num = _cfg.dma_buf_len;
     chan_cfg.auto_clear = true;
-    _i2s_driver_uninstall(_cfg.i2s_port);
-    esp_err_t err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
+    esp_err_t err = _i2s_driver_uninstall(_cfg.i2s_port);
+    if (err != ESP_OK) { return err; }
+    err = i2s_new_channel(&chan_cfg, &_i2s_handle[_cfg.i2s_port], nullptr);
     if (err != ESP_OK) { return err; }
 
     i2s_std_config_t i2s_config;
@@ -208,8 +204,25 @@ namespace m5
 #else
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (spk_task での raw 分周
+    // 上書きを行わない)。ここで実レートを渡すことで、begin 中のクロック遷移が
+    // 一度きりになり、外付け codec (Tab5=ES8388) のロック失敗を防ぐ。
+    // クロック源既定 (minimum supported revision < 3 のビルドは XTAL 40MHz /
+    // rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+    i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate;
+    i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+#if defined (I2S_LL_DEFAULT_CLK_FREQ)
+    // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
+    // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+    if ((uint64_t)_cfg.sample_rate * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
+      i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
+    }
+#endif
+#else
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo || _cfg.buzzer) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -230,13 +243,19 @@ namespace m5
     i2s_config.gpio_cfg.mclk = (gpio_num_t)_cfg.pin_mck;
     i2s_config.gpio_cfg.din  = (gpio_num_t)I2S_PIN_NO_CHANGE;
     err = i2s_channel_init_std_mode(_i2s_handle[_cfg.i2s_port], &i2s_config);
+    if (err != ESP_OK)
+    {
+      _i2s_driver_uninstall(_cfg.i2s_port);
+      return err;
+    }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_dac)
     {
       bool left_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_26);
       bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
       err = _i2s_set_dac(_cfg.i2s_port, left_en, right_en);
+      if (err != ESP_OK) { _i2s_driver_uninstall(_cfg.i2s_port); }
     }
 #endif
 
@@ -279,7 +298,7 @@ namespace m5
     }
     if (err != ESP_OK) { return err; }
 
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (_cfg.use_dac)
     {
       bool right_en = _cfg.stereo || (_cfg.pin_data_out == GPIO_NUM_25);
@@ -378,19 +397,33 @@ namespace m5
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32S3 )
-    static constexpr uint32_t PLL_D2_CLK = 120*1000*1000; // 240 MHz/2
-#elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    static constexpr uint32_t PLL_D2_CLK = 20*1000*1000; // 20 MHz
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // クロックは _setup_i2s でドライバ管理により最終値に設定済み (実レート +
+    // 256fs、40MHz source ビルドの高レートのみ 128fs)。
+    // ドライバの分数分周 (a/b ≤ 511) は十分高精度のため、レート換算は公称値でよい。
+    const int32_t spk_sample_rate_x256 = self->_cfg.sample_rate * SAMPLERATE_MUL;
 #else
-    static constexpr uint32_t PLL_D2_CLK = 80*1000*1000; // 160 MHz/2
-#endif
+    static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
     uint32_t bits = (self->_cfg.use_dac) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
     uint32_t div_a, div_b, div_n;
     uint32_t div_m = 32 / bits; /// MCLKを使用しない場合、サンプリングレート誤差が少なくなるようにdiv_mを調整する;
     // MCLKを使用するデバイスに対応する場合には、div_mを使用してBCKとMCKの比率を調整する;
     if ((uint_fast16_t)self->_cfg.pin_mck < GPIO_NUM_MAX) {
       div_m = 8;
+    }
+
+    { /// 低サンプリングレートで分周値が n の上限 255 を超える場合、BCK 分周 (div_m) を
+      /// 引き上げてレンジ内に収める。これを行わないと n が飽和して実レートが大きく
+      /// ずれ (例: S3 の 12000Hz 指定で実 14649Hz)、リサンプラの補間歪みが生じる。
+      const uint64_t limit = 255ULL * bits * self->_cfg.sample_rate;
+      if (limit) {
+        uint32_t min_m = (uint32_t)((PLL_D2_CLK + limit - 1) / limit);
+        if (div_m < min_m) {
+          /// 63 は HW v1 (6bit フィールドに生値格納、最大 63) と HW v2 (divisor-1 を
+          /// 格納、単独なら 64 まで表現可) の両 raw レジスタ経路で安全な共通上限。
+          div_m = (min_m < 63) ? min_m : 63;
+        }
+      }
     }
 
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK, div_m * bits * self->_cfg.sample_rate);
@@ -400,17 +433,17 @@ namespace m5
 //  ESP_EARLY_LOGW("Speaker_Class", "sample rate:%d Hz = %d MHz/(%d+(%d/%d))/%d/%d = %d Hz", self->_cfg.sample_rate, PLL_D2_CLK / 1000000, div_n, div_b, div_a, div_m, bits, spk_sample_rate_x256 / SAMPLERATE_MUL);
 
     auto dev = &I2S0;
-#if SOC_I2S_NUM >= 2
-    if (i2s_port == i2s_port_t::I2S_NUM_1) { dev = &I2S1; }
-#if SOC_I2S_NUM >= 3
-    else if (i2s_port == i2s_port_t::I2S_NUM_2) { dev = &I2S2; }
-#if SOC_I2S_NUM >= 4
-    else if (i2s_port == i2s_port_t::I2S_NUM_3) { dev = &I2S3; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 2
+    if (i2s_port == (i2s_port_t)I2S_NUM_1) { dev = &I2S1; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 3
+    else if (i2s_port == (i2s_port_t)I2S_NUM_2) { dev = &I2S2; }
+#if M5UNIFIED_I2S_PORT_COUNT >= 4
+    else if (i2s_port == (i2s_port_t)I2S_NUM_3) { dev = &I2S3; }
 #endif
 #endif
 #endif
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C3 ) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined ( CONFIG_IDF_TARGET_ESP32C61 ) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32S3 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+#if defined (M5UNIFIED_I2S_HW_V2)
     // モノラル設定時、同じデータを左右両方に送信する設定
     if (!self->_cfg.stereo && !self->_cfg.use_dac && !self->_cfg.buzzer)
     {
@@ -418,9 +451,9 @@ namespace m5
       dev->tx_conf.tx_chan_equal = 1;
     }
 
-#if defined ( CONFIG_IDF_TARGET_ESP32C5 ) || defined (CONFIG_IDF_TARGET_ESP32C61) || defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    dev->tx_conf.tx_bck_div_num = div_m - 1;
-#else
+#if defined (M5UNIFIED_I2S_USE_LL)
+    i2s_ll_tx_set_bck_div_num(dev, div_m); // (the register location differs per chip; the HAL absorbs it)
+#else // ESP-IDF v4 HW v2 targets (ESP32-S3/C3): the HAL header is not C++-clean, write directly
     dev->tx_conf1.tx_bck_div_num = div_m - 1;
 #endif
 
@@ -445,7 +478,7 @@ namespace m5
       }
     }
 
-#if __has_include(<driver/i2s_std.h>)
+#if defined (M5UNIFIED_I2S_USE_LL)
     i2s_ll_tx_set_raw_clk_div(dev, div_n, div_x, div_y, div_b, yn1);
 #endif
 
@@ -469,12 +502,18 @@ namespace m5
     dev->tx_clkm_div_conf.tx_clkm_div_yn1 = yn1;
     dev->tx_clkm_conf.tx_clkm_div_num = div_n;
     dev->tx_clkm_conf.tx_clk_sel = 1;   // PLL_240M_CLK
-    dev->tx_clkm_conf.clk_en = 1;
+    dev->tx_clkm_conf.clk_en = 1;       // I2S module common clock gate (physically located in the TX register)
     dev->tx_clkm_conf.tx_clk_active = 1;
-
-    dev->tx_conf.tx_update = 1;
-    dev->tx_conf.tx_update = 0;
 #endif
+
+    // Latch the whole clock/format configuration at once. This is the same
+    // sequence as the HAL's i2s_ll_tx_update (the function itself does not exist
+    // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
+    // been synchronized into the I2S clock domain. The wait is deliberately
+    // unbounded to match the HAL implementation; the module clocks are already
+    // enabled by the driver at this point, so the bit always clears.
+    dev->tx_conf.tx_update = 1;
+    while (dev->tx_conf.tx_update) {} // wait for the hardware to clear the update bit
 
 #else
 
@@ -482,7 +521,11 @@ namespace m5
     dev->clkm_conf.clkm_div_a = div_a;
     dev->clkm_conf.clkm_div_b = div_b;
     dev->clkm_conf.clkm_div_num = div_n;
+#if defined (CONFIG_IDF_TARGET_ESP32S2)
+    dev->clkm_conf.clk_sel = 2; // PLL_160M ( 1=APLL )
+#else
     dev->clkm_conf.clka_en = 0; // APLL disable : PLL_160M
+#endif
 
     // If TX is not reset here, BCK polarity may be inverted.
     dev->conf.tx_reset = 1;
@@ -491,6 +534,7 @@ namespace m5
     dev->conf.tx_fifo_reset = 0;
 
 #endif
+#endif // !CONFIG_IDF_TARGET_ESP32P4 (raw クロック設定ブロック全体)
     // i2s_zero_dma_buffer(i2s_port);
 
     enum spk_i2s_state
@@ -564,7 +608,7 @@ namespace m5
 
           if (!retry)
           {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
             if (self->_cfg.use_dac)
             {
               flg_i2s_started = spk_i2s_stop;
@@ -594,7 +638,7 @@ namespace m5
       {
         if (flg_i2s_started == spk_i2s_stop)
         {
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
           if (self->_cfg.use_dac)
           {
             bool left_en = out_stereo || (self->_cfg.pin_data_out == GPIO_NUM_26);
@@ -633,40 +677,73 @@ namespace m5
         int ch_diff = ch_info->diff;
         size_t ch_index = ch_info->index;
 
-        wav_info_t* current_wav = &(ch_info->wavinfo[!ch_info->flip]);
-        wav_info_t* next_wav    = &(ch_info->wavinfo[ ch_info->flip]);
+        wav_info_t* current_wav = &(ch_info->current);
+        bool flip = ch_info->flip.load(std::memory_order_relaxed);
+        uint8_t next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
 
         size_t idx = 0;
 
-        if (current_wav->repeat == 0 || next_wav->stop_current)
+        if (current_wav->repeat == 0
+         || ((next_state & (wav_phase_mask | wav_state_stop_current)) == (wav_phase_published | wav_state_stop_current)))
         {
 label_next_wav:
-          bool clear_idx = (next_wav->repeat == 0
-                        || !next_wav->no_clear_index
-                        || (next_wav->data != current_wav->data));
-          current_wav->clear();
-          ch_info->flip = !ch_info->flip;
+          next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
+          if ((next_state & wav_phase_mask) == wav_phase_published
+           && ch_info->wavinfo[flip].state.compare_exchange_strong(next_state
+              , (uint8_t)((next_state & ~wav_phase_mask) | wav_phase_playing)
+              , std::memory_order_acquire, std::memory_order_relaxed))
+          { // the claim above is what makes the payload of the slot readable.
+            wav_info_t& incoming = ch_info->wavinfo[flip].info;
+            bool clear_idx = ((next_state & wav_state_stop_marker)
+                          || !incoming.no_clear_index
+                          || (incoming.data != current_wav->data));
+            *current_wav = incoming;
+            if (next_state & wav_state_stop_marker)
+            { // a pure stop: nothing to play. The slot itself is retired
+              // further below, once flip has moved off of it - freeing it
+              // here would let a writer claim it while flip still points at
+              // it, and the later retirement would wipe that claim out.
+              current_wav->clear();
+            }
+            // the finished (or cut) request goes back to the writers before
+            // flip moves, so a claim through the fresh flip cannot miss it;
+            // the wakeup comes last so a woken writer finds flip already moved.
+            ch_info->wavinfo[!flip].state.store(wav_phase_empty, std::memory_order_release);
+            ch_info->flip.store(!flip, std::memory_order_relaxed);
+            flip = !flip;
 #if !defined (SDL_h_)
-          xSemaphoreGive(self->_task_semaphore);
+            xSemaphoreGive(self->_task_semaphore);
 #endif
-          std::swap(current_wav, next_wav);
 
-          if (clear_idx)
-          {
-            ch_index = 0;
-            if (current_wav->repeat == 0)
+            if (clear_idx)
             {
-              self->_play_channel_bits.fetch_and(~(1 << ch));
-              if (current_wav->repeat == 0)
-              {
-                ch_info->diff = 0;
-                ch_info->index = 0;
-                continue;
-              }
-              self->_play_channel_bits.fetch_or(1 << ch);
+              ch_index = 0;
             }
           }
+          else if (current_wav->repeat != 0)
+          { // a writer snatched the request away first: the current sound
+            // stays until whatever they are publishing arrives.
+            goto label_play;
+          }
+          if (current_wav->repeat == 0)
+          {
+            ch_info->wavinfo[!flip].state.store(wav_phase_empty, std::memory_order_release);
+#if !defined (SDL_h_)
+            xSemaphoreGive(self->_task_semaphore);
+#endif
+            self->_play_channel_bits.fetch_and(~(1 << ch));
+            next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
+            if ((next_state & wav_phase_mask) != wav_phase_published)
+            { // nothing to do; a writer caught mid-publish raises the bit itself.
+              ch_info->diff = 0;
+              ch_info->index = 0;
+              continue;
+            }
+            self->_play_channel_bits.fetch_or(1 << ch);
+            goto label_next_wav;
+          }
         }
+label_play:
         auto data = (const uint8_t*)current_wav->data;
         const bool in_stereo = current_wav->is_stereo;
         const int32_t in_rate = current_wav->sample_rate_x256;
@@ -877,7 +954,17 @@ label_continue_sample:
             if (v2 < INT16_MIN) { v2 = INT16_MIN; }
             else if (v2 > INT16_MAX) { v2 = INT16_MAX; }
 
-            sound_buf32[idx >> 1] = v1 << 16 | (uint16_t)v2;
+#if defined (M5UNIFIED_I2S_HW_V2)
+            // I2S HW v2 (e.g. ESP32-S3) transmits the lower half-word of each 32-bit
+            // word first (memory order), so the earlier sample v1 goes to the lower
+            // half. Using the HW v1 layout here would swap every pair of samples on
+            // the wire, producing audible fs/2 image noise. (For mono output this
+            // corrupts the sample order; for stereo it swaps the L/R channels.)
+            sound_buf32[idx >> 1] = (int32_t)(((uint32_t)(uint16_t)v2 << 16) | (uint16_t)v1);
+#else
+            // I2S HW v1 (ESP32/ESP32-S2) transmits the upper half-word first.
+            sound_buf32[idx >> 1] = (int32_t)(((uint32_t)(uint16_t)v1 << 16) | (uint16_t)v2);
+#endif
           } while (++idx < data_length);
         }
 
@@ -900,7 +987,7 @@ label_continue_sample:
     SDL_CloseAudio();
 #else
     _i2s_stop(i2s_port);
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+#if defined (M5UNIFIED_I2S_ADC_DAC)
     if (self->_cfg.use_dac)
     {
       _i2s_set_dac(i2s_port, false, false);
@@ -915,7 +1002,23 @@ label_continue_sample:
 
   bool Speaker_Class::begin(void)
   {
-    if (_task_running) { return true; }
+    if (_begun.load(std::memory_order_acquire)) { return true; }
+
+    // Playback calls begin() lazily from whichever task gets there first,
+    // and _setup_i2s starts by uninstalling the port: two of these racing
+    // rip the live channel out from under the playback task. One caller
+    // goes through at a time; the others wait and find the work done.
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
+      vTaskDelay(1);
+#endif
+    }
+    if (_begun.load(std::memory_order_acquire)) { _begin_lock.store(false); return true; }
 
 #if !defined (SDL_h_)
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
@@ -930,32 +1033,41 @@ label_continue_sample:
       _task_running = true;
 #if defined (SDL_h_)
       _task_handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
+      res = (_task_handle != nullptr);
 #else
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
 
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core);
+        res = (pdPASS == xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle);
+        res = (pdPASS == xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
 #endif
+      // end() takes the driver and the callback back down; it still sees the
+      // class as running, which is what lets it do that.
+      if (!res) { end(); }
+      else { _begun.store(true, std::memory_order_release); }
     }
+    _begin_lock.store(false);
 
     return res;
   }
 
   void Speaker_Class::end(void)
   {
+    _begun.store(false, std::memory_order_release);
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     if (_task_running)
     {
+      // No stop() here: it would publish markers and notify a task that may
+      // already be tearing its handle down. The slots are reset below once
+      // the task is gone, which is all the stop would have achieved.
       _task_running = false;
-      stop();
       if (_task_handle)
       {
 #if defined (SDL_h_)
@@ -971,8 +1083,11 @@ label_continue_sample:
     for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
       auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[0].clear();
-      chinfo->wavinfo[1].clear();
+      chinfo->wavinfo[0].info.clear();
+      chinfo->wavinfo[0].state.store(wav_phase_empty);
+      chinfo->wavinfo[1].info.clear();
+      chinfo->wavinfo[1].state.store(wav_phase_empty);
+      chinfo->current.clear();
     }
 #if !defined (SDL_h_)
     _i2s_driver_uninstall(_cfg.i2s_port);
@@ -983,10 +1098,10 @@ label_continue_sample:
   {
     wav_info_t tmp;
     tmp.stop_current = 1;
+    uint8_t bits = _play_channel_bits.load();
     for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
-      auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[chinfo->flip] = tmp;
+      if (bits & (1 << ch)) { _set_next_wav(ch, tmp); }
     }
   }
 
@@ -996,12 +1111,11 @@ label_continue_sample:
     {
       stop();
     }
-    else
+    else if (_play_channel_bits.load() & (1 << ch))
     {
       wav_info_t tmp;
       tmp.stop_current = 1;
-      auto chinfo = &_ch_info[ch];
-      chinfo->wavinfo[chinfo->flip] = tmp;
+      _set_next_wav(ch, tmp);
     }
   }
 
@@ -1018,25 +1132,55 @@ label_continue_sample:
   {
     auto chinfo = &_ch_info[ch];
     uint8_t chmask = 1 << ch;
-    if (!wav.stop_current)
+    const uint8_t claimed = wav_phase_writing | ((wav.repeat == 0) ? wav_state_stop_marker : 0);
+    for (;;)
     {
-      while ((_play_channel_bits.load() & chmask) && (chinfo->wavinfo[chinfo->flip].repeat))
+      bool f = chinfo->flip.load(std::memory_order_relaxed);
+      auto slot = &(chinfo->wavinfo[f]);
+      uint8_t st = slot->state.load(std::memory_order_relaxed);
+      uint8_t phase = st & wav_phase_mask;
+      // a preempting request may take a queued one's place; anything else
+      // needs the slot back from the task first.
+      if (phase == wav_phase_empty || (wav.stop_current && phase == wav_phase_published))
       {
-        if (chinfo->wavinfo[!chinfo->flip].repeat == ~0u) { return false; }
+        if (slot->state.compare_exchange_strong(st, claimed
+            , std::memory_order_acquire, std::memory_order_relaxed))
+        {
+          // holding the claim pins flip: the task cannot adopt a slot in
+          // writing. So if flip already points elsewhere, this was the stale
+          // slot - put it back exactly as found and take the fresh target.
+          if (chinfo->flip.load(std::memory_order_relaxed) != f)
+          {
+            slot->state.store(st, std::memory_order_release);
+            continue;
+          }
+          slot->info = wav;
+          slot->state.store(wav_phase_published
+                          | (wav.stop_current      ? wav_state_stop_current : 0)
+                          | (wav.repeat == ~0u     ? wav_state_infinite     : 0)
+                          | (wav.repeat == 0       ? wav_state_stop_marker  : 0)
+                          , std::memory_order_release);
+          _play_channel_bits.fetch_or(chmask);
 #if !defined (SDL_h_)
-        xSemaphoreTake(_task_semaphore, 1);
-#else
-        SDL_Delay(1);
+          xTaskNotifyGive(_task_handle);
 #endif
+          return true;
+        }
+        continue; // lost the claim to whoever changed the state; they made
+                  // progress, so trying again right away cannot spin for long.
       }
-    }
-    chinfo->wavinfo[chinfo->flip] = wav;
-    _play_channel_bits.fetch_or(chmask);
-
+      if (!wav.stop_current
+       && ((chinfo->wavinfo[!f].state.load(std::memory_order_relaxed)
+            & (wav_phase_mask | wav_state_infinite)) == (wav_phase_playing | wav_state_infinite)))
+      { // never a turn behind an endless request.
+        return false;
+      }
 #if !defined (SDL_h_)
-    xTaskNotifyGive(_task_handle);
+      xSemaphoreTake(_task_semaphore, 1);
+#else
+      SDL_Delay(1);
 #endif
-    return true;
+    }
   }
 
   bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)

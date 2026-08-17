@@ -136,13 +136,20 @@ namespace m5
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
     void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
+    /// Value for micro_seconds of deepSleep / lightSleep, meaning "sleep without a timer wakeup".
+    /// The device sleeps until a wakeup pin or another wakeup source is triggered.
+    static constexpr std::uint64_t sleep_no_timer = ~0ull;
+
     /// ESP32 deepsleep
-    /// @param micro_seconds Number of micro seconds to wakeup.
-    void deepSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
+    /// @param micro_seconds Number of micro seconds to wakeup. 0 = do not sleep. sleep_no_timer = no timer wakeup.
+    /// @param touch_wakeup Enable wakeup by the wakeup pin of the device, if it has one.
+    /// @attention Waking up from deep sleep restarts the program from the beginning.
+    void deepSleep(std::uint64_t micro_seconds = sleep_no_timer, bool touch_wakeup = true);
 
     /// ESP32 lightsleep
-    /// @param micro_seconds Number of micro seconds to wakeup.
-    void lightSleep(std::uint64_t micro_seconds = 0, bool touch_wakeup = true);
+    /// @param micro_seconds Number of micro seconds to wakeup. 0 = do not sleep. sleep_no_timer = no timer wakeup.
+    /// @param touch_wakeup Enable wakeup by the wakeup pin of the device, if it has one.
+    void lightSleep(std::uint64_t micro_seconds = sleep_no_timer, bool touch_wakeup = true);
 
     /// Get the remaining battery power.
     /// @return 0-100 level
@@ -154,6 +161,7 @@ namespace m5
 
     /// set battery charge current
     /// @param max_mA milli ampere.
+    /// @note CoreMatrix selects the nearest supported maximum: 180 mA below 650 mA, otherwise 650 mA.
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     void setChargeCurrent(std::uint16_t max_mA);
 
@@ -168,15 +176,21 @@ namespace m5
 
     /// Get VBUS voltage
     /// @return VBUS voltage [mV] / -1=not supported model
-    /// @attention Only for models with AXP192 or AXP2101
+    /// @attention Only for models with AXP192, AXP2101, or M5PM1 VBUS monitoring
     int16_t getVBUSVoltage(void);
 
     /// Get battery voltage
     /// @return battery voltage [mV]
+    /// @attention Models with battery detection ( ex. CoreMatrix , ToughC5 )
+    /// return 0 when no battery is attached and -1 while the presence has
+    /// not been determined yet (shortly after boot).
     int16_t getBatteryVoltage(void);
 
     /// get battery current
     /// @return battery current [mA] ( +=charge / -=discharge )
+    /// @attention This reading comes from the hardware of the board: an AXP192, or a
+    /// dedicated current sense IC ( ex. Core2 v1.1 , M5Tab5 , M5PowerHub ).
+    /// Boards without either of them return 0.
     int32_t getBatteryCurrent(void);
 
     /// Get Ext Port voltage
@@ -230,12 +244,42 @@ namespace m5
     // secondery INA3221 for M5Station.
     INA3221_Class Ina3221[2] = { { 0x40 }, { 0x41 } };
 
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    M5PM1_Class M5pm1;
+#endif
+
 #endif
 
   private:
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
+
+#if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
+    /// Check whether a battery is actually attached (non-blocking).
+    /// @return 1=present / 0=absent / -1=not yet determined
+    std::int8_t _batteryPresent(void);
+    /// Read the raw charger CHG_STAT line. @return false=not readable
+    bool _readChargeStat(bool* level);
+    /// Whether the VBAT node is confirmed collapsed (false when unreadable).
+    bool _vbatNodeDown(void);
+    /// Battery presence. -1 = not yet determined.
+    std::int8_t _batt_present = -1;
+    /// Tick when charging last stopped (0 = at reset, which clears PWR_CFG).
+    std::uint32_t _chg_off_ms = 0;
+    /// Presence sampling state: last VBAT sample, CHG_STAT low since,
+    /// and evidence counters. 0 in the tick fields = no sample yet.
+    std::uint16_t _bp_last_mv = 0;
+    std::uint32_t _bp_last_ms = 0;
+    std::uint32_t _bp_chg_low_ms = 0;
+    std::uint8_t _bp_stable = 0;
+    std::uint8_t _bp_unstable = 0;
+    std::uint8_t _bp_low = 0;
+#endif
+
+    /// Release the wakeup pin so that it can be asserted again while sleeping.
+    /// @return true if the pin is released ( high ).
+    bool _releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok = nullptr);
     float _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;
@@ -245,6 +289,7 @@ namespace m5
 #if !defined (M5UNIFIED_PC_BUILD)
     uint8_t _batAdcCh;
     uint8_t _batAdcUnit;
+    uint8_t _batAdcPin = 255;
 #endif
   };
 }

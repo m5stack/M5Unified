@@ -23,6 +23,7 @@
 #endif
 
 #include <stdint.h>
+#include <atomic>
 
 #ifndef I2S_PIN_NO_CHANGE
 #define I2S_PIN_NO_CHANGE (-1)
@@ -92,7 +93,7 @@ namespace m5
     uint8_t task_pinned_core = -1;
 
     /// I2S port
-    i2s_port_t i2s_port = i2s_port_t::I2S_NUM_0;
+    i2s_port_t i2s_port = (i2s_port_t)I2S_NUM_0;
   };
 
   class Mic_Class
@@ -114,7 +115,7 @@ namespace m5
 
     /// now in recording or not.
     /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
-    size_t isRecording(void) const { return _is_recording ? ((bool)_rec_info[0].length) + ((bool)_rec_info[1].length) : 0; }
+    size_t isRecording(void) const volatile { return ((bool)_rec_info[0].length.load(std::memory_order_acquire)) + ((bool)_rec_info[1].length.load(std::memory_order_acquire)); }
 
     /// set recording sampling rate.
     /// @param sample_rate the sampling rate (Hz)
@@ -163,18 +164,28 @@ namespace m5
     struct recording_info_t
     {
       void* data = nullptr;
-      size_t length = 0;
+      /// The task takes a slot as soon as this is set, so it is stored last
+      /// with a release and loaded first with an acquire: that is what makes
+      /// the fields above visible to the task, and the recorded samples
+      /// visible to whoever waits for the slot to come back empty. It is also
+      /// why the slot cannot be copied as a whole.
+      std::atomic<size_t> length { 0 };
       size_t index = 0;
       bool is_stereo = false;
       bool is_16bit = false;
+
+      void clear(void);
     };
 
     recording_info_t _rec_info[2];
-    volatile bool _rec_flip = false;
+    /// Which of the two slots the next request goes into. The task moves it;
+    /// a writer picks it up once and stays with that slot.
+    std::atomic<bool> _rec_flip { false };
 
     static void mic_task(void* args);
 
     uint32_t _calc_rec_rate(void) const;
+    bool _begin_locked(void);
     esp_err_t _setup_i2s(void);
     bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool stereo);
 
@@ -186,7 +197,12 @@ namespace m5
 
     int32_t _offset = 0;
     volatile bool _task_running = false;
-    volatile bool _is_recording = false;
+    /// begin() runs from whichever task records first, and setup starts by
+    /// tearing the port down - so only one call may go through.
+    std::atomic<bool> _begin_lock { false };
+    /// True only once begin() has fully finished; the lock-free early return
+    /// keys on this, so a caller can never see a half-built port as ready.
+    std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else

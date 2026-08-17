@@ -11,6 +11,13 @@
 #include <soc/soc.h>
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
+#if __has_include (<soc/io_mux_reg.h>)
+#include <soc/io_mux_reg.h>
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+#include <esp_chip_info.h>
+#endif
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
  #if __has_include (<driver/touch_sens.h>)
@@ -32,6 +39,8 @@
  #endif
 
 #endif
+
+#include "utility/m5unified_i2s.h"
 
 #include "utility/led/LED_Strip_Class.hpp"
 #include "utility/led/LED_PMIC_Class.hpp"
@@ -111,6 +120,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5NanoC6     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_1 ,GPIO_NUM_0  }, // Grove shares the internal bus (level-shifted)
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
@@ -120,6 +131,9 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
+{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  }, // PortA は内部バスと同一 (レベルシフタ経由の物理分配)
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -153,9 +167,12 @@ static constexpr const uint8_t _pin_table_port_bc[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_17,GPIO_NUM_52, GPIO_NUM_7 ,GPIO_NUM_6  }, // Tab5
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5    , GPIO_NUM_1 ,GPIO_NUM_6  , GPIO_NUM_12,GPIO_NUM_11 },
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_16,GPIO_NUM_17 },
 { board_t::board_M5StackCore2 , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
+{ board_t::board_M5Tough      , GPIO_NUM_36,GPIO_NUM_26 , GPIO_NUM_13,GPIO_NUM_14 },
 { board_t::board_M5Paper      , GPIO_NUM_33,GPIO_NUM_26 , GPIO_NUM_19,GPIO_NUM_18 },
 { board_t::board_M5Station    , GPIO_NUM_35,GPIO_NUM_25 , GPIO_NUM_13,GPIO_NUM_14 },
 #endif
@@ -173,6 +190,7 @@ static constexpr const uint8_t _pin_table_port_de[][5] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_5 ,GPIO_NUM_13 },
 { board_t::board_M5StackCore2 , GPIO_NUM_34,GPIO_NUM_35 , GPIO_NUM_27,GPIO_NUM_19 },
@@ -198,13 +216,17 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix , GPIO_NUM_25, GPIO_NUM_27, GPIO_NUM_26, 255        , 255        , GPIO_NUM_28 },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5    , GPIO_NUM_9 , GPIO_NUM_7 , GPIO_NUM_8 , 255        , 255        , GPIO_NUM_10 },
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_19, 255        , 255        , GPIO_NUM_4  },
 { board_t::board_M5StackCore2 , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, 255        , 255        , GPIO_NUM_4  },
+{ board_t::board_M5Tough      , GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_38, 255        , 255        , GPIO_NUM_4  },
 { board_t::board_M5Paper      , GPIO_NUM_14, GPIO_NUM_12, GPIO_NUM_13, 255        , 255        , GPIO_NUM_4  },
 #endif
 { board_t::board_unknown      , 255        , 255        , 255        , 255        , 255        , 255         },
@@ -234,6 +256,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 { board_t::board_M5NanoH2     , GPIO_NUM_11 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 { board_t::board_M5Stack      , GPIO_NUM_15 },
 { board_t::board_M5StackCore2 , GPIO_NUM_25 },
@@ -262,6 +285,7 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 
 { board_t::board_M5StickCPlus2 , GPIO_NUM_4  },
@@ -347,8 +371,26 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
+{ board_t::board_M5CoreMatrix,
+  255        , GPIO_NUM_3 ,
+  255        , GPIO_NUM_4 ,
+  255        , 255        ,
+  GPIO_NUM_27, GPIO_NUM_5 ,
+  GPIO_NUM_26, GPIO_NUM_6 ,
+  GPIO_NUM_25, 255        ,
+  GPIO_NUM_10, GPIO_NUM_11,
+  GPIO_NUM_7 , GPIO_NUM_8 ,
+  GPIO_NUM_0 , GPIO_NUM_1 ,
+  GPIO_NUM_0 , GPIO_NUM_1 ,
+  GPIO_NUM_23, GPIO_NUM_22,
+  GPIO_NUM_24, GPIO_NUM_9 ,
+  255        , GPIO_NUM_29,
+  255        , 255        ,
+  255        , 255        ,
+},
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+#elif defined (CONFIG_IDF_TARGET_ESP32S2)
 #else
 { board_t::board_M5Stack  ,
   255        , GPIO_NUM_35,
@@ -368,6 +410,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   255        , 255        ,
 },
 { board_t::board_M5StackCore2,
+  255        , GPIO_NUM_35,
+  255        , GPIO_NUM_36,
+  255        , 255        ,
+  GPIO_NUM_23, GPIO_NUM_25,
+  GPIO_NUM_38, GPIO_NUM_26,
+  GPIO_NUM_18, 255        ,
+  GPIO_NUM_3 , GPIO_NUM_1 ,
+  GPIO_NUM_13, GPIO_NUM_14,
+  GPIO_NUM_21, GPIO_NUM_22,
+  GPIO_NUM_32, GPIO_NUM_33,
+  GPIO_NUM_27, GPIO_NUM_19,
+  GPIO_NUM_2 , GPIO_NUM_0 ,
+  255        , GPIO_NUM_34,
+  255        , 255        ,
+  255        , 255        ,
+},
+{ board_t::board_M5Tough,
   255        , GPIO_NUM_35,
   255        , GPIO_NUM_36,
   255        , 255        ,
@@ -691,19 +750,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       2,   49, 0x21,
       0
     };
-    static constexpr const uint8_t disabled_bulk_data[] = {
-      2,    8, 0x00, //set I2S slave mode
-      0
-    };
-    in_i2c_bulk_write(es8388_i2c_addr, enabled ? enabled_bulk_data : disabled_bulk_data);
-
     if (enabled)
-    { // AMP on
+    {
+      in_i2c_bulk_write(es8388_i2c_addr, enabled_bulk_data);
+      // AMP on
       M5.In_I2C.bitOn(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
     }
     else
-    { // AMP off
-      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
+    { // 正規の power-down シーケンス。end() は cb(false) を I2S 停止より先に呼ぶため、
+      // ここは MCLK/BCLK が生きているうちに実行される。旧実装 (reg8 のみ書き込み) では
+      // DAC 稼働状態のままクロックが絶たれ、次回 enable の reset が毎回異なる残留状態
+      // から行われて受信位相が begin ごとに不定になっていた。毎回同一の power-down
+      // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
+      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
+      M5.delay(1);                                                 // soft-ramp 遷移待ち
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
     }
 #endif
     return true;
@@ -1143,60 +1206,78 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   }
 
 #if defined (CONFIG_IDF_TARGET_ESP32) && SOC_TOUCH_SENSOR_SUPPORTED
-  static void _read_touch_pad(uint32_t* results, const touch_pad_t* channel, const size_t channel_count)
+  /// @param channel touch channel ids. (ESP-IDF v6 removed the touch_pad_t enum, so plain integers are used here)
+  /// @return true = all channels were read successfully.
+  static bool _read_touch_pad(uint32_t* results, const int* channel, const size_t channel_count)
   {
+    for (size_t i = 0; i < channel_count; ++i) { results[i] = 0; }
 #if defined ( TOUCH_SENSOR_DEFAULT_FILTER_CONFIG )
-    /* Handles of touch sensor */
-    touch_sensor_handle_t sens_handle = nullptr;
-    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM];
+    if (channel_count > TOUCH_TOTAL_CHAN_NUM) { return false; }
 
     /* Step 1: Create a new touch sensor controller handle with default sample configuration */
-    touch_sensor_sample_config_t sample_cfg;
+    touch_sensor_sample_config_t sample_cfg = {};
     sample_cfg.charge_duration_ms = 5.0f;
     sample_cfg.charge_volt_lim_h = TOUCH_VOLT_LIM_H_1V7;
     sample_cfg.charge_volt_lim_l = TOUCH_VOLT_LIM_L_0V5;
 
-    touch_sensor_config_t sens_cfg;
+    touch_sensor_config_t sens_cfg = {};
     sens_cfg.power_on_wait_us = 256;
     sens_cfg.meas_interval_us = 320.0;
     sens_cfg.intr_trig_mode = TOUCH_INTR_TRIG_ON_BELOW_THRESH;
     sens_cfg.intr_trig_group = TOUCH_INTR_TRIG_GROUP_BOTH;
     sens_cfg.sample_cfg_num = 1;
     sens_cfg.sample_cfg = &sample_cfg;
-    touch_sensor_new_controller(&sens_cfg, &sens_handle);
+    touch_sensor_handle_t sens_handle = nullptr;
+    if (touch_sensor_new_controller(&sens_cfg, &sens_handle) != ESP_OK) { return false; }
 
-    touch_channel_config_t chan_cfg;
+    touch_channel_config_t chan_cfg = {};
     chan_cfg.abs_active_thresh[0] = 1024;
     chan_cfg.charge_speed = TOUCH_CHARGE_SPEED_7;
     chan_cfg.init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT;
     chan_cfg.group = TOUCH_CHAN_TRIG_GROUP_BOTH;
-    for (int i = 0; i < channel_count; i++) {
-      touch_sensor_new_channel(sens_handle, channel[i], &chan_cfg, &chan_handle[i]);
+    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM] = { nullptr, };
+    size_t created = 0;
+    while (created < channel_count
+        && touch_sensor_new_channel(sens_handle, channel[created], &chan_cfg, &chan_handle[created]) == ESP_OK) {
+      ++created;
     }
-    touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
-    touch_sensor_config_filter(sens_handle, &filter_cfg);
-    touch_sensor_enable(sens_handle);
-    touch_sensor_trigger_oneshot_scanning(sens_handle, 64);
-    touch_sensor_disable(sens_handle);
-
-    for (int i = 0; i < channel_count; i++) {
-      touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]);
+    bool result = false;
+    if (created == channel_count) {
+      touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+      if (touch_sensor_config_filter(sens_handle, &filter_cfg) == ESP_OK) {
+        bool scanned = false;
+        if (touch_sensor_enable(sens_handle) == ESP_OK) {
+          scanned = (touch_sensor_trigger_oneshot_scanning(sens_handle, 64) == ESP_OK);
+          touch_sensor_disable(sens_handle);
+        }
+        if (scanned) {
+          result = true;
+          for (size_t i = 0; i < channel_count; i++) {
+            result &= (touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]) == ESP_OK);
+          }
+        }
+        // Passing nullptr releases the software filter timer. (del_controller does not)
+        touch_sensor_config_filter(sens_handle, nullptr);
+      }
     }
-    for (int i = 0; i < channel_count; i++) {
-      touch_sensor_del_channel(chan_handle[i]);
+    while (created) {
+      touch_sensor_del_channel(chan_handle[--created]);
     }
     touch_sensor_del_controller(sens_handle);
+    return result;
 #else
-    touch_pad_init();
+    if (touch_pad_init() != ESP_OK) { return false; }
+    bool result = true;
     for (size_t i = 0; i < channel_count; i++) {
-      touch_pad_config(channel[i], TOUCH_PAD_THRESHOLD_MAX);
+      result &= (touch_pad_config((touch_pad_t)channel[i], TOUCH_PAD_THRESHOLD_MAX) == ESP_OK);
     }
     for (size_t i = 0; i < channel_count; i++) {
-      uint16_t tmp;
-      touch_pad_read(channel[i], &tmp);
+      uint16_t tmp = 0;
+      result &= (touch_pad_read((touch_pad_t)channel[i], &tmp) == ESP_OK);
       results[i] = tmp;
     }
     touch_pad_deinit();
+    return result;
 #endif
   }
 #endif
@@ -1378,16 +1459,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
 */
               uint32_t results[2] = { 0, 0 };
-              static constexpr touch_pad_t s_channel_id[] = {
-                  TOUCH_PAD_NUM4, //Touch pad channel 4 is GPIO13(ESP32)
-                  TOUCH_PAD_NUM7, //Touch pad channel 7 is GPIO27(ESP32)
+              static constexpr int s_channel_id[] = {
+                  4, //Touch pad channel 4 is GPIO13(ESP32)
+                  7, //Touch pad channel 7 is GPIO27(ESP32)
               };
-              _read_touch_pad(results, s_channel_id, 2);
+              bool touch_ok = _read_touch_pad(results, s_channel_id, 2);
 
               int diff = (results[1] * 3 - results[0]);
               // M5_LOGV("G13 = %d / G27 = %d / diff = %d", results[0], results[1], diff);
-   // true==(Lite/ECHO) / false==AtomMatrix
-              if (diff >= 0)
+   // true==(Lite/ECHO) / false==AtomMatrix (on read failure, keep the AtomMatrix default)
+              if (touch_ok && diff >= 0)
 #else
 /*
   タッチセンサAPIが使えない場合の処理 (ESP-IDFのバージョンに依る)
@@ -1743,7 +1824,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
       else
-        board = board_t::board_M5StampP4;
+      {
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        board = chip_info.revision >= 300
+              ? board_t::board_M5StampP4X
+              : board_t::board_M5StampP4;
+      }
     }
 
 #endif
@@ -1765,6 +1852,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     i2c_port_t ex_port = I2C_NUM_0;
 #if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
+// M5GFX が LP_I2C 対応をコンパイルする条件と同一に保つこと
+// (条件を満たさない SDK では LP ポートを開けないため HP のまま運用する)
+#if defined (CONFIG_IDF_TARGET_ESP32C5) && defined ( SOC_LP_I2C_NUM ) && ( SOC_LP_I2C_NUM > 0 ) \
+ && __has_include ( <driver/i2c_master.h> ) && defined ( ESP_IDF_VERSION_VAL ) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+    if (board == board_t::board_M5ToughC5)
+    { /// 内部バス (G2/G3) は LP_I2C の固定パッドと一致するため LP ポートへ割り当てる。
+      /// PortA も同じバスの物理分配なので Ex_I2C は同ポートを共有し (初代 BASIC と
+      /// 同じ形)、HP の I2C0 は丸ごと空く。
+      in_port = LP_I2C_NUM_0;
+      ex_port = LP_I2C_NUM_0;
+    }
+#endif
 #else
     i2c_port_t in_port = I2C_NUM_1;
     if (in_scl == ex_scl && in_sda == ex_sda) {
@@ -1825,6 +1924,24 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PaperMono:
     case board_t::board_M5StopWatch:
       {
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      { /// LCD 電源/リセット/バックライトのほか TF 電源 (PYG6) と
+        /// TF カード検出 (PYG14) がこの IOE にぶら下がる
+        auto ioexp = new M5IOE1_Class;
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      { /// Controls the LED matrix / TF / Grove / buzzer power rails,
+        /// the charge current selector and the buzzer PWM.
         auto ioexp = new M5IOE1_Class;
         ioexp->begin();
         _io_expander[0].reset(ioexp);
@@ -2365,8 +2482,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       // set default speaker gain.
       spk_cfg.magnification = 16;
-#if defined SOC_I2S_NUM
-      spk_cfg.i2s_port = (i2s_port_t)(SOC_I2S_NUM - 1);
+#if defined M5UNIFIED_I2S_PORT_COUNT
+      spk_cfg.i2s_port = (i2s_port_t)(M5UNIFIED_I2S_PORT_COUNT - 1);
 #else
       spk_cfg.i2s_port = (i2s_port_t)(I2S_NUM_MAX - 1);
 #endif
@@ -2837,6 +2954,74 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
   }
 
+  bool M5Unified::_clearWakeupInterrupt(void)
+  {
+    bool res = true;
+    // A touch panel holds its INT asserted until the touch data is read. Every board that
+    // uses the touch INT as its wakeup pin therefore has to consume the data here.
+    // ( M5Paper = GPIO36 , M5PaperS3 = GPIO48 , Core2 / Tough = GPIO39 , CoreS3 = via AW9523 )
+    if (!_displays.empty() && _displays.front().touch())
+    { // Same source as Touch_Class, see Touch.begin() in _begin().
+      m5gfx::touch_point_t tp;
+      _displays.front().getTouchRaw(&tp, 1);
+    }
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    switch (getBoard())
+    {
+    case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackChan:
+      { // TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN -> I2C_INT -> GPIO21.
+        // The AW9523 reports input changes only, so releasing the touch INT is not enough:
+        // its input would stay in the touched state and a later touch would not produce
+        // any change, leaving the wakeup source dead.
+        uint8_t buf[2];
+        res = In_I2C.readRegister(aw9523_i2c_addr, 0x00, buf, sizeof(buf), 400000);
+      }
+      break;
+
+    default:
+      break;
+    }
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    switch (getBoard())
+    {
+    case board_t::board_M5ToughC5:
+      { // TOUCH_INT や RTC_INT は PM1 に集約され、PM1 の IRQ 出力 -> GPIO4 が
+        // 唯一の wakeup ピンになる。IRQ 出力は IRQ ステータス (0x40-0x42) が
+        // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
+        // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
+        // され続けるので、先に WAKE_SRC を消す。
+        res  = Power.M5pm1.clearWakeSource();
+        res &= Power.M5pm1.clearIRQStatus();
+      }
+      break;
+
+    default:
+      break;
+    }
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    switch (getBoard())
+    {
+    case board_t::board_M5CoreMatrix:
+      { // KEY and IMU wake events are funneled into the PM1, whose IRQ output
+        // (GPIO2) is the only wakeup pin. The IRQ output stays low until every
+        // IRQ status bit is cleared, so clear them here to release the pin.
+        // Clear WAKE_SRC first: while it is set, the WAKEUP bit of IRQ status 3
+        // keeps getting re-asserted.
+        res  = Power.M5pm1.clearWakeSource();
+        res &= Power.M5pm1.clearIRQStatus();
+      }
+      break;
+
+    default:
+      break;
+    }
+#endif
+    return res;
+  }
+
   bool M5Unified::_begin_rtc_imu(const config_t& cfg)
   {
     bool port_a_used = false;
@@ -2891,6 +3076,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       {
       case board_t::board_M5StackCore2:
       case board_t::board_M5Tough:
+      case board_t::board_M5ToughC5:
       case board_t::board_M5StackCoreS3SE:
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackChan:
@@ -3189,6 +3375,28 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
     }
 
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+
+    switch (_board)
+    {
+    case board_t::board_M5CoreMatrix:
+      /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW), not to the ESP,
+      /// so they are read by I2C polling. Skip the update on an I2C failure so
+      /// a bus error is not reported as a button press.
+      {
+        uint8_t in;
+        if (Power.M5pm1.getGPIOInputBits(&in))
+        {
+          use_rawstate_bits = 0b00111;
+          btn_rawstate_bits = (~in) & 0b00111;
+        }
+      }
+      break;
+
+    default:
+      break;
+    }
+
 #endif
 
     if (use_rawstate_bits) {
@@ -3199,7 +3407,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
     }
 
-#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3)
+#if defined (CONFIG_IDF_TARGET_ESP32) || defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
     if (_use_pmic_button)
     {
       Button_Class::button_state_t state = Button_Class::button_state_t::state_nochange;
@@ -3225,6 +3433,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
+    case board_t::board_M5ToughC5:
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackChan:

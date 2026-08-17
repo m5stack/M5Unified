@@ -36,4 +36,15 @@ typedef enum {
 } i2s_port_t;
 
 #endif
+
+#else // ESP_PLATFORM
+
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+/// ESP-IDF v6 removed the i2s_port_t enum. (I2S_NUM_x are provided as plain integer macros)
+typedef int i2s_port_t;
+ #endif
+#endif
+
 #endif
