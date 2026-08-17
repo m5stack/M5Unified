@@ -28,4 +28,21 @@ namespace m5
     date = rtc_date_t { datetime };
     time = rtc_time_t { datetime };
   }
+
+  bool RTC_Base::validateDateTime(const rtc_date_t* date, const rtc_time_t* time)
+  {
+    if (time && (time->seconds > 59 || time->seconds < 0
+              || time->minutes > 59 || time->minutes < 0
+              || time->hours   > 23 || time->hours   < 0))
+    {
+      return false;
+    }
+    if (date && (date->date  < 1 || date->date  > 31
+              || date->month < 1 || date->month > 12
+              || date->weekDay < 0 || date->weekDay > 6))
+    {
+      return false;
+    }
+    return true;
+  }
 }
