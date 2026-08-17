@@ -193,19 +193,21 @@ namespace m5
     return writeRegister(M5PM1_REG_PWM_FREQ_L, data, sizeof(data));
   }
 
-  bool M5PM1_Class::setPwmDuty(pwm_channel_t channel, std::uint8_t duty, bool polarity, bool enable)
+  bool M5PM1_Class::setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                                      pwm_polarity_t polarity, bool enable)
   {
     if (duty > 100) { return false; }
-    auto duty12 = static_cast<std::uint16_t>(static_cast<std::uint32_t>(duty) * 0x0FFF / 100);
+    auto duty12 = duty * 0x0FFF / 100;
     return setPwmDuty12bit(channel, duty12, polarity, enable);
   }
 
-  bool M5PM1_Class::setPwmDuty12bit(pwm_channel_t channel, std::uint16_t duty12, bool polarity, bool enable)
+  bool M5PM1_Class::setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                                    pwm_polarity_t polarity, bool enable)
   {
     if (!is_valid_pwm_channel(channel) || duty12 > 0x0FFF) { return false; }
     std::uint8_t high = static_cast<std::uint8_t>(duty12 >> 8);
     if (enable) { high |= M5PM1_PWM_ENABLE; }
-    if (polarity) { high |= M5PM1_PWM_POLARITY; }
+    if (polarity == pwm_polarity_t::inverted) { high |= M5PM1_PWM_POLARITY; }
     std::uint8_t data[2] = { static_cast<std::uint8_t>(duty12 & 0xFF), high };
     auto reg = static_cast<std::uint8_t>(M5PM1_REG_PWM0_L + static_cast<std::uint8_t>(channel) * 2);
     return writeRegister(reg, data, sizeof(data));

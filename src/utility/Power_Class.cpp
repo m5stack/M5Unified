@@ -287,7 +287,7 @@ namespace m5
       /// cannot be confirmed, the pin is left as a plain output driving low,
       /// which is silent whatever the retained PWM state is.
       bool pwm_off = false;
-      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, false, false)) && --retry; )
+      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false)) && --retry; )
       {
         m5gfx::delay(10);
       }
