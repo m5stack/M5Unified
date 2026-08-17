@@ -55,12 +55,12 @@ namespace m5
     , open_drain = 1
     };
 
-    /// PM1 power source status.
+    /// PM1 power source bitmap. Multiple values may be combined.
     enum pwr_src_t : std::uint8_t
-    { vin     = 0
-    , vinout  = 1
-    , battery = 2
-    , unknown = 3
+    { none    = 0
+    , vin     = 1 << 0
+    , vinout  = 1 << 1
+    , battery = 1 << 2
     };
 
     /// set BOOST/Grove 5V output enable.
@@ -82,7 +82,9 @@ namespace m5
     /// @param level true=high / false=low
     bool setLedEnLevel(bool level);
 
-    /// get current PM1 power source.
+    /// get the PM1 PWR_SRC bitmap.
+    /// bit0=5VIN valid, bit1=5VINOUT valid (0 while the 5V boost is enabled),
+    /// bit2=VBAT node valid. Multiple sources may be present simultaneously.
     pwr_src_t getPowerSource(void);
 
     /// get whether PWR_SRC reports the VBAT node rail as powered.

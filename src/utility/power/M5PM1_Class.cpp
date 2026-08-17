@@ -99,9 +99,8 @@ namespace m5
 
   M5PM1_Class::pwr_src_t M5PM1_Class::getPowerSource(void)
   {
-    if (!_init) { return unknown; }
-    auto src = readRegister8(M5PM1_REG_PWR_SRC) & 0x07;
-    return src <= static_cast<std::uint8_t>(battery) ? static_cast<pwr_src_t>(src) : unknown;
+    if (!_init) { return none; }
+    return static_cast<pwr_src_t>(readRegister8(M5PM1_REG_PWR_SRC) & 0x07);
   }
 
   bool M5PM1_Class::getVbatNodePowered(bool* powered)
