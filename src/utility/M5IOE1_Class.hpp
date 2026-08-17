@@ -46,9 +46,7 @@ namespace m5
 
     void setDirection(uint8_t pin, bool direction) override;
 
-    void enablePull(uint8_t pin, bool enablePull) override;
-
-    void setPullMode(uint8_t pin, bool mode) override;
+    bool setPullMode(uint8_t pin, gpio_pull_t mode) override;
 
     void setHighImpedance(uint8_t pin, bool enable) override;
 

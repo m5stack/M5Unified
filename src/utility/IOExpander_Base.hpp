@@ -12,6 +12,12 @@ namespace m5
   class IOExpander_Base : public I2C_Device
   {
   public:
+    enum gpio_pull_t : std::uint8_t
+    { pull_none = 0
+    , pull_up   = 1
+    , pull_down = 2
+    };
+
     IOExpander_Base(std::uint8_t i2c_addr, std::uint32_t freq = 400000, m5::I2C_Class* i2c = &m5::In_I2C)
       : I2C_Device(i2c_addr, freq, i2c)
     {}
@@ -20,10 +26,10 @@ namespace m5
     // false input, true output
     virtual void setDirection(uint8_t pin, bool direction) = 0;
 
-    virtual void enablePull(uint8_t pin, bool enablePull) = 0;
-
-    // false down, true up
-    virtual void setPullMode(uint8_t pin, bool mode) = 0;
+    /// Set the GPIO pull resistor state.
+    /// @return true only when the requested state was completely established;
+    /// false for an invalid pin, mode, or I2C failure.
+    virtual bool setPullMode(uint8_t pin, gpio_pull_t mode) = 0;
 
     virtual void setHighImpedance(uint8_t pin, bool enable) = 0;
 

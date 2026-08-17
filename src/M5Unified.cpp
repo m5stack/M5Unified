@@ -2170,13 +2170,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         auto& ioexp = getIOExpander(0);
         // lcd backlight
         ioexp.setDirection(7, true);
-        ioexp.setPullMode(7, false);
+        ioexp.setPullMode(7, IOExpander_Base::pull_down);
         ioexp.setHighImpedance(7, false);
   
         for (int i = 0; i < 3; ++i) {
           // button a~c
           ioexp.setDirection(i, false);
-          ioexp.setPullMode(i, true);
+          ioexp.setPullMode(i, IOExpander_Base::pull_up);
           ioexp.setHighImpedance(i, false);
         }
         delay(100);
