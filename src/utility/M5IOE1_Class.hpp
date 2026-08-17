@@ -59,9 +59,24 @@ namespace m5
     bool digitalRead(uint8_t pin) override;
     bool getInputLevel(uint8_t pin, bool* level) override;
 
-    void setPwmFrequency(std::uint16_t frequency);
+    /// set the PWM frequency in Hz.
+    /// @note The frequency is shared by all PWM channels, so changing it also
+    /// changes a channel that is already running.
+    bool setPwmFrequency(std::uint16_t frequency);
 
-    void setPwmDuty(std::uint8_t channel, std::uint16_t duty12, bool enable = true, bool polarity = false);
+    /// set PWM duty in percent.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty duty cycle in percent (0-100).
+    /// @param polarity false=normal / true=inverted.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty(pwm_channel_t channel, std::uint8_t duty, bool polarity = false, bool enable = true);
+
+    /// set PWM duty with 12-bit precision.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty12 duty cycle (0-4095).
+    /// @param polarity false=normal / true=inverted.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint16_t duty12, bool polarity = false, bool enable = true);
 
     void resetIrq() override;
 
