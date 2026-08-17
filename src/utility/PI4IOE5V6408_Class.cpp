@@ -29,22 +29,21 @@ void PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
     }
 }
 
-void PI4IOE5V6408_Class::enablePull(uint8_t pin, bool enablePull)
+bool PI4IOE5V6408_Class::setPullMode(uint8_t pin, gpio_pull_t mode)
 {
-    if (enablePull) {
-        bitOn(0x0B, 1 << pin);
-    } else {
-        bitOff(0x0B, 1 << pin);
-    }
-}
-
-// false down, true up
-void PI4IOE5V6408_Class::setPullMode(uint8_t pin, bool mode)
-{
-    if (mode) {
-        bitOn(0x0D, 1 << pin);
-    } else {
-        bitOff(0x0D, 1 << pin);
+    if (pin >= 8) return false;
+    const auto bit = 1 << pin;
+    switch (mode) {
+    case pull_none:
+        return bitOff(0x0B, bit);
+    case pull_up:
+        if (!bitOn(0x0D, bit)) { return false; }
+        return bitOn(0x0B, bit);
+    case pull_down:
+        if (!bitOff(0x0D, bit)) { return false; }
+        return bitOn(0x0B, bit);
+    default:
+        return false;
     }
 }
 

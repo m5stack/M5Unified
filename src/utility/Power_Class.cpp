@@ -321,7 +321,7 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         ioe1.setDirection(M5IOE1_Class::gpio1, false);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, true);
-        ioe1.enablePull(M5IOE1_Class::gpio1, false);
+        ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
       }
       M5pm1.setBatteryCharge(true);
@@ -465,7 +465,7 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         // M5IOE1_G3 -- Charge Status
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
-        ioe1.enablePull(M5IOE1_Class::gpio3, false);
+        ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
         // M5IOE1_G4 -- Boost Control
         ioe1.setHighImpedance(M5IOE1_Class::gpio4, false);
         ioe1.setDirection(M5IOE1_Class::gpio4, true);
@@ -874,13 +874,13 @@ namespace m5
       if (port_mask & ext_port_mask_t::ext_PA)
       {
         auto& ioe = M5.getIOExpander(0);
-        ioe.setPullMode(2, enable);
+        ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
         ioe.digitalWrite(2, enable);
       }
       if (port_mask & ext_port_mask_t::ext_USB)
       {
         auto& ioe = M5.getIOExpander(1);
-        ioe.setPullMode(3, enable);
+        ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
         ioe.digitalWrite(3, enable);
       }
       break;
@@ -2331,14 +2331,14 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         if (max_mA >= 650)
         {
-          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
           ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
           ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
           ioe1.setDirection(M5IOE1_Class::gpio3, true);
         }
         else
         {
-          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
           ioe1.setDirection(M5IOE1_Class::gpio3, false);
         }
       }

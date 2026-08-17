@@ -48,29 +48,27 @@ namespace m5
     direction ? bitOn(reg, bit) : bitOff(reg, bit);
   }
 
-  void M5IOE1_Class::enablePull(uint8_t pin, bool enablePull)
+  bool M5IOE1_Class::setPullMode(uint8_t pin, gpio_pull_t mode)
   {
-    if (!_isValidPin(pin)) { return; }
+    if (!_isValidPin(pin)) { return false; }
     const auto pu_reg = _regForPin(M5IOE1_REG_GPIO_PU_L, pin);
     const auto pd_reg = _regForPin(M5IOE1_REG_GPIO_PD_L, pin);
     const auto bit = _bitForPin(pin);
-    if (enablePull) {
-      bitOn(pu_reg, bit);
-    } else {
-      bitOff(pu_reg, bit);
-      bitOff(pd_reg, bit);
+    switch (mode) {
+    case pull_none: {
+      const bool pu_ok = bitOff(pu_reg, bit);
+      const bool pd_ok = bitOff(pd_reg, bit);
+      return pu_ok && pd_ok;
     }
-  }
-
-  void M5IOE1_Class::setPullMode(uint8_t pin, bool mode)
-  {
-    if (!_isValidPin(pin)) { return; }
-    const auto pu_reg = _regForPin(M5IOE1_REG_GPIO_PU_L, pin);
-    const auto pd_reg = _regForPin(M5IOE1_REG_GPIO_PD_L, pin);
-    const auto bit = _bitForPin(pin);
-    // false=pull-down, true=pull-up.
-    mode ? bitOn(pu_reg, bit) : bitOff(pu_reg, bit);
-    mode ? bitOff(pd_reg, bit) : bitOn(pd_reg, bit);
+    case pull_up:
+      if (!bitOff(pd_reg, bit)) { return false; }
+      return bitOn(pu_reg, bit);
+    case pull_down:
+      if (!bitOff(pu_reg, bit)) { return false; }
+      return bitOn(pd_reg, bit);
+    default:
+      return false;
+    }
   }
 
   void M5IOE1_Class::setHighImpedance(uint8_t pin, bool enable)
