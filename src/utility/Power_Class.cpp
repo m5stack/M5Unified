@@ -1822,8 +1822,11 @@ namespace m5
     if (adc_oneshot_read(adc_handle, (adc_channel_t)_batAdcCh, &raw) != ESP_OK) {
       return 0;
     }
+    // Callers treat the return value as millivolts; without a calibration
+    // scheme the raw count cannot be expressed in mV, so report 0 (unreadable)
+    // instead of a bogus value.
     if (adc_cali == nullptr) {
-      return raw;
+      return 0;
     }
     if (adc_cali_raw_to_voltage(adc_cali, raw, &volt) != ESP_OK) {
       return 0;
