@@ -5,6 +5,7 @@
 #define __M5_M5PM1_CLASS_H__
 
 #include "../I2C_Class.hpp"
+#include "../pwm_types.hpp"
 
 namespace m5
 {
@@ -129,16 +130,18 @@ namespace m5
     /// set PWM duty in percent.
     /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
     /// @param duty duty cycle in percent (0-100).
-    /// @param polarity false=normal / true=inverted.
+    /// @param polarity PWM output polarity.
     /// @param enable true=enable / false=disable.
-    bool setPwmDuty(pwm_channel_t channel, std::uint8_t duty, bool polarity = false, bool enable = true);
+    bool setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                           pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
     /// set PWM duty with 12-bit precision.
     /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
     /// @param duty12 duty cycle (0-4095).
-    /// @param polarity false=normal / true=inverted.
+    /// @param polarity PWM output polarity.
     /// @param enable true=enable / false=disable.
-    bool setPwmDuty12bit(pwm_channel_t channel, std::uint16_t duty12, bool polarity = false, bool enable = true);
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                         pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
     /// clear PM1 wake source bits selected by mask.
     bool clearWakeSource(std::uint8_t mask = 0x7F);

@@ -5,6 +5,7 @@
 #define __M5_M5IOE1_CLASS_H__
 
 #include "IOExpander_Base.hpp"
+#include "pwm_types.hpp"
 
 namespace m5
 {
@@ -59,7 +60,21 @@ namespace m5
 
     void setPwmFrequency(std::uint16_t frequency);
 
-    void setPwmDuty(std::uint8_t channel, std::uint16_t duty12, bool enable = true, bool polarity = false);
+    /// set PWM duty in percent.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty duty cycle in percent (0-100).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                           pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
+
+    /// set PWM duty with 12-bit precision.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty12 duty cycle (0-4095).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                         pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
     void resetIrq() override;
 

@@ -287,7 +287,7 @@ namespace m5
       /// cannot be confirmed, the pin is left as a plain output driving low,
       /// which is silent whatever the retained PWM state is.
       bool pwm_off = false;
-      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, false, false)) && --retry; )
+      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false)) && --retry; )
       {
         m5gfx::delay(10);
       }
@@ -402,7 +402,7 @@ namespace m5
         // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
         ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
         ioe1.setDirection(M5IOE1_Class::gpio9, true);
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);  // PWM off at boot
+        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);  // PWM off at boot
       }
       break;
 
@@ -2780,13 +2780,13 @@ namespace m5
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
       auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
       if (level == 0) {
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);
+        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
       } else {
         // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
         ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
         ioe1.setDirection(M5IOE1_Class::gpio9, true);
         uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, duty12);
+        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
       }
       return;
     }
