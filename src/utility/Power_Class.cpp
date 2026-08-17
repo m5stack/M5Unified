@@ -275,6 +275,35 @@ namespace m5
       _wakeupPin = GPIO_NUM_4;
       /// bring up the PM1 early so its status registers are readable below.
       M5pm1.begin();
+      /// GPIO4 drives the buzzer through PM1 PWM channel 1. The PM1 keeps
+      /// running across ESP resets and retains its PWM state, so put the
+      /// channel off at boot, then normalize the pin before selecting its PWM
+      /// function. Stopping the channel before sleep is left to the caller:
+      /// the PM1 stays powered while the ESP sleeps, so the application may
+      /// intend the PWM output to remain active, which makes it application
+      /// policy rather than board initialization.
+      /// Selecting the PWM function is what makes a retained duty audible
+      /// again, so it is only done once the channel is known to be off. If that
+      /// cannot be confirmed, the pin is left as a plain output driving low,
+      /// which is silent whatever the retained PWM state is.
+      bool pwm_off = false;
+      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, false, false)) && --retry; )
+      {
+        m5gfx::delay(10);
+      }
+      M5pm1.setGPIODrive(M5PM1_Class::gpio4, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio4, M5PM1_Class::pull_none);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio4, false);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::output);
+      if (pwm_off)
+      {
+        M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::special);
+      }
+      else
+      {
+        M5_LOGE("PM1 PWM ch1 could not be turned off. Leaving GPIO4 as a low output.");
+        M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+      }
       /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
       /// いたファームの設定に依存しないよう IRQ 関連を初期化する
       M5pm1.clearWakeSource();
