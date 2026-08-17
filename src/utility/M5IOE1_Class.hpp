@@ -58,7 +58,10 @@ namespace m5
     bool digitalRead(uint8_t pin) override;
     bool getInputLevel(uint8_t pin, bool* level) override;
 
-    void setPwmFrequency(std::uint16_t frequency);
+    /// set the PWM frequency in Hz.
+    /// @note The frequency is shared by all PWM channels, so changing it also
+    /// changes a channel that is already running.
+    bool setPwmFrequency(std::uint16_t frequency);
 
     /// set PWM duty in percent.
     /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
