@@ -109,10 +109,10 @@ namespace m5
     return true;
   }
 
-  void M5IOE1_Class::setPwmFrequency(std::uint16_t frequency)
+  bool M5IOE1_Class::setPwmFrequency(std::uint16_t frequency)
   {
     std::uint8_t data[2] = { static_cast<std::uint8_t>(frequency & 0xFF), static_cast<std::uint8_t>(frequency >> 8) };
-    writeRegister(M5IOE1_REG_PWM_FREQ_L, data, sizeof(data));
+    return writeRegister(M5IOE1_REG_PWM_FREQ_L, data, sizeof(data));
   }
 
   bool M5IOE1_Class::setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
