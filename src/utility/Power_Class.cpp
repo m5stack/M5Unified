@@ -2423,7 +2423,9 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
-        return 1000.0f * Ina226.getShuntCurrent();
+        // The shunt is wired so that charge current reads negative; invert to
+        // match the documented convention (+ = charge / - = discharge).
+        return -1000.0f * Ina226.getShuntCurrent();
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
