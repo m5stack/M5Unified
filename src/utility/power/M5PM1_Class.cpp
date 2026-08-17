@@ -30,6 +30,8 @@ namespace m5
   static constexpr const uint8_t M5PM1_REG_VBAT_L      = 0x22;
   static constexpr const uint8_t M5PM1_REG_VIN_L       = 0x24;
   static constexpr const uint8_t M5PM1_REG_5VOUT_L     = 0x26;
+  static constexpr const uint8_t M5PM1_REG_PWM0_L      = 0x30;
+  static constexpr const uint8_t M5PM1_REG_PWM_FREQ_L  = 0x34;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS1 = 0x40;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS2 = 0x41;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS3 = 0x42;
@@ -43,6 +45,8 @@ namespace m5
   static constexpr const uint8_t M5PM1_PWR_CFG_BOOST_EN = 1 << 3;
   static constexpr const uint8_t M5PM1_PWR_CFG_LED_EN   = 1 << 4;
   static constexpr const uint8_t M5PM1_SYS_CMD_SHUTDOWN = 0xA1;
+  static constexpr const uint8_t M5PM1_PWM_ENABLE       = 1 << 4;
+  static constexpr const uint8_t M5PM1_PWM_POLARITY     = 1 << 5;
 
   static constexpr bool is_valid_gpio(M5PM1_Class::gpio_t pin)
   {
@@ -52,6 +56,11 @@ namespace m5
   static constexpr std::uint8_t gpio_num(M5PM1_Class::gpio_t pin)
   {
     return static_cast<std::uint8_t>(pin);
+  }
+
+  static constexpr bool is_valid_pwm_channel(M5PM1_Class::pwm_channel_t channel)
+  {
+    return static_cast<std::uint8_t>(channel) <= M5PM1_Class::pwm_ch1;
   }
 
   bool M5PM1_Class::begin(void)
@@ -173,6 +182,33 @@ namespace m5
   {
     if (!_init || !is_valid_gpio(pin)) { return false; }
     return readRegister8(M5PM1_REG_GPIO_OUT) & (1 << gpio_num(pin));
+  }
+
+  bool M5PM1_Class::setPwmFrequency(std::uint16_t frequency)
+  {
+    std::uint8_t data[2] =
+    { static_cast<std::uint8_t>(frequency & 0xFF)
+    , static_cast<std::uint8_t>(frequency >> 8)
+    };
+    return writeRegister(M5PM1_REG_PWM_FREQ_L, data, sizeof(data));
+  }
+
+  bool M5PM1_Class::setPwmDuty(pwm_channel_t channel, std::uint8_t duty, bool polarity, bool enable)
+  {
+    if (duty > 100) { return false; }
+    auto duty12 = static_cast<std::uint16_t>(static_cast<std::uint32_t>(duty) * 0x0FFF / 100);
+    return setPwmDuty12bit(channel, duty12, polarity, enable);
+  }
+
+  bool M5PM1_Class::setPwmDuty12bit(pwm_channel_t channel, std::uint16_t duty12, bool polarity, bool enable)
+  {
+    if (!is_valid_pwm_channel(channel) || duty12 > 0x0FFF) { return false; }
+    std::uint8_t high = static_cast<std::uint8_t>(duty12 >> 8);
+    if (enable) { high |= M5PM1_PWM_ENABLE; }
+    if (polarity) { high |= M5PM1_PWM_POLARITY; }
+    std::uint8_t data[2] = { static_cast<std::uint8_t>(duty12 & 0xFF), high };
+    auto reg = static_cast<std::uint8_t>(M5PM1_REG_PWM0_L + static_cast<std::uint8_t>(channel) * 2);
+    return writeRegister(reg, data, sizeof(data));
   }
 
   bool M5PM1_Class::clearWakeSource(std::uint8_t mask)
