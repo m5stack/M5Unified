@@ -739,7 +739,11 @@ label_next_wav:
             { // nothing to do; a writer caught mid-publish raises the bit itself.
               ch_info->diff = 0;
               ch_info->index = 0;
-              if (flush_partial && data_length < idx) { data_length = idx; }
+              if (flush_partial)
+              { // Keep I2S words aligned and avoid a trailing half-word on HW v1.
+                const size_t flush_length = (idx + 1) & ~size_t{1};
+                if (data_length < flush_length) { data_length = flush_length; }
+              }
               continue;
             }
             self->_play_channel_bits.fetch_or(1 << ch);
