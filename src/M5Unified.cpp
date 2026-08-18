@@ -481,7 +481,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     while (*bulk_data) {
       uint8_t len = *bulk_data++;
       uint8_t r = retry + 1;
-      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { M5.delay(1); }
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { m5gfx::delay(1); }
       bulk_data += len;
     }
   }
@@ -764,7 +764,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
       M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
       M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
-      M5.delay(1);                                                 // soft-ramp 遷移待ち
+      m5gfx::delay(1);                                             // soft-ramp 遷移待ち
       M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
       M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
     }
