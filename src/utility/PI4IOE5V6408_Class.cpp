@@ -20,12 +20,12 @@ bool PI4IOE5V6408_Class::begin()
 }
 
 // false input, true output
-void PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
+bool PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
 {
     if (direction) {
-        bitOn(0x03, 1 << pin); // Output, set 1
+        return bitOn(0x03, 1 << pin); // Output, set 1
     } else {
-        bitOff(0x03, 1 << pin); // Input, set 0
+        return bitOff(0x03, 1 << pin); // Input, set 0
     }
 }
 
@@ -47,12 +47,12 @@ bool PI4IOE5V6408_Class::setPullMode(uint8_t pin, gpio_pull_t mode)
     }
 }
 
-void PI4IOE5V6408_Class::setHighImpedance(uint8_t pin, bool enable)
+bool PI4IOE5V6408_Class::setHighImpedance(uint8_t pin, bool enable)
 {
     if (enable) {
-        bitOn(0x07, 1 << pin);
+        return bitOn(0x07, 1 << pin);
     } else {
-        bitOff(0x07, 1 << pin);
+        return bitOff(0x07, 1 << pin);
     }
 }
 
@@ -62,12 +62,12 @@ bool PI4IOE5V6408_Class::getWriteValue(uint8_t pin)
     return (data & (1 << pin)) != 0;
 }
 
-void PI4IOE5V6408_Class::digitalWrite(uint8_t pin, bool level)
+bool PI4IOE5V6408_Class::digitalWrite(uint8_t pin, bool level)
 {
     if (level) {
-        bitOn(0x05, 1 << pin);
+        return bitOn(0x05, 1 << pin);
     } else {
-        bitOff(0x05, 1 << pin);
+        return bitOff(0x05, 1 << pin);
     }
 }
 
@@ -77,18 +77,19 @@ bool PI4IOE5V6408_Class::digitalRead(uint8_t pin)
     return (data & (1 << pin)) != 0;
 }
 
-void PI4IOE5V6408_Class::resetIrq()
+bool PI4IOE5V6408_Class::resetIrq()
 {
-    readRegister8(0x13);
+    uint8_t value;
+    return readRegister(0x13, &value, 1);
 }
 
-void PI4IOE5V6408_Class::disableIrq()
+bool PI4IOE5V6408_Class::disableIrq()
 {
-    writeRegister8(0x11, 0B11111111);
+    return writeRegister8(0x11, 0B11111111);
 }
 
-void PI4IOE5V6408_Class::enableIrq()
+bool PI4IOE5V6408_Class::enableIrq()
 {
-    writeRegister8(0x11, 0x0);
+    return writeRegister8(0x11, 0x0);
 }
 }

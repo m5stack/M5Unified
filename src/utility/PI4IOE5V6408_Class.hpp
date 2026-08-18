@@ -31,23 +31,23 @@ namespace m5
     bool begin();
 
     // false input, true output
-    void setDirection(uint8_t pin, bool direction) override;
+    bool setDirection(uint8_t pin, bool direction) override;
 
     bool setPullMode(uint8_t pin, gpio_pull_t mode) override;
 
-    void setHighImpedance(uint8_t pin, bool enable) override;
+    bool setHighImpedance(uint8_t pin, bool enable) override;
 
     bool getWriteValue(uint8_t pin) override;
 
-    void digitalWrite(uint8_t pin, bool level) override;
+    bool digitalWrite(uint8_t pin, bool level) override;
 
     bool digitalRead(uint8_t pin) override;
 
-    void resetIrq() override;
+    bool resetIrq() override;
 
-    void disableIrq() override;
+    bool disableIrq() override;
 
-    void enableIrq() override;
+    bool enableIrq() override;
   };
 }
 
