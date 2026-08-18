@@ -203,7 +203,8 @@ namespace m5
 
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
-    /// @attention Only for models with AXP192 or AXP2101
+    /// @attention Only for models with AXP192, AXP2101, or M5PM1.
+    /// @attention M5PM1 reports only 0 or 2.
     /// @attention Once this function is called, the value is reset to 0, and the next time it is pressed on, the value changes.
     uint8_t getKeyState(void);
 
