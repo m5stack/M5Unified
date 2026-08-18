@@ -22,6 +22,7 @@ bool PI4IOE5V6408_Class::begin()
 // false input, true output
 bool PI4IOE5V6408_Class::setDirection(uint8_t pin, bool direction)
 {
+    if (pin >= 8) { return false; }
     if (direction) {
         return bitOn(0x03, 1 << pin); // Output, set 1
     } else {
@@ -49,6 +50,7 @@ bool PI4IOE5V6408_Class::setPullMode(uint8_t pin, gpio_pull_t mode)
 
 bool PI4IOE5V6408_Class::setHighImpedance(uint8_t pin, bool enable)
 {
+    if (pin >= 8) { return false; }
     if (enable) {
         return bitOn(0x07, 1 << pin);
     } else {
@@ -64,6 +66,7 @@ bool PI4IOE5V6408_Class::getWriteValue(uint8_t pin)
 
 bool PI4IOE5V6408_Class::digitalWrite(uint8_t pin, bool level)
 {
+    if (pin >= 8) { return false; }
     if (level) {
         return bitOn(0x05, 1 << pin);
     } else {

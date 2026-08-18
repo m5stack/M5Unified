@@ -49,6 +49,8 @@ namespace m5
 
     bool setPullMode(uint8_t pin, gpio_pull_t mode) override;
 
+    /// On the M5IOE1 this selects the drive mode (open-drain), which keeps
+    /// sinking the pin while the output latch is low; it is not a disconnect.
     bool setHighImpedance(uint8_t pin, bool enable) override;
 
     bool getWriteValue(uint8_t pin) override;
