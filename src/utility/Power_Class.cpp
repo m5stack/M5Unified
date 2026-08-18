@@ -221,6 +221,8 @@ namespace m5
       _wakeupPin = GPIO_NUM_2;
       /// bring up the PM1 early so its status registers are readable below.
       M5pm1.begin();
+      // Enable the PM1 5V boost output (MBUS 5V and 3.3V)
+      M5pm1.setExtOutput(true);
       /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
