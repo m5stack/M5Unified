@@ -682,6 +682,7 @@ namespace m5
         uint8_t next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
 
         size_t idx = 0;
+        bool flush_partial = false;
 
         if (current_wav->repeat == 0
          || ((next_state & (wav_phase_mask | wav_state_stop_current)) == (wav_phase_published | wav_state_stop_current)))
@@ -703,6 +704,7 @@ label_next_wav:
               // further below, once flip has moved off of it - freeing it
               // here would let a writer claim it while flip still points at
               // it, and the later retirement would wipe that claim out.
+              flush_partial = false;
               current_wav->clear();
             }
             // the finished (or cut) request goes back to the writers before
@@ -737,6 +739,7 @@ label_next_wav:
             { // nothing to do; a writer caught mid-publish raises the bit itself.
               ch_info->diff = 0;
               ch_info->index = 0;
+              if (flush_partial && data_length < idx) { data_length = idx; }
               continue;
             }
             self->_play_channel_bits.fetch_or(1 << ch);
@@ -768,6 +771,7 @@ label_wav_end:
             current_wav->repeat = --repeat;
             if (repeat == 0)
             {
+              flush_partial = true;
               goto label_next_wav;
             }
           }
