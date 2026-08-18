@@ -125,6 +125,8 @@ namespace m5
     /// set the PWM frequency in Hz.
     /// @note The frequency is shared by both PWM channels, so changing it also
     /// changes a channel that is already running.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
     bool setPwmFrequency(std::uint16_t frequency);
 
     /// set PWM duty in percent.
@@ -132,6 +134,8 @@ namespace m5
     /// @param duty duty cycle in percent (0-100).
     /// @param polarity PWM output polarity.
     /// @param enable true=enable / false=disable.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
     bool setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
                            pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
@@ -140,6 +144,8 @@ namespace m5
     /// @param duty12 duty cycle (0-4095).
     /// @param polarity PWM output polarity.
     /// @param enable true=enable / false=disable.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
     bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
                          pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
