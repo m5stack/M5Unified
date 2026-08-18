@@ -304,7 +304,7 @@ namespace m5
     uint8_t pending = irq3 & ((1 << 0) | (1 << 2));
     if (!pending) return 0;
     if (!writeRegister8(M5PM1_REG_IRQ_STATUS3, static_cast<uint8_t>(~pending & 0x07))) return 0;
-    if (pending & (1 << 2)) { _pek_double_pending = true; }
+    _pek_double_pending = (pending & (1 << 2)) != 0;
     return 2;
   }
 

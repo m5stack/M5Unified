@@ -200,12 +200,12 @@ namespace m5
     bool isCharging(void);
 
     // get setting value of battery charge current
-    /// @return milli ampere. (8 - 512). 0=unknown
+    /// @return always 0.
     /// @note The PM1 register map exposes no charge current register; this is a permanent stub returning 0.
     std::uint16_t getChargeCurrent(void);
 
     // get setting value of battery charge voltage
-    /// @return milli volt. (3600 - 4545). 0=unknown
+    /// @return always 0.
     /// @note The PM1 register map exposes no charge voltage register; this is a permanent stub returning 0.
     std::uint16_t getChargeVoltage(void);
 
@@ -218,6 +218,8 @@ namespace m5
 
     /// Returns whether the most recently reported click (getPekPress() == 2)
     /// was a double click, then clears the flag.
+    /// Call from the task that polls getPekPress() (typically right after
+    /// M5.update()); the flag is not synchronized across tasks.
     bool wasPekDoubleClicked(void);
 
     /// get VIN voltage.
