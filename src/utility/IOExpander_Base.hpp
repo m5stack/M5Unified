@@ -18,24 +18,34 @@ namespace m5
     , pull_down = 2
     };
 
+    /// Mutating methods report their result: the written value is not read
+    /// back, and read-modify-write accesses are not atomic against
+    /// concurrent access to the same register.
+
     IOExpander_Base(std::uint8_t i2c_addr, std::uint32_t freq = 400000, m5::I2C_Class* i2c = &m5::In_I2C)
       : I2C_Device(i2c_addr, freq, i2c)
     {}
     IOExpander_Base(const IOExpander_Base&) = delete;
 
     // false input, true output
-    virtual void setDirection(uint8_t pin, bool direction) = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false for an invalid pin or I2C failure.
+    virtual bool setDirection(uint8_t pin, bool direction) = 0;
 
     /// Set the GPIO pull resistor state.
-    /// @return true only when the requested state was completely established;
+    /// @return true when every required register access was acknowledged;
     /// false for an invalid pin, mode, or I2C failure.
     virtual bool setPullMode(uint8_t pin, gpio_pull_t mode) = 0;
 
-    virtual void setHighImpedance(uint8_t pin, bool enable) = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false for an invalid pin or I2C failure.
+    virtual bool setHighImpedance(uint8_t pin, bool enable) = 0;
 
     virtual bool getWriteValue(uint8_t pin) = 0;
 
-    virtual void digitalWrite(uint8_t pin, bool level) = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false for an invalid pin or I2C failure.
+    virtual bool digitalWrite(uint8_t pin, bool level) = 0;
 
     virtual bool digitalRead(uint8_t pin) = 0;
 
@@ -48,11 +58,17 @@ namespace m5
       return false;
     }
 
-    virtual void resetIrq() = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false on I2C failure.
+    virtual bool resetIrq() = 0;
 
-    virtual void disableIrq() = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false on I2C failure.
+    virtual bool disableIrq() = 0;
 
-    virtual void enableIrq() = 0;
+    /// @return true when every required register access was acknowledged;
+    /// false on I2C failure.
+    virtual bool enableIrq() = 0;
   };
 }
 

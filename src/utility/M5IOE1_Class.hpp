@@ -45,15 +45,17 @@ namespace m5
 
     bool begin();
 
-    void setDirection(uint8_t pin, bool direction) override;
+    bool setDirection(uint8_t pin, bool direction) override;
 
     bool setPullMode(uint8_t pin, gpio_pull_t mode) override;
 
-    void setHighImpedance(uint8_t pin, bool enable) override;
+    /// On the M5IOE1 this selects the drive mode (open-drain), which keeps
+    /// sinking the pin while the output latch is low; it is not a disconnect.
+    bool setHighImpedance(uint8_t pin, bool enable) override;
 
     bool getWriteValue(uint8_t pin) override;
 
-    void digitalWrite(uint8_t pin, bool level) override;
+    bool digitalWrite(uint8_t pin, bool level) override;
 
     bool digitalRead(uint8_t pin) override;
     bool getInputLevel(uint8_t pin, bool* level) override;
@@ -79,11 +81,11 @@ namespace m5
     bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
                          pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
-    void resetIrq() override;
+    bool resetIrq() override;
 
-    void disableIrq() override;
+    bool disableIrq() override;
 
-    void enableIrq() override;
+    bool enableIrq() override;
 
   private:
     static bool _isValidPin(uint8_t pin) { return pin < 14; }

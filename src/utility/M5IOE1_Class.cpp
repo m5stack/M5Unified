@@ -39,13 +39,13 @@ namespace m5
     return _init;
   }
 
-  void M5IOE1_Class::setDirection(uint8_t pin, bool direction)
+  bool M5IOE1_Class::setDirection(uint8_t pin, bool direction)
   {
-    if (!_isValidPin(pin)) { return; }
+    if (!_isValidPin(pin)) { return false; }
     // false=input, true=output. MODE bit set means output.
     const auto reg = _regForPin(M5IOE1_REG_GPIO_MODE_L, pin);
     const auto bit = _bitForPin(pin);
-    direction ? bitOn(reg, bit) : bitOff(reg, bit);
+    return direction ? bitOn(reg, bit) : bitOff(reg, bit);
   }
 
   bool M5IOE1_Class::setPullMode(uint8_t pin, gpio_pull_t mode)
@@ -71,13 +71,13 @@ namespace m5
     }
   }
 
-  void M5IOE1_Class::setHighImpedance(uint8_t pin, bool enable)
+  bool M5IOE1_Class::setHighImpedance(uint8_t pin, bool enable)
   {
-    if (!_isValidPin(pin)) { return; }
+    if (!_isValidPin(pin)) { return false; }
     // M5IOE1 exposes drive mode here: 0=push-pull, 1=open-drain.
     const auto reg = _regForPin(M5IOE1_REG_GPIO_DRV_L, pin);
     const auto bit = _bitForPin(pin);
-    enable ? bitOn(reg, bit) : bitOff(reg, bit);
+    return enable ? bitOn(reg, bit) : bitOff(reg, bit);
   }
 
   bool M5IOE1_Class::getWriteValue(uint8_t pin)
@@ -86,12 +86,12 @@ namespace m5
     return (readRegister8(_regForPin(M5IOE1_REG_GPIO_OUT_L, pin)) & _bitForPin(pin)) != 0;
   }
 
-  void M5IOE1_Class::digitalWrite(uint8_t pin, bool level)
+  bool M5IOE1_Class::digitalWrite(uint8_t pin, bool level)
   {
-    if (!_isValidPin(pin)) { return; }
+    if (!_isValidPin(pin)) { return false; }
     const auto reg = _regForPin(M5IOE1_REG_GPIO_OUT_L, pin);
     const auto bit = _bitForPin(pin);
-    level ? bitOn(reg, bit) : bitOff(reg, bit);
+    return level ? bitOn(reg, bit) : bitOff(reg, bit);
   }
 
   bool M5IOE1_Class::digitalRead(uint8_t pin)
@@ -135,21 +135,21 @@ namespace m5
     return writeRegister(reg, data, sizeof(data));
   }
 
-  void M5IOE1_Class::resetIrq()
+  bool M5IOE1_Class::resetIrq()
   {
     std::uint8_t data[2] = { 0x00, 0x00 };
-    writeRegister(M5IOE1_REG_GPIO_IS_L, data, sizeof(data));
+    return writeRegister(M5IOE1_REG_GPIO_IS_L, data, sizeof(data));
   }
 
-  void M5IOE1_Class::disableIrq()
+  bool M5IOE1_Class::disableIrq()
   {
     std::uint8_t data[2] = { 0x00, 0x00 };
-    writeRegister(M5IOE1_REG_GPIO_IE_L, data, sizeof(data));
+    return writeRegister(M5IOE1_REG_GPIO_IE_L, data, sizeof(data));
   }
 
-  void M5IOE1_Class::enableIrq()
+  bool M5IOE1_Class::enableIrq()
   {
     std::uint8_t data[2] = { 0xFF, 0x3F };
-    writeRegister(M5IOE1_REG_GPIO_IE_L, data, sizeof(data));
+    return writeRegister(M5IOE1_REG_GPIO_IE_L, data, sizeof(data));
   }
 }
