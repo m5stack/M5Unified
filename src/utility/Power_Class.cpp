@@ -301,8 +301,19 @@ namespace m5
       }
       else
       {
-        M5_LOGE("PM1 PWM ch1 could not be turned off. Leaving GPIO4 as a low output.");
-        M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+        bool gpio_fallback = false;
+        for (int retry = 3; !(gpio_fallback = M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio)) && --retry; )
+        {
+          m5gfx::delay(10);
+        }
+        if (gpio_fallback)
+        {
+          M5_LOGE("PM1 PWM ch1 could not be turned off. GPIO4 was switched to GPIO mode.");
+        }
+        else
+        {
+          M5_LOGE("PM1 PWM ch1 could not be turned off, and GPIO4 could not be switched to GPIO mode; silence cannot be guaranteed.");
+        }
       }
       /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
       /// いたファームの設定に依存しないよう IRQ 関連を初期化する
@@ -321,7 +332,10 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         ioe1.setDirection(M5IOE1_Class::gpio1, false);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, true);
-        ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
+        if (!ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none))
+        {
+          M5_LOGE("M5IOE1 CHG_PROG pull state could not be released.");
+        }
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
       }
       M5pm1.setBatteryCharge(true);
@@ -398,11 +412,17 @@ namespace m5
         // M5IOE1: PWM1 drives IO9 (G9 motor). REG_PWM_FREQ 0x25/0x26 Hz LE; REG_PWM1_DUTY 0x1B/0x1C (bit7 EN).
         constexpr uint16_t motor_pwm_hz = 2000;
         auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
-        ioe1.setPwmFrequency(motor_pwm_hz);
-        // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
-        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
-        ioe1.setDirection(M5IOE1_Class::gpio9, true);
-        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);  // PWM off at boot
+        if (ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false))
+        {
+          ioe1.setPwmFrequency(motor_pwm_hz);
+          // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
+          ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
+          ioe1.setDirection(M5IOE1_Class::gpio9, true);
+        }
+        else
+        {
+          M5_LOGE("M5IOE1 PWM ch1 could not be turned off. Motor output was not enabled.");
+        }
       }
       break;
 
