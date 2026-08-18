@@ -121,7 +121,8 @@ namespace m5
 
   bool M5PM1_Class::setGPIOFunction(gpio_t pin, gpio_function_t function)
   {
-    if (!is_valid_gpio(pin)) { return false; }
+    if (!is_valid_gpio(pin)
+     || (function != gpio && function != irq && function != special)) { return false; }
     auto num = gpio_num(pin);
     auto reg = num < 4 ? M5PM1_REG_GPIO_FUNC0 : M5PM1_REG_GPIO_FUNC1;
     auto shift = static_cast<std::uint8_t>((num < 4 ? num : num - 4) * 2);
@@ -215,8 +216,7 @@ namespace m5
 
   bool M5PM1_Class::clearWakeSource(std::uint8_t mask)
   {
-    auto src = readRegister8(M5PM1_REG_WAKE_SRC);
-    return writeRegister8(M5PM1_REG_WAKE_SRC, src & ~mask);
+    return writeRegister8(M5PM1_REG_WAKE_SRC, static_cast<std::uint8_t>(~mask & 0x7F));
   }
 
   bool M5PM1_Class::clearGPIOIRQStatus(void)
@@ -264,7 +264,7 @@ namespace m5
 
   bool M5PM1_Class::getBatteryCharge(bool* enabled)
   {
-    if (!_init) { return false; }
+    if (!_init || enabled == nullptr) { return false; }
     std::uint8_t cfg = 0;
     if (!readRegister(M5PM1_REG_PWR_CFG, &cfg, 1)) { return false; }
     *enabled = cfg & M5PM1_PWR_CFG_CHG_EN;
@@ -274,25 +274,11 @@ namespace m5
   bool M5PM1_Class::setChargeCurrent(std::uint16_t max_mA)
   {
     return false;
-    // if (!_init) return false;
-    // int value = max_mA / 8;     // Convert mA to register value (8mA per step)
-    // if (value > 0) { value -= 1;  // 0 = 8mA, 63 = 512mA
-    //   if (value >= 64) value = 63; // max value is 512mA (8 + 63*8)
-    // }
-    // return writeRegister8(M5PM1_REG_CHR_CUR, value);
   }
 
   bool M5PM1_Class::setChargeVoltage(std::uint16_t max_mV)
   {
     return false;
-    // if (!_init) return false;
-    // int value = (max_mV - 3600) / 15;     // Convert mV to register value (15mV per step)
-    // if (value > 0) { value -= 1;  // 0 = 3600mV, 63 = 4545mV
-    //   if (value >= 64) value = 63; // max value is 4545mV (3600 + 63*15)
-    // }
-    // uint8_t reg_value = readRegister8(M5PM1_REG_CHR_VOL);
-    // reg_value &= 0xC0;
-    // return writeRegister8(M5PM1_REG_CHR_VOL, reg_value | value);
   }
 
   std::uint16_t M5PM1_Class::getChargeCurrent(void)
@@ -314,14 +300,19 @@ namespace m5
   {
     if (!_init) return 0;
     uint8_t irq3 = 0;
-    if (readRegister(M5PM1_REG_IRQ_STATUS3, &irq3, 1))
-    {
-      if (irq3 & ((1 << 0) | (1 << 2))) {
-        writeRegister8(M5PM1_REG_IRQ_STATUS3, 0);
-        return 2;
-      }
-    }
-    return 0;
+    if (!readRegister(M5PM1_REG_IRQ_STATUS3, &irq3, 1)) return 0;
+    uint8_t pending = irq3 & ((1 << 0) | (1 << 2));
+    if (!pending) return 0;
+    if (!writeRegister8(M5PM1_REG_IRQ_STATUS3, static_cast<uint8_t>(~pending & 0x07))) return 0;
+    _pek_double_pending = (pending & (1 << 2)) != 0;
+    return 2;
+  }
+
+  bool M5PM1_Class::wasPekDoubleClicked(void)
+  {
+    bool result = _pek_double_pending;
+    _pek_double_pending = false;
+    return result;
   }
 
   std::uint16_t M5PM1_Class::getVBUSVoltage(void)
@@ -339,7 +330,7 @@ namespace m5
 
   bool M5PM1_Class::getBatteryVoltage(std::uint16_t* millivolt)
   {
-    if (!_init) { return false; }
+    if (!_init || millivolt == nullptr) { return false; }
     std::uint8_t buf[2] = {};
     if (!readRegister(M5PM1_REG_VBAT_L, buf, sizeof(buf))) { return false; }
     *millivolt = (buf[1] << 8) | buf[0];
