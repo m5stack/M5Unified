@@ -1375,10 +1375,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #else
     /// アドレスの存在確認はソフトウェア I2C ポートで行う (オープンドレイン駆動で
     /// ACK 競合が起きず、ハードウェアのペリフェラルにも触れない)。
-    /// ポートは M5GFX の autodetect probe と同じ -1 を使う。負ポートは 2 本しかなく、
-    /// probe は使い終わりに release するので逐次実行なら共有できる。2 本目を
-    /// ライブラリ側で占有せず、利用者のソフト I2C バス用に空けておく。
-    static constexpr int_fast16_t probe_i2c_port = -1;
+    /// ポートは M5GFX の autodetect probe (-1) と分ける。ソフト I2C のスロットは
+    /// 所有権を持たず、init が既存の設定を黙って奪う作りなので、ライブラリ同士で
+    /// 同じスロットを共有しない。
+    static constexpr int_fast16_t probe_i2c_port = -2;
 
     m5gfx::gpio::pin_backup_t pin_backup[] = { scl, sda };
 
@@ -1387,25 +1387,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     m5gfx::pinMode(scl, m5gfx::pin_mode_t::input_pullup);
     m5gfx::pinMode(sda, m5gfx::pin_mode_t::input_pullup);
     m5gfx::delay(50);
-
-    // 前回の通信の途中で止まっているデバイスに STOP を見せて論理状態を戻す。
-    // START だけで戻らないデバイスが実在する (同ファイルの StampS3/Capsule 判別に
-    // 「STOP を出さないと正しく動作しないデバイスがあった (UnitHEART MAX30100)」の記録がある)。
-    // 線を Low へ駆動するか解放するかの 2 状態しか使わない (High を駆動しない) ので、
-    // デバイスが線を握っていてもパッド同士の衝突にはならない。
-    {
-      auto line_lo = [](uint8_t pin)
-      { m5gfx::gpio_lo(pin); m5gfx::pinMode(pin, m5gfx::pin_mode_t::output); };
-      auto line_hi = [](uint8_t pin)
-      { m5gfx::pinMode(pin, m5gfx::pin_mode_t::input_pullup); };
-      for (int i = 0; i < 8; ++i)
-      {
-        line_lo(scl); m5gfx::delayMicroseconds(5);
-        line_lo(sda); m5gfx::delayMicroseconds(5);
-        line_hi(scl); m5gfx::delayMicroseconds(5);
-        line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
-      }
-    }
 
     // 指定ピンが「外部プルアップの載った I2C バス」かどうかを先に確かめる。
     // ここは I2C ピンとは限らない場所を駆動する機種判別なので、判定を外すと
@@ -1439,6 +1420,25 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       return false;
     }
 
+    // 前回の通信の途中で止まっているデバイスに STOP を見せて論理状態を戻す。
+    // START だけで戻らないデバイスが実在する (同ファイルの StampS3/Capsule 判別に
+    // 「STOP を出さないと正しく動作しないデバイスがあった (UnitHEART MAX30100)」の記録がある)。
+    // 線を Low へ駆動するか解放するかの 2 状態しか使わない (High を駆動しない) ので、
+    // デバイスが線を握っていてもパッド同士の衝突にはならない。
+    {
+      auto line_lo = [](uint8_t pin)
+      { m5gfx::gpio_lo(pin); m5gfx::pinMode(pin, m5gfx::pin_mode_t::output); };
+      auto line_hi = [](uint8_t pin)
+      { m5gfx::pinMode(pin, m5gfx::pin_mode_t::input_pullup); };
+      for (int i = 0; i < 8; ++i)
+      {
+        line_lo(scl); m5gfx::delayMicroseconds(5);
+        line_lo(sda); m5gfx::delayMicroseconds(5);
+        line_hi(scl); m5gfx::delayMicroseconds(5);
+        line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
+      }
+    }
+
     bool hit = false;
     if (m5gfx::i2c::init(probe_i2c_port, sda, scl).has_value())
     {
@@ -1447,15 +1447,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       // NACK の場合も beginTransaction 自体は成功を返し (内部で STOP を出して
       // エラーをラッチする)、そのエラーは endTransaction が報告する。
       // したがって両方の成功をもって「ACK が返った」と判定する。
-      // 旧実装はプルアップの有無しか見ておらず、デバイスが応答するかは確かめて
-      // いなかった。厳密に ACK を要求するようになったぶん、起動が遅い個体を
-      // 取りこぼす余地ができるので、間を空けて一度だけ試し直す。
-      for (int attempt = 0; attempt < 2 && !hit; ++attempt)
-      {
-        if (attempt) { m5gfx::delay(20); }
-        hit = m5gfx::i2c::beginTransaction(probe_i2c_port, addr, 100000, false).has_value()
-           && m5gfx::i2c::endTransaction(probe_i2c_port).has_value();
-      }
+      hit = m5gfx::i2c::beginTransaction(probe_i2c_port, addr, 100000, false).has_value()
+         && m5gfx::i2c::endTransaction(probe_i2c_port).has_value();
       m5gfx::i2c::release(probe_i2c_port);
     }
     for (auto& backup : pin_backup) {
