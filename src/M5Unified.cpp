@@ -1412,9 +1412,20 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::gpio::command_mode_input_pullup  , sda,
       m5gfx::gpio::command_end
     };
-    m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
-    m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
-    if (m5gfx::gpio::command(cmd_bus_check_list) != 0x03)
+    auto bus_check = [&](void) -> uint32_t
+    {
+      m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
+      m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
+      return m5gfx::gpio::command(cmd_bus_check_list);
+    };
+
+    // 0x02 は「SCL は外部プルアップで戻るのに SDA だけ Low のまま」。前回の通信の
+    // 途中で止まったデバイスがデータ線を握っている典型で (ソフトリセットでは
+    // デバイスの電源が切れないため実際に起きる)、プルアップの無いただの Low ピンとは
+    // このシグネチャで区別できる。この場合だけは STOP を見せて握りを解かせ、
+    // もう一度確かめる。それ以外の不一致は I2C バスではないとみなして即座に帰る。
+    uint32_t check = bus_check();
+    if (check != 0x03 && check != 0x02)
     {
       for (auto& backup : pin_backup) { backup.restore(); }
       return false;
@@ -1437,6 +1448,12 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         line_hi(scl); m5gfx::delayMicroseconds(5);
         line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
       }
+    }
+
+    if (check != 0x03 && bus_check() != 0x03)
+    { // 握りが解けなかった。ここから先は probe しても意味がない。
+      for (auto& backup : pin_backup) { backup.restore(); }
+      return false;
     }
 
     bool hit = false;
