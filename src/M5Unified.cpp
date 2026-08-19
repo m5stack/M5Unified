@@ -1699,18 +1699,26 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
     if (board == board_t::board_unknown) {
+        /// 内部 I2C バス (SDA45/SCL0) に載るデバイスで先に決める。他ピンの probe を
+        /// 間に挟まないので、ここで確定する機種は 48/47 に一切触れずに済む
+        /// (AtomVoiceS3R では GPIO48 が I2S の DOUT)。
+        ///
         /// AtomS3RExt / AtomS3RCam have a BMI270 on the internal I2C bus.
+        /// この 2 機種は基板が共通で、カメラ部がユーザーの扱えるブレッドボードに
+        /// なっているため、内部バスにユーザーのデバイスが載りうる。オンボードで
+        /// 必ず存在する BMI270 を先に見て、後から載ったアドレスに identity を
+        /// 奪われないようにする。
         if (_probe_i2c_addr(45, 0, 0x68)
          || _probe_i2c_addr(45, 0, 0x69)) {
           board = board_t::board_M5AtomS3RExt;
         }
-        /// Stamp-S3Bat ?
+        /// AtomVoiceS3R ?
+        else if (_probe_i2c_addr(45, 0, 0x18)) {
+          board = board_t::board_M5AtomVoiceS3R;
+        }
+        /// Stamp-S3Bat ? (内部バスに何も居なかったときだけ別のピンを触る)
         else if (_probe_i2c_addr(48, 47, 0x6E)) {
           board = board_t::board_M5StampS3Bat;
-        }
-        /// AtomEchoS3R ?
-        else if(_probe_i2c_addr(45, 0, 0x18)) {
-          board = board_t::board_M5AtomVoiceS3R;
         }
         /// StampS3Mini has no other onboard device that can identify it.
         else {
