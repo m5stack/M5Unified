@@ -1431,8 +1431,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     };
     auto bus_check = [&](void) -> uint32_t
     {
-      m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
-      m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
+      // ラッチを Low にしてから出力へ切り替える。直前は input_pullup (ラッチ High)
+      // なので、先に出力にすると一瞬 push-pull で High を駆動してしまう。
+      // ここは相手が何か分からないピンなので、High は一度も駆動しない。
+      m5gfx::gpio_lo(scl); m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_lo(sda); m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
       return m5gfx::gpio::command(cmd_bus_check_list);
     };
 
