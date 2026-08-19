@@ -666,7 +666,16 @@ namespace m5
     board_t _check_boardtype(board_t);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
-    bool _detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list=nullptr);
+    /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
+    static void _wait_i2c_device_power(void);
+
+    /// 指定ピンのバス上に、指定した 7bit アドレスのデバイスが居るかを調べる。
+    /// (M5GFX にも同名だった _probe_i2c_addr があるが、あちらは複数アドレスを
+    ///  ビット列で返す別物。取り違えを避けるため名前を分けている)
+    /// @return true = ACK が返った (デバイスが存在する)。
+    ///         false は「ACK を確認できなかった」であり、不在のほかバスが
+    ///         成立していない場合・probe 用ポートの初期化に失敗した場合を含む。
+    bool _probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr);
 
     static void _setup_pinmap(board_t);
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);
