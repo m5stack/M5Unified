@@ -1368,65 +1368,100 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
-  bool M5Unified::_detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list)
+  bool M5Unified::_probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr)
   {
-    uint32_t result = 0;
 #if defined(M5UNIFIED_PC_BUILD)
-    return result;
+    return false;
 #else
-    m5gfx::gpio::pin_backup_t pin_backup[] = {scl, sda};
+    /// アドレスの存在確認はソフトウェア I2C ポートで行う (オープンドレイン駆動で
+    /// ACK 競合が起きず、ハードウェアのペリフェラルにも触れない)。
+    /// ポートは M5GFX の autodetect probe と同じ -1 を使う。負ポートは 2 本しかなく、
+    /// probe は使い終わりに release するので逐次実行なら共有できる。2 本目を
+    /// ライブラリ側で占有せず、利用者のソフト I2C バス用に空けておく。
+    static constexpr int_fast16_t probe_i2c_port = -1;
+
+    m5gfx::gpio::pin_backup_t pin_backup[] = { scl, sda };
+
+    // デバイスの電源投入直後の安定待ち。バスは解放した状態で待つ
+    // (SCL を Low に駆動したまま待つと、バスタイムアウトを持つデバイスに対して不正)。
+    m5gfx::pinMode(scl, m5gfx::pin_mode_t::input_pullup);
+    m5gfx::pinMode(sda, m5gfx::pin_mode_t::input_pullup);
+    m5gfx::delay(50);
+
+    // 前回の通信の途中で止まっているデバイスに STOP を見せて論理状態を戻す。
+    // START だけで戻らないデバイスが実在する (同ファイルの StampS3/Capsule 判別に
+    // 「STOP を出さないと正しく動作しないデバイスがあった (UnitHEART MAX30100)」の記録がある)。
+    // 線を Low へ駆動するか解放するかの 2 状態しか使わない (High を駆動しない) ので、
+    // デバイスが線を握っていてもパッド同士の衝突にはならない。
     {
-      if(cmd_list == nullptr)
+      auto line_lo = [](uint8_t pin)
+      { m5gfx::gpio_lo(pin); m5gfx::pinMode(pin, m5gfx::pin_mode_t::output); };
+      auto line_hi = [](uint8_t pin)
+      { m5gfx::pinMode(pin, m5gfx::pin_mode_t::input_pullup); };
+      for (int i = 0; i < 8; ++i)
       {
-        uint8_t cmd_low[] = {
-          m5gfx::gpio::command_write_low, scl,
-          m5gfx::gpio::command_mode_output, scl,  // SCL
-          m5gfx::gpio::command_write_low, sda,
-          m5gfx::gpio::command_mode_output, sda, // SDA
-          m5gfx::gpio::command_end,
-        };
-        m5gfx::gpio::command(cmd_low);
+        line_lo(scl); m5gfx::delayMicroseconds(5);
+        line_lo(sda); m5gfx::delayMicroseconds(5);
+        line_hi(scl); m5gfx::delayMicroseconds(5);
+        line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
       }
-      else m5gfx::gpio::command(cmd_list);
+    }
 
-      delay(50);  // 延时 50ms，保证设备上电稳定
+    // 指定ピンが「外部プルアップの載った I2C バス」かどうかを先に確かめる。
+    // ここは I2C ピンとは限らない場所を駆動する機種判別なので、判定を外すと
+    // 機種の読みが変わる。判定方式は M5GFX の autodetect probe と同一のものを使う
+    // (実機での実績がある形から動かさない。変えるなら該当機種すべてで再検証が要る)。
+    //
+    // 4 回の read のうち、後半 2 回は入力プルダウンにしても High になること
+    // (= 外部プルアップが内部プルダウンに勝つこと) を確認するもの。
+    // 弱いプルアップ (内部プルダウンと同程度の抵抗値) では通らないが、
+    // 「強いプルアップがある = I2C バスである」を要求するのがこの判定の趣旨。
+    const uint8_t cmd_bus_check_list[] = {
+      m5gfx::gpio::command_write_low          , scl,
+      m5gfx::gpio::command_read               , scl,  // low チェック
+      m5gfx::gpio::command_write_low          , sda,
+      m5gfx::gpio::command_read               , sda,  // low チェック
+      m5gfx::gpio::command_mode_input_pulldown, scl,
+      m5gfx::gpio::command_delay_usec         , 10,
+      m5gfx::gpio::command_read               , scl,  // 外部プルアップがあるなら High
+      m5gfx::gpio::command_mode_input_pullup  , scl,
+      m5gfx::gpio::command_mode_input_pulldown, sda,
+      m5gfx::gpio::command_delay_usec         , 10,
+      m5gfx::gpio::command_read               , sda,  // 外部プルアップがあるなら High
+      m5gfx::gpio::command_mode_input_pullup  , sda,
+      m5gfx::gpio::command_end
+    };
+    m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
+    m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
+    if (m5gfx::gpio::command(cmd_bus_check_list) != 0x03)
+    {
+      for (auto& backup : pin_backup) { backup.restore(); }
+      return false;
+    }
 
-      for (uint8_t i2caddr : (const uint8_t[]){static_cast<uint8_t>(addr << 1)}) { //detect address
-        delay(2);  // 小延时
-        bool nack = true;
-        // I2C START
-        m5gfx::gpio_lo(sda);  // SDA LOW = START
-        for (int cycle = 0; cycle < 20; ++cycle) {
-          // SCL toggle
-          m5gfx::gpio_hi(scl);
-          delay(1);
-          m5gfx::gpio_lo(scl);
-          delay(1);
-
-          if (cycle & 1) {
-            if (cycle == 17) {
-                nack = m5gfx::gpio_in(sda);  // 读 ACK
-            }
-          } else {
-            if (i2caddr & 0x80) {
-              m5gfx::gpio_hi(sda);
-            } else {
-              m5gfx::gpio_lo(sda);
-            }
-            i2caddr <<= 1;
-            if (cycle >= 16) {
-              m5gfx::pinMode(sda, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-            }
-          }
-        }
-        m5gfx::gpio_hi(sda);  // SDA HIGH = STOP
-        result = result << 1 | nack;
+    bool hit = false;
+    if (m5gfx::i2c::init(probe_i2c_port, sda, scl).has_value())
+    {
+      // クロックが上がらないバス、前の通信の途中でデバイスがデータ線を握っている
+      // バスは、いずれも beginTransaction 側が検出して復旧または中断する。
+      // NACK の場合も beginTransaction 自体は成功を返し (内部で STOP を出して
+      // エラーをラッチする)、そのエラーは endTransaction が報告する。
+      // したがって両方の成功をもって「ACK が返った」と判定する。
+      // 旧実装はプルアップの有無しか見ておらず、デバイスが応答するかは確かめて
+      // いなかった。厳密に ACK を要求するようになったぶん、起動が遅い個体を
+      // 取りこぼす余地ができるので、間を空けて一度だけ試し直す。
+      for (int attempt = 0; attempt < 2 && !hit; ++attempt)
+      {
+        if (attempt) { m5gfx::delay(20); }
+        hit = m5gfx::i2c::beginTransaction(probe_i2c_port, addr, 100000, false).has_value()
+           && m5gfx::i2c::endTransaction(probe_i2c_port).has_value();
       }
+      m5gfx::i2c::release(probe_i2c_port);
     }
     for (auto& backup : pin_backup) {
         backup.restore();
     }
-    return result;
+    return hit;
 #endif
   }
 
@@ -1656,7 +1691,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
       if (board == board_t::board_unknown) {
         /// PowerHub ?
-        if (_detect_i2c_device(45, 48, 0x50)) {
+        if (_probe_i2c_addr(45, 48, 0x50)) {
           board = board_t::board_M5PowerHub;
         }
       }
@@ -1665,16 +1700,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
     if (board == board_t::board_unknown) {
         /// AtomS3RExt / AtomS3RCam have a BMI270 on the internal I2C bus.
-        if (_detect_i2c_device(45, 0, 0x68)
-         || _detect_i2c_device(45, 0, 0x69)) {
+        if (_probe_i2c_addr(45, 0, 0x68)
+         || _probe_i2c_addr(45, 0, 0x69)) {
           board = board_t::board_M5AtomS3RExt;
         }
         /// Stamp-S3Bat ?
-        else if (_detect_i2c_device(48, 47, 0x6E)) {
+        else if (_probe_i2c_addr(48, 47, 0x6E)) {
           board = board_t::board_M5StampS3Bat;
         }
         /// AtomEchoS3R ?
-        else if(_detect_i2c_device(45, 0, 0x18)) {
+        else if(_probe_i2c_addr(45, 0, 0x18)) {
           board = board_t::board_M5AtomVoiceS3R;
         }
         /// StampS3Mini has no other onboard device that can identify it.
