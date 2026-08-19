@@ -666,6 +666,9 @@ namespace m5
     board_t _check_boardtype(board_t);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
+    /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
+    static void _wait_i2c_device_power(void);
+
     /// 指定ピンのバス上に、指定した 7bit アドレスのデバイスが居るかを調べる。
     /// (M5GFX にも同名だった _probe_i2c_addr があるが、あちらは複数アドレスを
     ///  ビット列で返す別物。取り違えを避けるため名前を分けている)

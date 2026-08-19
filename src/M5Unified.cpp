@@ -1368,6 +1368,22 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
+  /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
+  /// 待ちが要るのは「電源投入から間もない」ことであってアドレスごとの事情ではないので、
+  /// 判定の入口で一度払う。旧実装は最初の probe が常に真を返して連鎖が止まっていたため
+  /// 結果的に 1 回しか待っていなかった。それを意図として書き直したもの。
+  void M5Unified::_wait_i2c_device_power(void)
+  {
+#if !defined(M5UNIFIED_PC_BUILD)
+    static bool waited = false;
+    if (!waited)
+    {
+      waited = true;
+      m5gfx::delay(50);
+    }
+#endif
+  }
+
   bool M5Unified::_probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr)
   {
 #if defined(M5UNIFIED_PC_BUILD)
@@ -1380,13 +1396,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     /// 同じスロットを共有しない。
     static constexpr int_fast16_t probe_i2c_port = -2;
 
+    _wait_i2c_device_power();
+
     m5gfx::gpio::pin_backup_t pin_backup[] = { scl, sda };
 
-    // デバイスの電源投入直後の安定待ち。バスは解放した状態で待つ
-    // (SCL を Low に駆動したまま待つと、バスタイムアウトを持つデバイスに対して不正)。
+    // ここでは待たない。電源安定待ちは判定の入口で一度だけ行う (_wait_i2c_device_power)。
+    // アドレスごとに待つと、判定が空振りするたびに数十 ms が起動時間へ積み上がる。
     m5gfx::pinMode(scl, m5gfx::pin_mode_t::input_pullup);
     m5gfx::pinMode(sda, m5gfx::pin_mode_t::input_pullup);
-    m5gfx::delay(50);
 
     // 指定ピンが「外部プルアップの載った I2C バス」かどうかを先に確かめる。
     // ここは I2C ピンとは限らない場所を駆動する機種判別なので、判定を外すと
