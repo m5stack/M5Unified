@@ -29,6 +29,16 @@ namespace m5
       M5.Power.M5pm1.clearIRQStatus();
     }
   }
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+  static void clear_m5pm1_rtc_irq(void)
+  {
+    if (M5.getBoard() == board_t::board_M5ToughC5
+     && M5.Power.getType() == Power_Class::pmic_t::pmic_m5pm1)
+    {
+      M5.Power.M5pm1.clearWakeSource();
+      M5.Power.M5pm1.clearIRQStatus();
+    }
+  }
 #else
   static void clear_m5pm1_rtc_irq(void) {}
 #endif
