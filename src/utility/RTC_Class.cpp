@@ -55,6 +55,7 @@ namespace m5
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
         break;
 #endif

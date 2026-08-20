@@ -46,6 +46,7 @@ namespace m5
   , ext_USB    = 1 << 5 // M5Station external USB.   ※ Not for CoreS3 main USB.
   , ext_PWR485 = 1 << 6 // M5PowerHub external RS485.
   , ext_PWRCAN = 1 << 7 // M5PowerHub external CAN.
+  , ext_EXT    = 1 << 8 // M5Tab5X bottom Hat power.
   , ext_MAIN   = 1 << 15
   };
 

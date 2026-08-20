@@ -449,6 +449,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
   void M5Unified::_setup_pinmap(board_t id)
   {
+    if (id == board_t::board_M5Tab5X) {
+      id = board_t::board_M5Tab5;
+    }
+
     constexpr const std::pair<const void*, size_t> tbl[] = {
       { _pin_table_i2c_ex_in, sizeof(_pin_table_i2c_ex_in[0]) },
       { _pin_table_port_bc, sizeof(_pin_table_port_bc[0]) },
@@ -1892,8 +1896,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
-        board = board_t::board_M5Tab5;
+      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 and M5Tab5X G32 always High
+      {
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        board = chip_info.revision >= 300
+              ? board_t::board_M5Tab5X
+              : board_t::board_M5Tab5;
+      }
       else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
       else
@@ -1962,6 +1972,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     switch (board) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       for (int i = 0; i < 2; ++i)
       {
         auto ioexp = new PI4IOE5V6408_Class(0x43 + i);
@@ -2370,6 +2381,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         if (cfg.internal_mic)
         {
           mic_cfg.pin_mck = GPIO_NUM_30;
@@ -2576,6 +2588,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         if (cfg.internal_spk)
         {
           spk_cfg.pin_mck = GPIO_NUM_30;
@@ -2977,7 +2990,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #define ENABLE_M5MODULE
-        if (_board == board_t::board_M5Tab5)
+        if (_board == board_t::board_M5Tab5 || _board == board_t::board_M5Tab5X)
 #elif defined ( CONFIG_IDF_TARGET_ESP32S3 )
  #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3
@@ -3162,6 +3175,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         tb_k = 364; // (65536*3/540)
         break;
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         tb_y = 1280;
         tb_k = 273; // (65536*3/540)
         break;
@@ -3517,6 +3531,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       height = 960;
       break;
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       height = 1280;
       break;
     default:
