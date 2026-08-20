@@ -166,7 +166,11 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
                              = board_t::board_M5StampC3;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+#if defined (BOARD_ID) && BOARD_ID == 35
+                             = board_t::board_M5Tab5X;
+#else
                              = board_t::board_M5Tab5;
+#endif
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
                              = board_t::board_M5StampC5;
 #elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
@@ -406,7 +410,7 @@ namespace m5
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
       if (cfg.external_display.module_display) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
-        if (_board == board_t::board_M5Tab5)
+        if (_board == board_t::board_M5Tab5 || _board == board_t::board_M5Tab5X)
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
         if (_board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE
          || _board == board_t::board_M5StackChan)

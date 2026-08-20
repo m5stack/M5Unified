@@ -119,6 +119,7 @@ namespace m5
       break;
 
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       {
         static constexpr std::uint8_t reg_array_0x43[] =
         { ///     +--------- HP_DET : Headphone detect
@@ -154,6 +155,13 @@ namespace m5
         };
         M5.getIOExpander(0).writeRegister8Array(reg_array_0x43, sizeof(reg_array_0x43));
         M5.getIOExpander(1).writeRegister8Array(reg_array_0x44, sizeof(reg_array_0x44));
+        if (M5.getBoard() == board_t::board_M5Tab5X)
+        {
+          auto& ioe = M5.getIOExpander(0); // PI4IOE 0x43, ADDR grounded, bottom Hat power
+          ioe.setHighImpedance(3, false);
+          ioe.setDirection(3, true);
+          ioe.digitalWrite(3, true);
+        }
         Ina226.begin();
         INA226_Class::config_t cfg;
         cfg.sampling_rate = INA226_Class::Sampling::Rate16;
@@ -893,11 +901,20 @@ namespace m5
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       if (port_mask & ext_port_mask_t::ext_PA)
       {
         auto& ioe = M5.getIOExpander(0);
         ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
         ioe.digitalWrite(2, enable);
+      }
+      if (M5.getBoard() == board_t::board_M5Tab5X
+       && (port_mask & ext_port_mask_t::ext_EXT))
+      {
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setHighImpedance(3, false);
+        ioe.setDirection(3, true);
+        ioe.digitalWrite(3, enable);
       }
       if (port_mask & ext_port_mask_t::ext_USB)
       {
@@ -1061,6 +1078,8 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
       return M5.getIOExpander(0).getWriteValue(2);
+    case board_t::board_M5Tab5X:
+      return M5.getIOExpander(0).getWriteValue(3);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
@@ -1442,6 +1461,7 @@ namespace m5
     default: break;
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       for (int i = 0; i < 10; ++i)
       {
         M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.gpio4 == PWROFF_PLUSE
@@ -2148,6 +2168,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         return Ina226.getBusVoltage() * 1000;
 #endif
 
@@ -2232,6 +2253,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         // 2S Li-Po ( * 1000 / 2 == * 500)
         mv = Ina226.getBusVoltage() * 500;
         break;
@@ -2321,6 +2343,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         M5.getIOExpander(1).digitalWrite(7, enable);
         break;
 #endif
@@ -2398,7 +2421,8 @@ namespace m5
     default:
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       switch (M5.getBoard()) {
-        case board_t::board_M5Tab5: {
+        case board_t::board_M5Tab5:
+        case board_t::board_M5Tab5X: {
           switch (max_mA) {
             case 0:
               // charge disable
@@ -2474,6 +2498,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         // The shunt is wired so that charge current reads negative; invert to
         // match the documented convention (+ = charge / - = discharge).
         return -1000.0f * Ina226.getShuntCurrent();
@@ -2523,6 +2548,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         // TODO:implement
 #endif
       default:
@@ -2638,6 +2664,7 @@ namespace m5
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
           ? is_charging_t::is_charging : is_charging_t::is_discharging;
 #endif
