@@ -161,7 +161,8 @@ namespace m5
 
     /// set battery charge current
     /// @param max_mA milli ampere.
-    /// @note CoreMatrix selects the nearest supported maximum: 180 mA below 650 mA, otherwise 650 mA.
+    /// @note CoreMatrix selects 180 mA below 650 mA, otherwise 650 mA.
+    /// @note ToughC5 selects 180 mA below 830 mA, otherwise 830 mA.
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     void setChargeCurrent(std::uint16_t max_mA);
 
