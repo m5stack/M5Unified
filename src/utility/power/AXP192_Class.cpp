@@ -169,17 +169,15 @@ namespace m5
   }
 
   void AXP192_Class::setChargeVoltage(std::uint16_t max_mV)
-  {
-    max_mV = (max_mV / 10) - 410;
-    if (max_mV > 436 - 410) { max_mV = 436 - 410; }
-    static constexpr std::uint8_t table[] =
-      { 415 - 410  /// 4150mV
-      , 420 - 410  /// 4200mV
-      , 436 - 410  /// 4360mV
-      , 255
-      };
-    size_t i = 0;
-    while (table[i] <= max_mV) { ++i; }
+  { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts:
+    /// the earlier form subtracted a bias first, which underflowed the
+    /// unsigned argument for anything below the lowest step and then clamped
+    /// to the highest one - a request for less charge voltage produced more.
+    static constexpr std::uint16_t table[] = { 4100, 4150, 4200, 4360 };
+    size_t i = (sizeof(table) / sizeof(table[0])) - 1;
+    /// pick the highest step that does not exceed the request, and the lowest
+    /// step when the request is under all of them.
+    while (i && table[i] > max_mV) { --i; }
 
     std::uint8_t val = 0;
     if (readRegister(0x33, &val, 1))

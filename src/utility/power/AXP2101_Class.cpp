@@ -125,22 +125,18 @@ namespace m5
   }
 
   void AXP2101_Class::setChargeVoltage(std::uint16_t max_mV)
-  {
-    max_mV = (max_mV / 10) - 400;
-    if (max_mV > 460 - 400) { max_mV = 460 - 400; }
-    static constexpr std::uint8_t table[] =
-      { 410 - 400  /// 4100mV
-      , 420 - 400  /// 4200mV
-      , 435 - 400  /// 4350mV
-      , 440 - 400  /// 4400mV
-      , 460 - 400  /// 4600mV
-      , 255
-      };
-    size_t i = 0;
-    while (table[i] <= max_mV) { ++i; }
+  { /// reg 0x64 selects the constant-voltage target, 1 = 4.0V through 5 = 4.4V.
+    /// There is no step above 4.4V; the earlier table carried one, and a
+    /// request that reached it wrapped the index back to the reserved 0.
+    /// Requests below the lowest step underflowed the unsigned argument and
+    /// landed on the same 0.
+    static constexpr std::uint16_t table[] = { 4000, 4100, 4200, 4350, 4400 };
+    size_t i = (sizeof(table) / sizeof(table[0])) - 1;
+    /// pick the highest step that does not exceed the request, and the lowest
+    /// step when the request is under all of them.
+    while (i && table[i] > max_mV) { --i; }
 
-    if (++i >= 0b110) { i = 0; }
-    writeRegister8(0x64, i);
+    writeRegister8(0x64, static_cast<std::uint8_t>(i + 1));
   }
 
   std::int8_t AXP2101_Class::getBatteryLevel(void)
