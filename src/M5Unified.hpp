@@ -166,7 +166,9 @@ namespace m5
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
                              = board_t::board_M5StampC3;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-#if defined (BOARD_ID) && BOARD_ID == 35
+#if defined (BOARD_ID) && BOARD_ID == 31
+                             = board_t::board_M5CoreP4X;
+#elif defined (BOARD_ID) && BOARD_ID == 35
                              = board_t::board_M5Tab5X;
 #else
                              = board_t::board_M5Tab5;
@@ -689,6 +691,7 @@ namespace m5
     static bool _speaker_enabled_cb_stopwatch(void* args, bool enabled);
     static bool _speaker_enabled_cb_chain_captain(void* args, bool enabled);
     static bool _speaker_enabled_cb_tab5(void* args, bool enabled);
+    static bool _speaker_enabled_cb_corep4x(void* args, bool enabled);
     static bool _speaker_enabled_cb_cardputer_adv(void* args, bool enabled);
     static bool _speaker_enabled_cb_atom_echos3r(void* args, bool enabled);
     static bool _speaker_enabled_cb_atomic_echo(void* args, bool enabled);
@@ -701,6 +704,7 @@ namespace m5
     static bool _microphone_enabled_cb_stopwatch(void* args, bool enabled);
     static bool _microphone_enabled_cb_chain_captain(void* args, bool enabled);
     static bool _microphone_enabled_cb_tab5(void* args, bool enabled);
+    static bool _microphone_enabled_cb_corep4x(void* args, bool enabled);
     static bool _microphone_enabled_cb_cardputer_adv(void* args, bool enabled);
     static bool _microphone_enabled_cb_atomic_echo(void* args, bool enabled);
     static bool _microphone_enabled_cb_atom_echos3r(void* args, bool enabled);

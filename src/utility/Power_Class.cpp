@@ -118,6 +118,23 @@ namespace m5
     default:
       break;
 
+    case board_t::board_M5CoreP4X:
+      {
+        _pmic = pmic_t::pmic_m5pm1;
+        M5pm1.begin();
+
+        auto& ioe1 = M5.getIOExpander(0);
+        // M5IOE1_G12 supplies the shared 3V3 rail for MBUS, TF card and sensors.
+        ioe1.setHighImpedance(M5IOE1_Class::gpio12, false);
+        ioe1.setDirection(M5IOE1_Class::gpio12, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio12, true);
+
+        // M5IOE1_G6 is the active-low charger status input.
+        ioe1.setDirection(M5IOE1_Class::gpio6, false);
+        ioe1.setPullMode(M5IOE1_Class::gpio6, IOExpander_Base::pull_up);
+      }
+      break;
+
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
       {
@@ -900,6 +917,24 @@ namespace m5
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+          ioe1.setDirection(M5IOE1_Class::gpio5, true);
+          ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          ioe1.setHighImpedance(M5IOE1_Class::gpio2, false);
+          ioe1.setDirection(M5IOE1_Class::gpio2, true);
+          ioe1.digitalWrite(M5IOE1_Class::gpio2, enable);
+        }
+      }
+      break;
+
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
       if (port_mask & ext_port_mask_t::ext_PA)
@@ -1076,6 +1111,9 @@ namespace m5
     {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio5);
+
     case board_t::board_M5Tab5:
       return M5.getIOExpander(0).getWriteValue(2);
     case board_t::board_M5Tab5X:
@@ -1162,6 +1200,12 @@ namespace m5
     (void)enable;
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
+      break;
+#endif
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -1179,6 +1223,11 @@ namespace m5
   {
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio2);
+#endif
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -1367,6 +1416,13 @@ namespace m5
         Axp2101.powerOff();
         break;
 
+      case pmic_t::pmic_m5pm1:
+        if (!withTimer) {
+          M5pm1.powerOff();
+        }
+        break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
       case pmic_t::pmic_m5pm1:
         if (!withTimer) {
           M5pm1.powerOff();
@@ -1945,6 +2001,8 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       return M5pm1.getVBUSVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getVBUSVoltage();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -2135,6 +2193,8 @@ namespace m5
       }
       return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getBatteryVoltage();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2215,6 +2275,15 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      {
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1;
+        }
+        mv = bat_mv;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2293,6 +2362,9 @@ namespace m5
       M5pm1.setBatteryCharge(enable);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      M5pm1.setBatteryCharge(enable);
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2389,6 +2461,9 @@ namespace m5
       }
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      (void)max_mA;
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2603,6 +2678,14 @@ namespace m5
       }
       return is_charging_t::charge_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      {
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level)) {
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -2800,6 +2883,10 @@ namespace m5
       return M5pm1.getPekPress();
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getPekPress();
+
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 

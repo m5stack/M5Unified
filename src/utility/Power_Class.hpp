@@ -237,6 +237,7 @@ namespace m5
     M5PM1_Class M5pm1;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    M5PM1_Class M5pm1;
     INA226_Class Ina226 = { 0x41 };
 
 #else
