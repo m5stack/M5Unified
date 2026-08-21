@@ -104,9 +104,30 @@ namespace m5
   }
 
   bool IP5306_Class::isCharging(void)
-  {
+  { /// This needs both of the flags the datasheet describes, not one of them:
+    /// REG_READ0 bit3 tells charging from discharging, and REG_READ1 bit3
+    /// tells whether the cell has already been filled. Only the first was
+    /// read. It stays set once charging is enabled and a supply is present -
+    /// the completed charge included - so a finished charge was reported as an
+    /// ongoing one, as was a board running with no cell installed at all.
+    ///
+    /// The two sit at adjacent addresses but are read separately on purpose.
+    /// The register document only ever shows a single-byte read and nowhere
+    /// states that the address auto-increments, so reading both in one
+    /// transaction would rest on behaviour that is not specified.
+    ///
+    /// Two limits worth knowing. The full flag has no defined reset value, so
+    /// shortly after power-up it can read as full before the charger has
+    /// settled, and nothing here can tell that from a real full charge. And a
+    /// failed read is reported the same way as "not charging", because this
+    /// return type has no room to say that the question could not be answered.
     std::uint8_t val = 0;
-    return (readRegister(REG_READ0, &val, 1)) && (val & 0x08);
+    if (!readRegister(REG_READ0, &val, 1)) { return false; }
+    /// discharging: either charging is disabled or there is no supply
+    if (!(val & 0x08)) { return false; }
+    if (!readRegister(REG_READ1, &val, 1)) { return false; }
+    /// already full, so nothing is going into the cell
+    return !(val & 0x08);
   }
 
   bool IP5306_Class::setPowerBoostKeepOn(bool en) {
