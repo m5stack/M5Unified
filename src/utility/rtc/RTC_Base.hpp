@@ -89,7 +89,8 @@ namespace m5
 
     /// Set timer IRQ
     /// @param milliseconds (0 == disable)
-    /// @return the set number of milliseconds. (0 == disable)
+    /// @return the set number of milliseconds. 0 == disabled, or the timer could not be set
+    ///         (communication failure; the driver then stops the timer on a best-effort basis).
     virtual std::uint32_t setTimerIRQ(std::uint32_t timer_msec) { return 0; };
 
     /// Set alarm by time
