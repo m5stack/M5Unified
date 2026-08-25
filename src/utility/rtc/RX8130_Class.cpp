@@ -118,54 +118,95 @@ namespace m5
 
   std::uint32_t RX8130_Class::setTimerIRQ(std::uint32_t msec)
   {
-    // タイマー周期の除数
-    uint32_t div = 1;
-    // タイマー周期の乗数
-    uint32_t mul = 1;
+    // Source clocks in the order they are tried. period = mul_ms / div [ms].
+    // max_ms  = 65535 * period, so msec <= max_ms keeps msec * div within uint32.
+    // max_cnt = min(65535, 0xFFFFFFFF / mul_ms), so cnt * mul_ms (the period) stays within uint32.
+    struct clk_t { std::uint32_t mul_ms; std::uint32_t div; std::uint32_t max_ms; std::uint16_t max_cnt; std::uint8_t tsel; };
+    static constexpr clk_t clks[] = {
+      {    1000, 64,   1023984,    65535, 0x01 }, // 64 Hz
+      {    1000, 1,    65535000,   65535, 0x02 }, // 1 Hz
+      {   60000, 1,    3932100000, 65535, 0x03 }, // 1/60 Hz
+      { 3600000, 1,    0xFFFFFFFF, 1193,  0x04 }, // 1/3600 Hz
+      {    1000, 4096, 15999,      65535, 0x00 }, // 4096 Hz (last resort: its /IRQ pulse is only 122us)
+    };
+    static constexpr std::size_t NCLK = sizeof(clks) / sizeof(clks[0]);
+    // The /IRQ pulse auto-releases after 122us with the 4096Hz clock but 7.57ms with the others,
+    // so take the finest non-4096Hz clock whose rounded count keeps the period error under 1/256
+    // and has >= MIN_COUNT counts (the first countdown can be short by up to one source clock,
+    // 1s for the 1/60Hz and 1/3600Hz clocks, so this bounds that to ~6% or less).
+    static constexpr std::uint32_t MIN_COUNT = 16;
 
-    uint8_t tsel_bits = 0;
-    if (msec < 65536 * 1000 / 4096) { // 約16秒
-      tsel_bits = 0x00;
-      div = 4096;
-    } else if (msec < 65536 * 1000 / 64) { // 約1024秒(約17分)
-      tsel_bits = 0x01;
-      div = 64;
-    } else if (msec < 65536 * 1000) { // 約65535秒(約18時間)
-      tsel_bits = 0x02;
-    } else if (msec < 65536 * 60) { // 約3,932,160秒(約45日)
-      mul = 60;
-      tsel_bits = 0x03;
-    } else { // msec < 65536*3600 // 約39,321,600秒(約1年3ヶ月)
-      mul = 3600;
-      tsel_bits = 0x04;
-    }
-
-    std::uint32_t result = 0;
-    std::uint8_t regdata[3];
-    if (readRegister(0x1A, regdata, 3)) {
-      mul *= 1000;
-      uint32_t cycle = (msec * div + (mul >> 1)) / mul;
-      if (cycle > 65535) { cycle = 65535; }
-      result = cycle * mul / div;
-
-      regdata[0] = cycle & 0xff;
-      regdata[1] = (cycle >> 8) & 0xff;
-      if (cycle > 0) {
-        // Clear timer select bits & TE flag
-        std::uint8_t reg0x1C = regdata[2] & ~0x17;
-        // Set timer select bits & TE flag
-        reg0x1C |= 0x10 | tsel_bits;
-        regdata[2] = reg0x1C;
-        bitOn(0x1E, 0x10);
-      } else {
-        // Clear TE flag
-        regdata[2] &= ~0x10;
-        bitOff(0x1E, 0x10);
+    std::uint32_t cycle = 0;
+    const clk_t* sel = nullptr;
+    if (msec != 0) {
+      bool overflowed = false;  // a finer clock ran out of range: round up so the period never steps back
+      for (std::size_t i = 0; i < NCLK; ++i) {
+        const clk_t& c = clks[i];
+        if (msec > c.max_ms) { overflowed = true; continue; }
+        // Everything below is in units of msec * div: cnt counts of mul_ms each, err the remainder.
+        std::uint32_t num = msec * c.div;
+        std::uint32_t cnt = num / c.mul_ms;
+        std::uint32_t err = num % c.mul_ms;
+        if (overflowed ? (err != 0) : (err * 2 >= c.mul_ms)) { ++cnt; err = c.mul_ms - err; }
+        if (cnt > c.max_cnt) { cnt = c.max_cnt; err = num - cnt * c.mul_ms; }
+        // Accept when the error is within 1/256 (~0.39%) of the request (err < mul_ms, so no overflow).
+        if (i + 1 == NCLK || (cnt >= MIN_COUNT && (err << 8) <= num)) {
+          sel = &c; cycle = cnt; break;
+        }
       }
-      writeRegister(0x1A, regdata, 3);
+      if (sel == nullptr) { return 0; }  // unreachable (1/3600Hz covers all of uint32); fail safe = stay stopped
     }
 
-    return result;
+    // Sequence per datasheet Figure 48: TE=0 (+TSEL) -> clear TF -> TIE -> preset -> TE=1 last,
+    // so the first event cannot precede TIE. On any I2C failure the timer is stopped (verified by
+    // read-back where the bus allows it) and 0 is returned; the caller cannot tell that from a
+    // requested stop, and if even the stop fails the hardware state is unknown.
+    // 0x1D flags are write-0-to-clear (writing 1 is ignored, VBFF is read-only), so TF is cleared
+    // with a single write that leaves the other flags untouched (a read-modify-write would drop
+    // a flag raised in between).
+    static constexpr std::uint8_t FLAG_CLEAR_TF = 0xAF;
+    auto stop_timer = [this](void) -> bool {
+      for (int retry = 0; retry < 3; ++retry) {
+        std::uint8_t ext = 0, ctl = 0;
+        if (bitOff(0x1C, 0x10) && bitOff(0x1E, 0x10)
+         && readRegister(0x1C, &ext, 1) && readRegister(0x1E, &ctl, 1)
+         && !(ext & 0x10) && !(ctl & 0x10)) { return true; }
+      }
+      return false;
+    };
+    std::uint8_t reg0x1C = 0;
+    if (cycle == 0) {
+      stop_timer();
+      writeRegister8(0x1D, FLAG_CLEAR_TF);
+      return 0;
+    }
+    bool ok = readRegister(0x1C, &reg0x1C, 1);
+    if (ok) {
+      reg0x1C = (reg0x1C & ~0x17) | sel->tsel;
+      ok = writeRegister8(0x1C, reg0x1C)
+        && writeRegister8(0x1D, FLAG_CLEAR_TF)
+        && bitOn(0x1E, 0x10);
+    }
+    if (ok) {
+      // While TE=0 the counter registers read back the preset, so verify the write took
+      // (a corrupted preset was observed on a shared bus) and retry a few times.
+      std::uint8_t regdata[2] = { (std::uint8_t)(cycle & 0xff), (std::uint8_t)((cycle >> 8) & 0xff) };
+      ok = false;
+      for (int retry = 0; retry < 3 && !ok; ++retry) {
+        std::uint8_t verify[2] = { 0, 0 };
+        ok = writeRegister(0x1A, regdata, 2)
+          && readRegister(0x1A, verify, 2)
+          && verify[0] == regdata[0] && verify[1] == regdata[1];
+      }
+    }
+    if (ok) { ok = writeRegister8(0x1C, reg0x1C | 0x10); }
+    if (!ok) {
+      stop_timer();
+      return 0;
+    }
+    // Actual period rounded to the nearest ms (cycle * mul_ms fits by max_cnt); never 0 while running.
+    std::uint32_t result = (cycle * sel->mul_ms + (sel->div >> 1)) / sel->div;
+    return result ? result : 1;
   }
 
   int RX8130_Class::setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time)
@@ -239,7 +280,7 @@ namespace m5
   void RX8130_Class::clearIRQ(void)
   {
     if (isEnabled()) {
-      bitOff(0x1D, 0x18);
+      writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
     }
   }
 
@@ -247,7 +288,7 @@ namespace m5
   {
     if (isEnabled()) {
       bitOff(0x1E, 0x18);
-      bitOff(0x1D, 0x18);
+      writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
     }
   }
 
