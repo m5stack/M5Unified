@@ -125,22 +125,25 @@ namespace m5
   }
 
   void AXP2101_Class::setChargeVoltage(std::uint16_t max_mV)
-  {
-    max_mV = (max_mV / 10) - 400;
-    if (max_mV > 460 - 400) { max_mV = 460 - 400; }
-    static constexpr std::uint8_t table[] =
-      { 410 - 400  /// 4100mV
-      , 420 - 400  /// 4200mV
-      , 435 - 400  /// 4350mV
-      , 440 - 400  /// 4400mV
-      , 460 - 400  /// 4600mV
-      , 255
-      };
-    size_t i = 0;
-    while (table[i] <= max_mV) { ++i; }
+  { /// reg 0x64 selects the constant-voltage target: 1 = 4.0V through 5 = 4.4V,
+    /// with 0 reserved. An early revision of the datasheet also documented a
+    /// 4.6V setting, which later revisions dropped; nothing this library runs
+    /// on carries a cell that charges to 4.6V, so a request that high is held
+    /// at the highest step both revisions agree on rather than sent to a code
+    /// whose meaning depends on the silicon.
+    ///
+    /// The earlier form subtracted a bias from the argument before comparing.
+    /// The argument is unsigned, so a request under the lowest step wrapped
+    /// around and selected code 0, as did a request that reached the 4.6V
+    /// entry - asking for a gentler charge voltage produced either a reserved
+    /// code or the highest voltage, depending on the silicon.
+    static constexpr std::uint16_t table[] = { 4000, 4100, 4200, 4350, 4400 };
+    size_t i = (sizeof(table) / sizeof(table[0])) - 1;
+    /// pick the highest step that does not exceed the request, and the lowest
+    /// step when the request is under all of them.
+    while (i && table[i] > max_mV) { --i; }
 
-    if (++i >= 0b110) { i = 0; }
-    writeRegister8(0x64, i);
+    writeRegister8(0x64, static_cast<std::uint8_t>(i + 1));
   }
 
   std::int8_t AXP2101_Class::getBatteryLevel(void)

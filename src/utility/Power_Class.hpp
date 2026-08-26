@@ -46,6 +46,7 @@ namespace m5
   , ext_USB    = 1 << 5 // M5Station external USB.   ※ Not for CoreS3 main USB.
   , ext_PWR485 = 1 << 6 // M5PowerHub external RS485.
   , ext_PWRCAN = 1 << 7 // M5PowerHub external CAN.
+  , ext_EXT    = 1 << 8 // M5Tab5X bottom Hat power.
   , ext_MAIN   = 1 << 15
   };
 
@@ -161,7 +162,8 @@ namespace m5
 
     /// set battery charge current
     /// @param max_mA milli ampere.
-    /// @note CoreMatrix selects the nearest supported maximum: 180 mA below 650 mA, otherwise 650 mA.
+    /// @note CoreMatrix selects 180 mA below 650 mA, otherwise 650 mA.
+    /// @note ToughC5 selects 180 mA below 830 mA, otherwise 830 mA.
     /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
     void setChargeCurrent(std::uint16_t max_mA);
 
@@ -203,7 +205,8 @@ namespace m5
 
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
-    /// @attention Only for models with AXP192 or AXP2101
+    /// @attention Only for models with AXP192, AXP2101, or M5PM1.
+    /// @attention M5PM1 reports only 0 or 2.
     /// @attention Once this function is called, the value is reset to 0, and the next time it is pressed on, the value changes.
     uint8_t getKeyState(void);
 
@@ -234,6 +237,7 @@ namespace m5
     M5PM1_Class M5pm1;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    M5PM1_Class M5pm1;
     INA226_Class Ina226 = { 0x41 };
 
 #else

@@ -5,6 +5,7 @@
 #define __M5_M5IOE1_CLASS_H__
 
 #include "IOExpander_Base.hpp"
+#include "pwm_types.hpp"
 
 namespace m5
 {
@@ -44,30 +45,47 @@ namespace m5
 
     bool begin();
 
-    void setDirection(uint8_t pin, bool direction) override;
+    bool setDirection(uint8_t pin, bool direction) override;
 
-    void enablePull(uint8_t pin, bool enablePull) override;
+    bool setPullMode(uint8_t pin, gpio_pull_t mode) override;
 
-    void setPullMode(uint8_t pin, bool mode) override;
-
-    void setHighImpedance(uint8_t pin, bool enable) override;
+    /// On the M5IOE1 this selects the drive mode (open-drain), which keeps
+    /// sinking the pin while the output latch is low; it is not a disconnect.
+    bool setHighImpedance(uint8_t pin, bool enable) override;
 
     bool getWriteValue(uint8_t pin) override;
 
-    void digitalWrite(uint8_t pin, bool level) override;
+    bool digitalWrite(uint8_t pin, bool level) override;
 
     bool digitalRead(uint8_t pin) override;
     bool getInputLevel(uint8_t pin, bool* level) override;
 
-    void setPwmFrequency(std::uint16_t frequency);
+    /// set the PWM frequency in Hz.
+    /// @note The frequency is shared by all PWM channels, so changing it also
+    /// changes a channel that is already running.
+    bool setPwmFrequency(std::uint16_t frequency);
 
-    void setPwmDuty(std::uint8_t channel, std::uint16_t duty12, bool enable = true, bool polarity = false);
+    /// set PWM duty in percent.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty duty cycle in percent (0-100).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                           pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
-    void resetIrq() override;
+    /// set PWM duty with 12-bit precision.
+    /// @param channel PWM channel (pwm_ch1 - pwm_ch4).
+    /// @param duty12 duty cycle (0-4095).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                         pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
-    void disableIrq() override;
+    bool resetIrq() override;
 
-    void enableIrq() override;
+    bool disableIrq() override;
+
+    bool enableIrq() override;
 
   private:
     static bool _isValidPin(uint8_t pin) { return pin < 14; }

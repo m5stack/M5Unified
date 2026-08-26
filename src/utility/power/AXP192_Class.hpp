@@ -34,6 +34,11 @@ namespace m5
 
     /// set battery charge voltage
     /// @param max_mV milli volt. (4100 - 4360).
+    /// set the constant-voltage charge target.
+    /// @param max_mV the highest step at or below this value is selected.
+    /// Supported steps are 4100 / 4150 / 4200 / 4360 mV; a request under the
+    /// lowest step selects that step, and one above the highest selects the
+    /// highest.
     void setChargeVoltage(std::uint16_t max_mV);
 
     /// Get whether the battery is currently charging or not.

@@ -118,7 +118,25 @@ namespace m5
     default:
       break;
 
+    case board_t::board_M5CoreP4X:
+      {
+        _pmic = pmic_t::pmic_m5pm1;
+        M5pm1.begin();
+
+        auto& ioe1 = M5.getIOExpander(0);
+        // M5IOE1_G12 supplies the shared 3V3 rail for MBUS, TF card and sensors.
+        ioe1.setHighImpedance(M5IOE1_Class::gpio12, false);
+        ioe1.setDirection(M5IOE1_Class::gpio12, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio12, true);
+
+        // M5IOE1_G6 is the active-low charger status input.
+        ioe1.setDirection(M5IOE1_Class::gpio6, false);
+        ioe1.setPullMode(M5IOE1_Class::gpio6, IOExpander_Base::pull_up);
+      }
+      break;
+
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       {
         static constexpr std::uint8_t reg_array_0x43[] =
         { ///     +--------- HP_DET : Headphone detect
@@ -154,6 +172,13 @@ namespace m5
         };
         M5.getIOExpander(0).writeRegister8Array(reg_array_0x43, sizeof(reg_array_0x43));
         M5.getIOExpander(1).writeRegister8Array(reg_array_0x44, sizeof(reg_array_0x44));
+        if (M5.getBoard() == board_t::board_M5Tab5X)
+        {
+          auto& ioe = M5.getIOExpander(0); // PI4IOE 0x43, ADDR grounded, bottom Hat power
+          ioe.setHighImpedance(3, false);
+          ioe.setDirection(3, true);
+          ioe.digitalWrite(3, true);
+        }
         Ina226.begin();
         INA226_Class::config_t cfg;
         cfg.sampling_rate = INA226_Class::Sampling::Rate16;
@@ -221,6 +246,8 @@ namespace m5
       _wakeupPin = GPIO_NUM_2;
       /// bring up the PM1 early so its status registers are readable below.
       M5pm1.begin();
+      // Enable the PM1 5V boost output (MBUS 5V and 3.3V)
+      M5pm1.setExtOutput(true);
       /// KEY1/2/3 are wired to PM1 GPIO0/1/2 (pressed = LOW)
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
@@ -275,6 +302,46 @@ namespace m5
       _wakeupPin = GPIO_NUM_4;
       /// bring up the PM1 early so its status registers are readable below.
       M5pm1.begin();
+      /// GPIO4 drives the buzzer through PM1 PWM channel 1. The PM1 keeps
+      /// running across ESP resets and retains its PWM state, so put the
+      /// channel off at boot, then normalize the pin before selecting its PWM
+      /// function. Stopping the channel before sleep is left to the caller:
+      /// the PM1 stays powered while the ESP sleeps, so the application may
+      /// intend the PWM output to remain active, which makes it application
+      /// policy rather than board initialization.
+      /// Selecting the PWM function is what makes a retained duty audible
+      /// again, so it is only done once the channel is known to be off. If that
+      /// cannot be confirmed, the pin is left as a plain output driving low,
+      /// which is silent whatever the retained PWM state is.
+      bool pwm_off = false;
+      for (int retry = 3; !(pwm_off = M5pm1.setPwmDuty12bit(M5PM1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false)) && --retry; )
+      {
+        m5gfx::delay(10);
+      }
+      M5pm1.setGPIODrive(M5PM1_Class::gpio4, M5PM1_Class::push_pull);
+      M5pm1.setGPIOPull(M5PM1_Class::gpio4, M5PM1_Class::pull_none);
+      M5pm1.setGPIOOutput(M5PM1_Class::gpio4, false);
+      M5pm1.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::output);
+      if (pwm_off)
+      {
+        M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::special);
+      }
+      else
+      {
+        bool gpio_fallback = false;
+        for (int retry = 3; !(gpio_fallback = M5pm1.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio)) && --retry; )
+        {
+          m5gfx::delay(10);
+        }
+        if (gpio_fallback)
+        {
+          M5_LOGE("PM1 PWM ch1 could not be turned off. GPIO4 was switched to GPIO mode.");
+        }
+        else
+        {
+          M5_LOGE("PM1 PWM ch1 could not be turned off, and GPIO4 could not be switched to GPIO mode; silence cannot be guaranteed.");
+        }
+      }
       /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
       /// いたファームの設定に依存しないよう IRQ 関連を初期化する
       M5pm1.clearWakeSource();
@@ -292,7 +359,10 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         ioe1.setDirection(M5IOE1_Class::gpio1, false);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, true);
-        ioe1.enablePull(M5IOE1_Class::gpio1, false);
+        if (!ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none))
+        {
+          M5_LOGE("M5IOE1 CHG_PROG pull state could not be released.");
+        }
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
       }
       M5pm1.setBatteryCharge(true);
@@ -369,11 +439,17 @@ namespace m5
         // M5IOE1: PWM1 drives IO9 (G9 motor). REG_PWM_FREQ 0x25/0x26 Hz LE; REG_PWM1_DUTY 0x1B/0x1C (bit7 EN).
         constexpr uint16_t motor_pwm_hz = 2000;
         auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
-        ioe1.setPwmFrequency(motor_pwm_hz);
-        // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
-        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
-        ioe1.setDirection(M5IOE1_Class::gpio9, true);
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);  // PWM off at boot
+        if (ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false))
+        {
+          ioe1.setPwmFrequency(motor_pwm_hz);
+          // IO9 (G9 motor / PWM1): push-pull output, duty off until setVibration
+          ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
+          ioe1.setDirection(M5IOE1_Class::gpio9, true);
+        }
+        else
+        {
+          M5_LOGE("M5IOE1 PWM ch1 could not be turned off. Motor output was not enabled.");
+        }
       }
       break;
 
@@ -436,7 +512,7 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         // M5IOE1_G3 -- Charge Status
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
-        ioe1.enablePull(M5IOE1_Class::gpio3, false);
+        ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
         // M5IOE1_G4 -- Boost Control
         ioe1.setHighImpedance(M5IOE1_Class::gpio4, false);
         ioe1.setDirection(M5IOE1_Class::gpio4, true);
@@ -841,17 +917,44 @@ namespace m5
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      {
+        auto& ioe1 = M5.getIOExpander(0);
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+          ioe1.setDirection(M5IOE1_Class::gpio5, true);
+          ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          ioe1.setHighImpedance(M5IOE1_Class::gpio2, false);
+          ioe1.setDirection(M5IOE1_Class::gpio2, true);
+          ioe1.digitalWrite(M5IOE1_Class::gpio2, enable);
+        }
+      }
+      break;
+
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       if (port_mask & ext_port_mask_t::ext_PA)
       {
         auto& ioe = M5.getIOExpander(0);
-        ioe.setPullMode(2, enable);
+        ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
         ioe.digitalWrite(2, enable);
+      }
+      if (M5.getBoard() == board_t::board_M5Tab5X
+       && (port_mask & ext_port_mask_t::ext_EXT))
+      {
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setHighImpedance(3, false);
+        ioe.setDirection(3, true);
+        ioe.digitalWrite(3, enable);
       }
       if (port_mask & ext_port_mask_t::ext_USB)
       {
         auto& ioe = M5.getIOExpander(1);
-        ioe.setPullMode(3, enable);
+        ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
         ioe.digitalWrite(3, enable);
       }
       break;
@@ -1008,8 +1111,13 @@ namespace m5
     {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio5);
+
     case board_t::board_M5Tab5:
       return M5.getIOExpander(0).getWriteValue(2);
+    case board_t::board_M5Tab5X:
+      return M5.getIOExpander(0).getWriteValue(3);
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
@@ -1092,6 +1200,12 @@ namespace m5
     (void)enable;
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
+      break;
+#endif
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -1109,6 +1223,11 @@ namespace m5
   {
     switch (M5.getBoard())
     {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio2);
+#endif
+
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
@@ -1303,6 +1422,13 @@ namespace m5
         }
         break;
 
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+      case pmic_t::pmic_m5pm1:
+        if (!withTimer) {
+          M5pm1.powerOff();
+        }
+        break;
+
 #elif defined (CONFIG_IDF_TARGET_ESP32C61) || defined (CONFIG_IDF_TARGET_ESP32C5)
       case pmic_t::pmic_m5pm1:
       {
@@ -1391,6 +1517,7 @@ namespace m5
     default: break;
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       for (int i = 0; i < 10; ++i)
       {
         M5.getIOExpander(1).digitalWrite(4, i & 1); // io1.gpio4 == PWROFF_PLUSE
@@ -1508,7 +1635,7 @@ namespace m5
 #else
     ESP_LOGD("Power","deepSleep");
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) // || defined (CONFIG_IDF_TARGET_ESP32P4)
-
+    ESP_LOGW("Power","deepSleep: deep sleep is not supported on this target.");
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1639,8 +1766,8 @@ namespace m5
     (void)touch_wakeup;
 #else
     ESP_LOGD("Power","lightSleep");
-#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32H2) || defined (CONFIG_IDF_TARGET_ESP32P4)
-
+#if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32H2) || defined (CONFIG_IDF_TARGET_ESP32P4)
+    ESP_LOGW("Power","lightSleep: light sleep is not supported on this target.");
 #else
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1874,6 +2001,8 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       return M5pm1.getVBUSVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getVBUSVoltage();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -2064,6 +2193,8 @@ namespace m5
       }
       return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getBatteryVoltage();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2097,6 +2228,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         return Ina226.getBusVoltage() * 1000;
 #endif
 
@@ -2143,6 +2275,15 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      {
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1;
+        }
+        mv = bat_mv;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2181,6 +2322,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         // 2S Li-Po ( * 1000 / 2 == * 500)
         mv = Ina226.getBusVoltage() * 500;
         break;
@@ -2220,6 +2362,9 @@ namespace m5
       M5pm1.setBatteryCharge(enable);
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      M5pm1.setBatteryCharge(enable);
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2270,6 +2415,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         M5.getIOExpander(1).digitalWrite(7, enable);
         break;
 #endif
@@ -2302,19 +2448,22 @@ namespace m5
         auto& ioe1 = M5.getIOExpander(0);
         if (max_mA >= 650)
         {
-          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
           ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
           ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
           ioe1.setDirection(M5IOE1_Class::gpio3, true);
         }
         else
         {
-          ioe1.enablePull(M5IOE1_Class::gpio3, false);
+          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
           ioe1.setDirection(M5IOE1_Class::gpio3, false);
         }
       }
       return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      (void)max_mA;
+      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -2340,6 +2489,21 @@ namespace m5
           M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
         }
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5ToughC5)
+      {
+        // ToughC5 CHG_PROG is IOE1 G1: low selects 830 mA, high selects 180 mA.
+        // Set the latch before enabling push-pull output to avoid a transient
+        // selection of the opposite current during the mode transition.
+        auto& ioe1 = M5.getIOExpander(0);
+        const bool select_180mA = max_mA < 830;
+        ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
+        ioe1.digitalWrite(M5IOE1_Class::gpio1, select_180mA);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+      }
+      return;
 #endif
 
 #endif
@@ -2347,7 +2511,8 @@ namespace m5
     default:
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       switch (M5.getBoard()) {
-        case board_t::board_M5Tab5: {
+        case board_t::board_M5Tab5:
+        case board_t::board_M5Tab5X: {
           switch (max_mA) {
             case 0:
               // charge disable
@@ -2423,7 +2588,10 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
-        return 1000.0f * Ina226.getShuntCurrent();
+      case board_t::board_M5Tab5X:
+        // The shunt is wired so that charge current reads negative; invert to
+        // match the documented convention (+ = charge / - = discharge).
+        return -1000.0f * Ina226.getShuntCurrent();
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -2470,6 +2638,7 @@ namespace m5
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         // TODO:implement
 #endif
       default:
@@ -2509,6 +2678,14 @@ namespace m5
       }
       return is_charging_t::charge_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      {
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level)) {
+          return is_charging_t::charge_unknown;
+        }
+        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+      }
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
@@ -2531,8 +2708,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
         case board_t::board_M5PaperMono:
         {
-          // Running from battery (no external power) -> not charging.
-          if (M5pm1.getPowerSource() == M5PM1_Class::battery) { return is_charging_t::is_discharging; }
+          // No external power -> not charging. PWR_SRC is a bitmap, and the battery bit may coexist with VIN.
+          auto sources = M5pm1.getPowerSource();
+          if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout))) { return is_charging_t::is_discharging; }
           // External power present. The IP2316 charger reports
           // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
           // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
@@ -2584,6 +2762,7 @@ namespace m5
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
           ? is_charging_t::is_charging : is_charging_t::is_discharging;
 #endif
@@ -2707,6 +2886,10 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       return M5pm1.getPekPress();
 
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      return M5pm1.getPekPress();
+
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_axp192:
       return Axp192.getPekPress();
@@ -2748,13 +2931,13 @@ namespace m5
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
       auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
       if (level == 0) {
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, 0, false);
+        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
       } else {
         // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
         ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
         ioe1.setDirection(M5IOE1_Class::gpio9, true);
         uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
-        ioe1.setPwmDuty(M5IOE1_Class::pwm_ch1, duty12);
+        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
       }
       return;
     }

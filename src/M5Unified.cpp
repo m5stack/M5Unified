@@ -126,6 +126,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5NanoH2     , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5CoreP4X    , GPIO_NUM_9 ,GPIO_NUM_11 , GPIO_NUM_16,GPIO_NUM_18 }, // CoreP4X
 { board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
@@ -219,6 +220,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 { board_t::board_M5CoreMatrix , GPIO_NUM_25, GPIO_NUM_27, GPIO_NUM_26, 255        , 255        , GPIO_NUM_28 },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5CoreP4X    , GPIO_NUM_10, GPIO_NUM_7 , GPIO_NUM_8 , 255        , 255        , GPIO_NUM_50 },
 { board_t::board_M5Tab5       , GPIO_NUM_43, GPIO_NUM_44, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_41, GPIO_NUM_42 },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5ToughC5    , GPIO_NUM_9 , GPIO_NUM_7 , GPIO_NUM_8 , 255        , 255        , GPIO_NUM_10 },
@@ -299,6 +301,23 @@ static constexpr const uint8_t _pin_table_other1[][2] = {
 
 static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
+{ board_t::board_M5CoreP4X,
+  255        , GPIO_NUM_17,
+  255        , GPIO_NUM_20,
+  255        , 255        ,
+  GPIO_NUM_7 , GPIO_NUM_21,
+  GPIO_NUM_8 , GPIO_NUM_22,
+  GPIO_NUM_10, 255        ,
+  GPIO_NUM_38, GPIO_NUM_37,
+  GPIO_NUM_15, GPIO_NUM_14,
+  GPIO_NUM_11, GPIO_NUM_9 ,
+  GPIO_NUM_18, GPIO_NUM_16,
+  GPIO_NUM_39, GPIO_NUM_12,
+  GPIO_NUM_34, GPIO_NUM_23,
+  255        , GPIO_NUM_19,
+  255        , 255        ,
+  255        , 255        ,
+},
 { board_t::board_M5Tab5   ,
   255        , GPIO_NUM_16,
   255        , GPIO_NUM_17,
@@ -449,6 +468,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
   void M5Unified::_setup_pinmap(board_t id)
   {
+    if (id == board_t::board_M5Tab5X) {
+      id = board_t::board_M5Tab5;
+    }
+
     constexpr const std::pair<const void*, size_t> tbl[] = {
       { _pin_table_i2c_ex_in, sizeof(_pin_table_i2c_ex_in[0]) },
       { _pin_table_port_bc, sizeof(_pin_table_port_bc[0]) },
@@ -481,7 +504,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     while (*bulk_data) {
       uint8_t len = *bulk_data++;
       uint8_t r = retry + 1;
-      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { M5.delay(1); }
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { m5gfx::delay(1); }
       bulk_data += len;
     }
   }
@@ -764,10 +787,82 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
       M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
       M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
-      M5.delay(1);                                                 // soft-ramp 遷移待ち
+      m5gfx::delay(1);                                             // soft-ramp 遷移待ち
       M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
       M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
     }
+#endif
+    return true;
+  }
+
+  static void _corep4x_audio_power(M5Unified* self, bool enabled)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // Speaker and microphone share M5IOE1_G1, so keep the rail enabled at runtime.
+    if (!enabled) { return; }
+    auto& ioe1 = self->getIOExpander(0);
+    ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+    ioe1.setDirection(M5IOE1_Class::gpio1, true);
+    ioe1.digitalWrite(M5IOE1_Class::gpio1, true);
+    self->delay(20);
+#else
+    (void)self;
+    (void)enabled;
+#endif
+  }
+
+  bool M5Unified::_speaker_enabled_cb_corep4x(void* args, bool enabled)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    auto self = (M5Unified*)args;
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      // ES8311 slave, 24 kHz, 16-bit I2S, MCLK = 256 * sample rate.
+      2, 0x0D, 0xFA,
+      2, 0x44, 0x08,
+      2, 0x44, 0x08,
+      2, 0x01, 0x30,
+      2, 0x02, 0x00,
+      2, 0x03, 0x10,
+      2, 0x16, 0x24,
+      2, 0x04, 0x10,
+      2, 0x05, 0x00,
+      2, 0x0B, 0x00,
+      2, 0x0C, 0x00,
+      2, 0x10, 0x1F,
+      2, 0x11, 0x7F,
+      2, 0x00, 0x80,
+      2, 0x01, 0x3F,
+      2, 0x06, 0x03,
+      2, 0x13, 0x10,
+      2, 0x1B, 0x0A,
+      2, 0x1C, 0x6A,
+      2, 0x44, 0x58,
+      2, 0x09, 0x00,
+      2, 0x17, 0xBF,
+      2, 0x0E, 0x02,
+      2, 0x12, 0x00,
+      2, 0x14, 0x1A,
+      2, 0x0D, 0x01,
+      2, 0x15, 0x40,
+      2, 0x37, 0x08,
+      2, 0x45, 0x00,
+      2, 0x07, 0x00,
+      2, 0x08, 0xFF,
+      2, 0x32, 0xBF,
+      0
+    };
+    _corep4x_audio_power(self, enabled);
+    auto& ioe1 = self->getIOExpander(0);
+    ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
+    ioe1.setDirection(M5IOE1_Class::gpio3, true);
+    ioe1.digitalWrite(M5IOE1_Class::gpio3, enabled);
+    if (enabled)
+    {
+      in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
+    }
+#else
+    (void)args;
+    (void)enabled;
 #endif
     return true;
   }
@@ -1333,6 +1428,56 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+  bool M5Unified::_microphone_enabled_cb_corep4x(void* args, bool enabled)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    auto self = (M5Unified*)args;
+    _corep4x_audio_power(self, enabled);
+    self->In_I2C.writeRegister8(es7210_i2c_addr, 0x00, 0xFF, 400000);
+    if (enabled)
+    {
+      static constexpr uint8_t data[] =
+      {
+        2, 0x00, 0x41, // RESET_CTL
+        2, 0x01, 0x1f, // CLK_ON_OFF
+        2, 0x06, 0x00, // DIGITAL_PDN
+        2, 0x07, 0x20, // ADC_OSR
+        2, 0x08, 0x10, // MODE_CFG
+        2, 0x09, 0x30, // TCT0_CHPINI
+        2, 0x0A, 0x30, // TCT1_CHPINI
+        2, 0x20, 0x0a, // ADC34_HPF2
+        2, 0x21, 0x2a, // ADC34_HPF1
+        2, 0x22, 0x0a, // ADC12_HPF2
+        2, 0x23, 0x2a, // ADC12_HPF1
+        2, 0x02, 0xC1,
+        2, 0x04, 0x01,
+        2, 0x05, 0x00,
+        2, 0x11, 0x60,
+        2, 0x40, 0x42, // ANALOG_SYS
+        2, 0x41, 0x70, // MICBIAS12
+        2, 0x42, 0x70, // MICBIAS34
+        2, 0x43, 0x1B, // MIC1_GAIN
+        2, 0x44, 0x1B, // MIC2_GAIN
+        2, 0x45, 0x1B, // MIC3_GAIN (AEC input)
+        2, 0x46, 0x1B, // MIC4_GAIN (TDM slot 4)
+        2, 0x47, 0x00, // MIC1_LP
+        2, 0x48, 0x00, // MIC2_LP
+        2, 0x49, 0x00, // MIC3_LP
+        2, 0x4A, 0x00, // MIC4_LP
+        2, 0x4B, 0x00, // MIC12_PDN
+        2, 0x4C, 0x00, // MIC34_PDN
+        2, 0x01, 0x14, // CLK_ON_OFF
+        0,
+      };
+      in_i2c_bulk_write(es7210_i2c_addr, data, 100000, 3);
+    }
+#else
+    (void)args;
+    (void)enabled;
+#endif
+    return true;
+  }
+
   bool M5Unified::_microphone_enabled_cb_cardputer_adv(void* args, bool enabled)
   {
     (void)args;
@@ -1368,65 +1513,130 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
-  bool M5Unified::_detect_i2c_device(uint8_t sda, uint8_t scl, uint8_t addr, const uint8_t* cmd_list)
+  /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
+  /// 待ちが要るのは「電源投入から間もない」ことであってアドレスごとの事情ではないので、
+  /// 判定の入口で一度払う。旧実装は最初の probe が常に真を返して連鎖が止まっていたため
+  /// 結果的に 1 回しか待っていなかった。それを意図として書き直したもの。
+  void M5Unified::_wait_i2c_device_power(void)
   {
-    uint32_t result = 0;
-#if defined(M5UNIFIED_PC_BUILD)
-    return result;
-#else
-    m5gfx::gpio::pin_backup_t pin_backup[] = {scl, sda};
+#if !defined(M5UNIFIED_PC_BUILD)
+    static bool waited = false;
+    if (!waited)
     {
-      if(cmd_list == nullptr)
+      waited = true;
+      m5gfx::delay(50);
+    }
+#endif
+  }
+
+  bool M5Unified::_probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr)
+  {
+#if defined(M5UNIFIED_PC_BUILD)
+    return false;
+#else
+    /// アドレスの存在確認はソフトウェア I2C ポートで行う (オープンドレイン駆動で
+    /// ACK 競合が起きず、ハードウェアのペリフェラルにも触れない)。
+    /// ポートは M5GFX の autodetect probe (-1) と分ける。ソフト I2C のスロットは
+    /// 所有権を持たず、init が既存の設定を黙って奪う作りなので、ライブラリ同士で
+    /// 同じスロットを共有しない。
+    static constexpr int_fast16_t probe_i2c_port = -2;
+
+    _wait_i2c_device_power();
+
+    m5gfx::gpio::pin_backup_t pin_backup[] = { scl, sda };
+
+    // ここでは待たない。電源安定待ちは判定の入口で一度だけ行う (_wait_i2c_device_power)。
+    // アドレスごとに待つと、判定が空振りするたびに数十 ms が起動時間へ積み上がる。
+    m5gfx::pinMode(scl, m5gfx::pin_mode_t::input_pullup);
+    m5gfx::pinMode(sda, m5gfx::pin_mode_t::input_pullup);
+
+    // 指定ピンが「外部プルアップの載った I2C バス」かどうかを先に確かめる。
+    // ここは I2C ピンとは限らない場所を駆動する機種判別なので、判定を外すと
+    // 機種の読みが変わる。判定方式は M5GFX の autodetect probe と同一のものを使う
+    // (実機での実績がある形から動かさない。変えるなら該当機種すべてで再検証が要る)。
+    //
+    // 4 回の read のうち、後半 2 回は入力プルダウンにしても High になること
+    // (= 外部プルアップが内部プルダウンに勝つこと) を確認するもの。
+    // 弱いプルアップ (内部プルダウンと同程度の抵抗値) では通らないが、
+    // 「強いプルアップがある = I2C バスである」を要求するのがこの判定の趣旨。
+    const uint8_t cmd_bus_check_list[] = {
+      m5gfx::gpio::command_write_low          , scl,
+      m5gfx::gpio::command_read               , scl,  // low チェック
+      m5gfx::gpio::command_write_low          , sda,
+      m5gfx::gpio::command_read               , sda,  // low チェック
+      m5gfx::gpio::command_mode_input_pulldown, scl,
+      m5gfx::gpio::command_delay_usec         , 10,
+      m5gfx::gpio::command_read               , scl,  // 外部プルアップがあるなら High
+      m5gfx::gpio::command_mode_input_pullup  , scl,
+      m5gfx::gpio::command_mode_input_pulldown, sda,
+      m5gfx::gpio::command_delay_usec         , 10,
+      m5gfx::gpio::command_read               , sda,  // 外部プルアップがあるなら High
+      m5gfx::gpio::command_mode_input_pullup  , sda,
+      m5gfx::gpio::command_end
+    };
+    auto bus_check = [&](void) -> uint32_t
+    {
+      // ラッチを Low にしてから出力へ切り替える。直前は input_pullup (ラッチ High)
+      // なので、先に出力にすると一瞬 push-pull で High を駆動してしまう。
+      // ここは相手が何か分からないピンなので、High は一度も駆動しない。
+      m5gfx::gpio_lo(scl); m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
+      m5gfx::gpio_lo(sda); m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
+      return m5gfx::gpio::command(cmd_bus_check_list);
+    };
+
+    // 0x02 は「SCL は外部プルアップで戻るのに SDA だけ Low のまま」。前回の通信の
+    // 途中で止まったデバイスがデータ線を握っている典型で (ソフトリセットでは
+    // デバイスの電源が切れないため実際に起きる)、プルアップの無いただの Low ピンとは
+    // このシグネチャで区別できる。この場合だけは STOP を見せて握りを解かせ、
+    // もう一度確かめる。それ以外の不一致は I2C バスではないとみなして即座に帰る。
+    uint32_t check = bus_check();
+    if (check != 0x03 && check != 0x02)
+    {
+      for (auto& backup : pin_backup) { backup.restore(); }
+      return false;
+    }
+
+    // 前回の通信の途中で止まっているデバイスに STOP を見せて論理状態を戻す。
+    // START だけで戻らないデバイスが実在する (同ファイルの StampS3/Capsule 判別に
+    // 「STOP を出さないと正しく動作しないデバイスがあった (UnitHEART MAX30100)」の記録がある)。
+    // 線を Low へ駆動するか解放するかの 2 状態しか使わない (High を駆動しない) ので、
+    // デバイスが線を握っていてもパッド同士の衝突にはならない。
+    {
+      auto line_lo = [](uint8_t pin)
+      { m5gfx::gpio_lo(pin); m5gfx::pinMode(pin, m5gfx::pin_mode_t::output); };
+      auto line_hi = [](uint8_t pin)
+      { m5gfx::pinMode(pin, m5gfx::pin_mode_t::input_pullup); };
+      for (int i = 0; i < 8; ++i)
       {
-        uint8_t cmd_low[] = {
-          m5gfx::gpio::command_write_low, scl,
-          m5gfx::gpio::command_mode_output, scl,  // SCL
-          m5gfx::gpio::command_write_low, sda,
-          m5gfx::gpio::command_mode_output, sda, // SDA
-          m5gfx::gpio::command_end,
-        };
-        m5gfx::gpio::command(cmd_low);
+        line_lo(scl); m5gfx::delayMicroseconds(5);
+        line_lo(sda); m5gfx::delayMicroseconds(5);
+        line_hi(scl); m5gfx::delayMicroseconds(5);
+        line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
       }
-      else m5gfx::gpio::command(cmd_list);
+    }
 
-      delay(50);  // 延时 50ms，保证设备上电稳定
+    if (check != 0x03 && bus_check() != 0x03)
+    { // 握りが解けなかった。ここから先は probe しても意味がない。
+      for (auto& backup : pin_backup) { backup.restore(); }
+      return false;
+    }
 
-      for (uint8_t i2caddr : (const uint8_t[]){static_cast<uint8_t>(addr << 1)}) { //detect address
-        delay(2);  // 小延时
-        bool nack = true;
-        // I2C START
-        m5gfx::gpio_lo(sda);  // SDA LOW = START
-        for (int cycle = 0; cycle < 20; ++cycle) {
-          // SCL toggle
-          m5gfx::gpio_hi(scl);
-          delay(1);
-          m5gfx::gpio_lo(scl);
-          delay(1);
-
-          if (cycle & 1) {
-            if (cycle == 17) {
-                nack = m5gfx::gpio_in(sda);  // 读 ACK
-            }
-          } else {
-            if (i2caddr & 0x80) {
-              m5gfx::gpio_hi(sda);
-            } else {
-              m5gfx::gpio_lo(sda);
-            }
-            i2caddr <<= 1;
-            if (cycle >= 16) {
-              m5gfx::pinMode(sda, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-            }
-          }
-        }
-        m5gfx::gpio_hi(sda);  // SDA HIGH = STOP
-        result = result << 1 | nack;
-      }
+    bool hit = false;
+    if (m5gfx::i2c::init(probe_i2c_port, sda, scl).has_value())
+    {
+      // クロックが上がらないバス、前の通信の途中でデバイスがデータ線を握っている
+      // バスは、いずれも beginTransaction 側が検出して復旧または中断する。
+      // NACK の場合も beginTransaction 自体は成功を返し (内部で STOP を出して
+      // エラーをラッチする)、そのエラーは endTransaction が報告する。
+      // したがって両方の成功をもって「ACK が返った」と判定する。
+      hit = m5gfx::i2c::beginTransaction(probe_i2c_port, addr, 100000, false).has_value()
+         && m5gfx::i2c::endTransaction(probe_i2c_port).has_value();
+      m5gfx::i2c::release(probe_i2c_port);
     }
     for (auto& backup : pin_backup) {
         backup.restore();
     }
-    return result;
+    return hit;
 #endif
   }
 
@@ -1656,7 +1866,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
       if (board == board_t::board_unknown) {
         /// PowerHub ?
-        if (_detect_i2c_device(45, 48, 0x50)) {
+        if (_probe_i2c_addr(45, 48, 0x50)) {
           board = board_t::board_M5PowerHub;
         }
       }
@@ -1664,18 +1874,26 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
     if (board == board_t::board_unknown) {
+        /// 内部 I2C バス (SDA45/SCL0) に載るデバイスで先に決める。他ピンの probe を
+        /// 間に挟まないので、ここで確定する機種は 48/47 に一切触れずに済む
+        /// (AtomVoiceS3R では GPIO48 が I2S の DOUT)。
+        ///
         /// AtomS3RExt / AtomS3RCam have a BMI270 on the internal I2C bus.
-        if (_detect_i2c_device(45, 0, 0x68)
-         || _detect_i2c_device(45, 0, 0x69)) {
+        /// この 2 機種は基板が共通で、カメラ部がユーザーの扱えるブレッドボードに
+        /// なっているため、内部バスにユーザーのデバイスが載りうる。オンボードで
+        /// 必ず存在する BMI270 を先に見て、後から載ったアドレスに identity を
+        /// 奪われないようにする。
+        if (_probe_i2c_addr(45, 0, 0x68)
+         || _probe_i2c_addr(45, 0, 0x69)) {
           board = board_t::board_M5AtomS3RExt;
         }
-        /// Stamp-S3Bat ?
-        else if (_detect_i2c_device(48, 47, 0x6E)) {
-          board = board_t::board_M5StampS3Bat;
-        }
-        /// AtomEchoS3R ?
-        else if(_detect_i2c_device(45, 0, 0x18)) {
+        /// AtomVoiceS3R ?
+        else if (_probe_i2c_addr(45, 0, 0x18)) {
           board = board_t::board_M5AtomVoiceS3R;
+        }
+        /// Stamp-S3Bat ? (内部バスに何も居なかったときだけ別のピンを触る)
+        else if (_probe_i2c_addr(48, 47, 0x6E)) {
+          board = board_t::board_M5StampS3Bat;
         }
         /// StampS3Mini has no other onboard device that can identify it.
         else {
@@ -1817,10 +2035,19 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
+#if defined (BOARD_ID) && BOARD_ID == 31
+      board = board_t::board_M5CoreP4X;
+#else
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
-        board = board_t::board_M5Tab5;
+      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 and M5Tab5X G32 always High
+      {
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        board = chip_info.revision >= 300
+              ? board_t::board_M5Tab5X
+              : board_t::board_M5Tab5;
+      }
       else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
         board = board_t::board_M5UnitPoEP4;
       else
@@ -1831,6 +2058,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               ? board_t::board_M5StampP4X
               : board_t::board_M5StampP4;
       }
+#endif
     }
 
 #endif
@@ -1888,7 +2116,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     switch (board) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      {
+        auto ioexp = new M5IOE1_Class(0x4F);
+        ioexp->begin();
+        _io_expander[0].reset(ioexp);
+      }
+      break;
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       for (int i = 0; i < 2; ++i)
       {
         auto ioexp = new PI4IOE5V6408_Class(0x43 + i);
@@ -2170,13 +2406,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         auto& ioexp = getIOExpander(0);
         // lcd backlight
         ioexp.setDirection(7, true);
-        ioexp.setPullMode(7, false);
+        ioexp.setPullMode(7, IOExpander_Base::pull_down);
         ioexp.setHighImpedance(7, false);
   
         for (int i = 0; i < 3; ++i) {
           // button a~c
           ioexp.setDirection(i, false);
-          ioexp.setPullMode(i, true);
+          ioexp.setPullMode(i, IOExpander_Base::pull_up);
           ioexp.setHighImpedance(i, false);
         }
         delay(100);
@@ -2257,6 +2493,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      {
+        auto& ioe1 = getIOExpander(0);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
+        ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
+        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+        ioe1.setDirection(M5IOE1_Class::gpio3, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio1, false);
+        ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
+      }
+      break;
+
     case board_t::board_M5UnitPoEP4:
       m5gfx::pinMode(GPIO_NUM_45, m5gfx::pin_mode_t::input);
       break;
@@ -2296,7 +2544,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5CoreP4X:
+        if (cfg.internal_mic)
+        {
+          mic_cfg.pin_mck = GPIO_NUM_2;
+          mic_cfg.pin_bck = GPIO_NUM_6;
+          mic_cfg.pin_ws = GPIO_NUM_4;
+          mic_cfg.pin_data_in = GPIO_NUM_5;
+          mic_cfg.magnification = 2;
+          mic_cfg.sample_rate = 24000;
+          mic_cfg.input_channel = input_channel_t::input_stereo;
+          mic_cfg.i2s_port = I2S_NUM_0;
+          mic_enable_cb = _microphone_enabled_cb_corep4x;
+        }
+        break;
+
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         if (cfg.internal_mic)
         {
           mic_cfg.pin_mck = GPIO_NUM_30;
@@ -2502,7 +2766,22 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5CoreP4X:
+        if (cfg.internal_spk)
+        {
+          spk_cfg.pin_mck = GPIO_NUM_2;
+          spk_cfg.pin_bck = GPIO_NUM_6;
+          spk_cfg.pin_ws = GPIO_NUM_4;
+          spk_cfg.pin_data_out = GPIO_NUM_3;
+          spk_cfg.magnification = 4;
+          spk_cfg.sample_rate = 24000;
+          spk_cfg.i2s_port = I2S_NUM_0;
+          spk_enable_cb = _speaker_enabled_cb_corep4x;
+        }
+        break;
+
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         if (cfg.internal_spk)
         {
           spk_cfg.pin_mck = GPIO_NUM_30;
@@ -2904,7 +3183,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (M5UNIFIED_PC_BUILD)
 #elif defined ( CONFIG_IDF_TARGET_ESP32P4 )
  #define ENABLE_M5MODULE
-        if (_board == board_t::board_M5Tab5)
+        if (_board == board_t::board_M5Tab5
+         || _board == board_t::board_M5Tab5X
+         || _board == board_t::board_M5CoreP4X)
 #elif defined ( CONFIG_IDF_TARGET_ESP32S3 )
  #define ENABLE_M5MODULE
         if (_board == board_t::board_M5StackCoreS3
@@ -3089,6 +3370,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         tb_k = 364; // (65536*3/540)
         break;
       case board_t::board_M5Tab5:
+      case board_t::board_M5Tab5X:
         tb_y = 1280;
         tb_k = 273; // (65536*3/540)
         break;
@@ -3444,6 +3726,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       height = 960;
       break;
     case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
       height = 1280;
       break;
     default:

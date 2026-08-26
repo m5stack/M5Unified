@@ -30,6 +30,8 @@ namespace m5
   static constexpr const uint8_t M5PM1_REG_VBAT_L      = 0x22;
   static constexpr const uint8_t M5PM1_REG_VIN_L       = 0x24;
   static constexpr const uint8_t M5PM1_REG_5VOUT_L     = 0x26;
+  static constexpr const uint8_t M5PM1_REG_PWM0_L      = 0x30;
+  static constexpr const uint8_t M5PM1_REG_PWM_FREQ_L  = 0x34;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS1 = 0x40;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS2 = 0x41;
   static constexpr const uint8_t M5PM1_REG_IRQ_STATUS3 = 0x42;
@@ -43,6 +45,8 @@ namespace m5
   static constexpr const uint8_t M5PM1_PWR_CFG_BOOST_EN = 1 << 3;
   static constexpr const uint8_t M5PM1_PWR_CFG_LED_EN   = 1 << 4;
   static constexpr const uint8_t M5PM1_SYS_CMD_SHUTDOWN = 0xA1;
+  static constexpr const uint8_t M5PM1_PWM_ENABLE       = 1 << 4;
+  static constexpr const uint8_t M5PM1_PWM_POLARITY     = 1 << 5;
 
   static constexpr bool is_valid_gpio(M5PM1_Class::gpio_t pin)
   {
@@ -52,6 +56,11 @@ namespace m5
   static constexpr std::uint8_t gpio_num(M5PM1_Class::gpio_t pin)
   {
     return static_cast<std::uint8_t>(pin);
+  }
+
+  static constexpr bool is_valid_pwm_channel(M5PM1_Class::pwm_channel_t channel)
+  {
+    return static_cast<std::uint8_t>(channel) <= M5PM1_Class::pwm_ch1;
   }
 
   bool M5PM1_Class::begin(void)
@@ -99,9 +108,8 @@ namespace m5
 
   M5PM1_Class::pwr_src_t M5PM1_Class::getPowerSource(void)
   {
-    if (!_init) { return unknown; }
-    auto src = readRegister8(M5PM1_REG_PWR_SRC) & 0x07;
-    return src <= static_cast<std::uint8_t>(battery) ? static_cast<pwr_src_t>(src) : unknown;
+    if (!_init) { return none; }
+    return static_cast<pwr_src_t>(readRegister8(M5PM1_REG_PWR_SRC) & 0x07);
   }
 
   bool M5PM1_Class::getVbatNodePowered(bool* powered)
@@ -113,7 +121,8 @@ namespace m5
 
   bool M5PM1_Class::setGPIOFunction(gpio_t pin, gpio_function_t function)
   {
-    if (!is_valid_gpio(pin)) { return false; }
+    if (!is_valid_gpio(pin)
+     || (function != gpio && function != irq && function != special)) { return false; }
     auto num = gpio_num(pin);
     auto reg = num < 4 ? M5PM1_REG_GPIO_FUNC0 : M5PM1_REG_GPIO_FUNC1;
     auto shift = static_cast<std::uint8_t>((num < 4 ? num : num - 4) * 2);
@@ -176,10 +185,38 @@ namespace m5
     return readRegister8(M5PM1_REG_GPIO_OUT) & (1 << gpio_num(pin));
   }
 
+  bool M5PM1_Class::setPwmFrequency(std::uint16_t frequency)
+  {
+    std::uint8_t data[2] =
+    { static_cast<std::uint8_t>(frequency & 0xFF)
+    , static_cast<std::uint8_t>(frequency >> 8)
+    };
+    return writeRegister(M5PM1_REG_PWM_FREQ_L, data, sizeof(data));
+  }
+
+  bool M5PM1_Class::setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                                      pwm_polarity_t polarity, bool enable)
+  {
+    if (duty > 100) { return false; }
+    auto duty12 = duty * 0x0FFF / 100;
+    return setPwmDuty12bit(channel, duty12, polarity, enable);
+  }
+
+  bool M5PM1_Class::setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                                    pwm_polarity_t polarity, bool enable)
+  {
+    if (!is_valid_pwm_channel(channel) || duty12 > 0x0FFF) { return false; }
+    std::uint8_t high = static_cast<std::uint8_t>(duty12 >> 8);
+    if (enable) { high |= M5PM1_PWM_ENABLE; }
+    if (polarity == pwm_polarity_t::inverted) { high |= M5PM1_PWM_POLARITY; }
+    std::uint8_t data[2] = { static_cast<std::uint8_t>(duty12 & 0xFF), high };
+    auto reg = static_cast<std::uint8_t>(M5PM1_REG_PWM0_L + static_cast<std::uint8_t>(channel) * 2);
+    return writeRegister(reg, data, sizeof(data));
+  }
+
   bool M5PM1_Class::clearWakeSource(std::uint8_t mask)
   {
-    auto src = readRegister8(M5PM1_REG_WAKE_SRC);
-    return writeRegister8(M5PM1_REG_WAKE_SRC, src & ~mask);
+    return writeRegister8(M5PM1_REG_WAKE_SRC, static_cast<std::uint8_t>(~mask & 0x7F));
   }
 
   bool M5PM1_Class::clearGPIOIRQStatus(void)
@@ -227,7 +264,7 @@ namespace m5
 
   bool M5PM1_Class::getBatteryCharge(bool* enabled)
   {
-    if (!_init) { return false; }
+    if (!_init || enabled == nullptr) { return false; }
     std::uint8_t cfg = 0;
     if (!readRegister(M5PM1_REG_PWR_CFG, &cfg, 1)) { return false; }
     *enabled = cfg & M5PM1_PWR_CFG_CHG_EN;
@@ -237,25 +274,11 @@ namespace m5
   bool M5PM1_Class::setChargeCurrent(std::uint16_t max_mA)
   {
     return false;
-    // if (!_init) return false;
-    // int value = max_mA / 8;     // Convert mA to register value (8mA per step)
-    // if (value > 0) { value -= 1;  // 0 = 8mA, 63 = 512mA
-    //   if (value >= 64) value = 63; // max value is 512mA (8 + 63*8)
-    // }
-    // return writeRegister8(M5PM1_REG_CHR_CUR, value);
   }
 
   bool M5PM1_Class::setChargeVoltage(std::uint16_t max_mV)
   {
     return false;
-    // if (!_init) return false;
-    // int value = (max_mV - 3600) / 15;     // Convert mV to register value (15mV per step)
-    // if (value > 0) { value -= 1;  // 0 = 3600mV, 63 = 4545mV
-    //   if (value >= 64) value = 63; // max value is 4545mV (3600 + 63*15)
-    // }
-    // uint8_t reg_value = readRegister8(M5PM1_REG_CHR_VOL);
-    // reg_value &= 0xC0;
-    // return writeRegister8(M5PM1_REG_CHR_VOL, reg_value | value);
   }
 
   std::uint16_t M5PM1_Class::getChargeCurrent(void)
@@ -277,14 +300,19 @@ namespace m5
   {
     if (!_init) return 0;
     uint8_t irq3 = 0;
-    if (readRegister(M5PM1_REG_IRQ_STATUS3, &irq3, 1))
-    {
-      if (irq3 & ((1 << 0) | (1 << 2))) {
-        writeRegister8(M5PM1_REG_IRQ_STATUS3, 0);
-        return 2;
-      }
-    }
-    return 0;
+    if (!readRegister(M5PM1_REG_IRQ_STATUS3, &irq3, 1)) return 0;
+    uint8_t pending = irq3 & ((1 << 0) | (1 << 2));
+    if (!pending) return 0;
+    if (!writeRegister8(M5PM1_REG_IRQ_STATUS3, static_cast<uint8_t>(~pending & 0x07))) return 0;
+    _pek_double_pending = (pending & (1 << 2)) != 0;
+    return 2;
+  }
+
+  bool M5PM1_Class::wasPekDoubleClicked(void)
+  {
+    bool result = _pek_double_pending;
+    _pek_double_pending = false;
+    return result;
   }
 
   std::uint16_t M5PM1_Class::getVBUSVoltage(void)
@@ -302,7 +330,7 @@ namespace m5
 
   bool M5PM1_Class::getBatteryVoltage(std::uint16_t* millivolt)
   {
-    if (!_init) { return false; }
+    if (!_init || millivolt == nullptr) { return false; }
     std::uint8_t buf[2] = {};
     if (!readRegister(M5PM1_REG_VBAT_L, buf, sizeof(buf))) { return false; }
     *millivolt = (buf[1] << 8) | buf[0];

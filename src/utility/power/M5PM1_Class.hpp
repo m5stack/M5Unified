@@ -5,6 +5,7 @@
 #define __M5_M5PM1_CLASS_H__
 
 #include "../I2C_Class.hpp"
+#include "../pwm_types.hpp"
 
 namespace m5
 {
@@ -38,7 +39,7 @@ namespace m5
     enum gpio_function_t : std::uint8_t
     { gpio    = 0b00
     , irq     = 0b01
-    , wake    = 0b10
+      // 0b10 is reserved in the datasheet.
     , special = 0b11
     };
 
@@ -55,12 +56,18 @@ namespace m5
     , open_drain = 1
     };
 
-    /// PM1 power source status.
+    /// PM1 PWM channel. Both channels share the same frequency setting.
+    enum pwm_channel_t : std::uint8_t
+    { pwm_ch0 = 0 // GPIO3; may be assigned to another function depending on the board.
+    , pwm_ch1 = 1 // GPIO4
+    };
+
+    /// PM1 power source bitmap. Multiple values may be combined.
     enum pwr_src_t : std::uint8_t
-    { vin     = 0
-    , vinout  = 1
-    , battery = 2
-    , unknown = 3
+    { none    = 0
+    , vin     = 1 << 0
+    , vinout  = 1 << 1
+    , battery = 1 << 2
     };
 
     /// set BOOST/Grove 5V output enable.
@@ -74,7 +81,7 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setLDOOutput(bool enable);
 
-    /// set PM1 5V DCDC output enable.
+    /// set PM1 3.3V DCDC rail output enable (PWR_CFG bit1 = 3.3V_DCDC_EN).
     /// @param enable true=enable / false=disable
     bool setDCDCOutput(bool enable);
 
@@ -82,7 +89,9 @@ namespace m5
     /// @param level true=high / false=low
     bool setLedEnLevel(bool level);
 
-    /// get current PM1 power source.
+    /// get the PM1 PWR_SRC bitmap.
+    /// bit0=5VIN valid, bit1=5VINOUT valid (0 while the 5V boost is enabled),
+    /// bit2=VBAT node valid. Multiple sources may be present simultaneously.
     pwr_src_t getPowerSource(void);
 
     /// get whether PWR_SRC reports the VBAT node rail as powered.
@@ -113,7 +122,37 @@ namespace m5
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
 
+    /// set the PWM frequency in Hz.
+    /// @note The frequency is shared by both PWM channels, so changing it also
+    /// changes a channel that is already running.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
+    bool setPwmFrequency(std::uint16_t frequency);
+
+    /// set PWM duty in percent.
+    /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
+    /// @param duty duty cycle in percent (0-100).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
+    bool setPwmDutyPercent(pwm_channel_t channel, std::uint32_t duty,
+                           pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
+
+    /// set PWM duty with 12-bit precision.
+    /// @param channel PWM channel (pwm_ch0 / pwm_ch1).
+    /// @param duty12 duty cycle (0-4095).
+    /// @param polarity PWM output polarity.
+    /// @param enable true=enable / false=disable.
+    /// @note PWM channel 0 maps to GPIO3 and channel 1 maps to GPIO4. Call
+    /// setGPIOFunction() with special separately to route PWM to the pin.
+    bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
+                         pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
+
     /// clear PM1 wake source bits selected by mask.
+    /// Single-write selective clear assuming the write-zero-to-clear behavior
+    /// adopted by the official driver; the datasheet does not specify the write polarity.
+    /// Bits outside [6:0] are written as zero, matching the full-clear precedent.
     bool clearWakeSource(std::uint8_t mask = 0x7F);
 
     /// clear all PM1 GPIO IRQ status bits.
@@ -147,27 +186,41 @@ namespace m5
     bool getBatteryCharge(bool* enabled);
 
     /// set battery charge current
-    /// @param max_mA milli ampere. (8 - 512).
+    /// @param max_mA ignored; the PM1 has no charge current register.
+    /// @note The PM1 register map exposes no charge current register; this is a permanent stub returning false.
     bool setChargeCurrent(std::uint16_t max_mA);
 
     /// set battery charge voltage
-    /// @param max_mV milli volt. (3600 - 4545).
+    /// @param max_mV ignored; the PM1 has no charge voltage register.
+    /// @note The PM1 register map exposes no charge voltage register; this is a permanent stub returning false.
     bool setChargeVoltage(std::uint16_t max_mV);
 
     /// Get whether the battery is currently charging or not.
+    /// @note The PM1 register map exposes no charging status register; this is a permanent stub returning false.
     bool isCharging(void);
 
     // get setting value of battery charge current
-    /// @return milli ampere. (8 - 512). 0=unknown
+    /// @return always 0.
+    /// @note The PM1 register map exposes no charge current register; this is a permanent stub returning 0.
     std::uint16_t getChargeCurrent(void);
 
     // get setting value of battery charge voltage
-    /// @return milli volt. (3600 - 4545). 0=unknown
+    /// @return always 0.
+    /// @note The PM1 register map exposes no charge voltage register; this is a permanent stub returning 0.
     std::uint16_t getChargeVoltage(void);
 
     /// Get power key press condition.
-    /// @return 0=none / 2=short clicked
+    /// @return 0=none / 2=short clicked. For AXP compatibility, a double click
+    /// also reports 2; use wasPekDoubleClicked() to distinguish it.
+    /// Only the consumed click flags are cleared; the WAKEUP flag is preserved.
+    /// Returns 0 and leaves the event pending if the clear write fails.
     uint8_t getPekPress(void);
+
+    /// Returns whether the most recently reported click (getPekPress() == 2)
+    /// was a double click, then clears the flag.
+    /// Call from the task that polls getPekPress() (typically right after
+    /// M5.update()); the flag is not synchronized across tasks.
+    bool wasPekDoubleClicked(void);
 
     /// get VIN voltage.
     /// @return milli volt. 0=read failed
@@ -188,6 +241,9 @@ namespace m5
 
     /// power off PM1.
     bool powerOff(void);
+
+  private:
+    bool _pek_double_pending = false;
   };
 }
 
