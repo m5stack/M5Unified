@@ -351,7 +351,12 @@ namespace m5
       if (_board != m5gfx::board_t::board_unknown) { return; }
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-      // Power Hold pin for Capsule/Dial/DinMeter
+      // Power Hold pin for Capsule/Dial/DinMeter.
+      // Asserted before the board is known (those boards would power off otherwise).
+      // Boards where GPIO46 is exposed to the application (camera VSYNC on CoreS3, camera data on
+      // AtomS3R Cam, header pin on StampS3 / AtomS3R Ext) get the pad restored once the board is
+      // known, see below.
+      m5gfx::gpio::pin_backup_t gpio46_backup(GPIO_NUM_46);
       m5gfx::gpio_hi(GPIO_NUM_46);
       m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
 #endif
@@ -366,9 +371,29 @@ namespace m5
       }
       auto board = _check_boardtype(Display.getBoard());
       // printf("auto detect board:%d\n",board);
-      if (board == board_t::board_unknown) { board = cfg.fallback_board; }
+      bool board_detected = (board != board_t::board_unknown);
+      if (!board_detected) { board = cfg.fallback_board; }
       _board = board;
       _setup_pinmap(board);
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+      // Restore only on boards positively identified as exposing GPIO46 to the application
+      // (camera VSYNC / data, header pin); every other case (power hold, display bus pins
+      // configured by Display.init(), a fallback board) keeps the previous behaviour.
+      switch (board_detected ? board : board_t::board_unknown)
+      {
+      case board_t::board_M5StackCoreS3:
+      case board_t::board_M5StackCoreS3SE:
+      case board_t::board_M5StackChan:
+      case board_t::board_M5AtomS3RCam:
+      case board_t::board_M5AtomS3RExt:
+      case board_t::board_M5StampS3:
+      case board_t::board_M5StampS3Bat:
+        gpio46_backup.restore();
+        break;
+      default:
+        break;
+      }
+#endif
       _setup_i2c(board);
       _setup_led(board);
       if (res && getDisplayCount() == 0) {
