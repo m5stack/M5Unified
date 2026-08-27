@@ -364,6 +364,11 @@ namespace m5
           M5_LOGE("M5IOE1 CHG_PROG pull state could not be released.");
         }
         ioe1.setDirection(M5IOE1_Class::gpio3, false);
+
+        // Turn on SD card power
+        ioe1.setHighImpedance(M5IOE1_Class::gpio6, false); 
+        ioe1.setDirection(M5IOE1_Class::gpio6, true);
+        ioe1.digitalWrite(M5IOE1_Class::gpio6, true);
       }
       M5pm1.setBatteryCharge(true);
       M5pm1.setDCDCOutput(true);
