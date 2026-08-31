@@ -105,8 +105,13 @@ namespace m5
     mic_config_t config(void) const { return _cfg; }
     void config(const mic_config_t& cfg) { _cfg = cfg; }
 
+    /// start the capture port. serialized with end().
+    /// Success means the port runs and the codec is configured; some codecs
+    /// (ES8311) additionally warm up for about a second after power-up,
+    /// during which captured samples can be all zero.
     bool begin(void);
 
+    /// stop the capture port. serialized with begin().
     void end(void);
 
     bool isRunning(void) const { return _task_running; }
@@ -159,6 +164,8 @@ namespace m5
 
   protected:
 
+    /// The callbacks run under the begin()/end() lock and must not call
+    /// begin() or end() themselves.
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
     struct recording_info_t
@@ -200,8 +207,7 @@ namespace m5
     /// begin() runs from whichever task records first, and setup starts by
     /// tearing the port down - so only one call may go through.
     std::atomic<bool> _begin_lock { false };
-    /// True only once begin() has fully finished; the lock-free early return
-    /// keys on this, so a caller can never see a half-built port as ready.
+    /// true only once begin() has fully finished.
     std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
@@ -209,6 +215,22 @@ namespace m5
     TaskHandle_t _task_handle = nullptr;
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
 #endif
+
+  private:
+
+    /// set a callback that begin() invokes once the capture task has brought
+    /// the I2S clock up, for codecs that accept part of their setup only
+    /// while the bus clock runs (ES8311). A false return (or no clock within
+    /// one second) fails begin() and tears the port back down.
+    void setPostStartCallback(void* args, bool(*func)(void*)) { _cb_post_start = func; _cb_post_start_args = args; }
+
+    void _end_locked(void);
+
+    bool (*_cb_post_start)(void* args) = nullptr;
+    void* _cb_post_start_args = nullptr;
+    /// set by the task once the I2S channel is enabled; begin() waits on it
+    /// before invoking the post-start callback.
+    std::atomic<bool> _i2s_active { false };
   };
 }
 
