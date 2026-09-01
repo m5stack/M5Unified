@@ -825,9 +825,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     if (res) { res = (ESP_OK == _setup_i2s()); }
     if (!res)
     { // no task to tear down yet, but whatever the enable callback powered
-      // up still has to come back down
+      // up still has to come back down. No driver uninstall here: this
+      // attempt installed nothing (_setup_i2s cleans up its own failures),
+      // and on the legacy driver the port could belong to someone else.
       if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
-      _i2s_driver_uninstall(_cfg.i2s_port);
       return false;
     }
     if (res)
