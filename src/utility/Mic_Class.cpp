@@ -591,7 +591,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
 #endif
 
-    _i2s_start(self->_cfg.i2s_port);
+    if (ESP_OK == _i2s_start(self->_cfg.i2s_port))
+    {
+      self->_i2s_active.store(true, std::memory_order_release);
+    }
 
     int32_t gain = self->_cfg.magnification;
     const float f_gain = (float)gain / (oversampling << 1);
@@ -764,6 +767,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       }
     }
     _i2s_stop(self->_cfg.i2s_port);
+    self->_i2s_active.store(false, std::memory_order_release);
 
     self->_task_handle = nullptr;
     vTaskDelete(nullptr);
@@ -771,19 +775,21 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   bool Mic_Class::begin(void)
   {
-    // _rec_sample_rate was written before _begun was released, so the
-    // acquire load makes this pair of reads safe without the lock.
-    if (_begun.load(std::memory_order_acquire) && _rec_sample_rate == _calc_rec_rate()) { return true; }
-
     // record() calls begin() lazily from whichever task gets there first,
     // and both the setup and the sample-rate change tear the port down: two
     // of these racing rip the live channel out from under the running task.
     // One caller goes through at a time; the others wait for its outcome.
+    // The already-running check also lives under the lock (vs. end()).
     bool zero = false;
     while (!_begin_lock.compare_exchange_strong(zero, true))
     {
       zero = false;
       vTaskDelay(1);
+    }
+    if (_begun.load(std::memory_order_acquire) && _rec_sample_rate == _calc_rec_rate())
+    {
+      _begin_lock.store(false);
+      return true;
     }
 
     bool res = true;
@@ -793,7 +799,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       if (_rec_sample_rate != rate)
       {
         do { vTaskDelay(1); } while (isRecording());
-        end();
+        _end_locked();
         _rec_sample_rate = rate;
       }
     }
@@ -816,7 +822,15 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
 
-    res = (ESP_OK == _setup_i2s()) && res;
+    if (res) { res = (ESP_OK == _setup_i2s()); }
+    if (!res)
+    { // no task to tear down yet, but whatever the enable callback powered
+      // up still has to come back down. No driver uninstall here: this
+      // attempt installed nothing (_setup_i2s cleans up its own failures),
+      // and on the legacy driver the port could belong to someone else.
+      if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
+      return false;
+    }
     if (res)
     {
       size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint32_t));
@@ -831,16 +845,46 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle));
       }
-      // end() takes the driver and the callback back down; it still sees the
-      // class as running, which is what lets it do that.
-      if (!res) { end(); }
-      else { _begun.store(true, std::memory_order_release); }
+      // _end_locked() takes the driver and the callback back down; it still
+      // sees the class as running, which is what lets it do that.
+      if (!res) { _end_locked(); }
+      else
+      {
+        if (_cb_post_start)
+        { // the callback needs the bus clock running: wait for the task to
+          // enable the channel, and fail the begin when that never happens
+          const uint32_t start_tick = xTaskGetTickCount();
+          while (!_i2s_active.load(std::memory_order_acquire)
+              && (uint32_t)(xTaskGetTickCount() - start_tick) < pdMS_TO_TICKS(1000)) { vTaskDelay(1); }
+          if (!_i2s_active.load(std::memory_order_acquire)
+           || !_cb_post_start(_cb_post_start_args))
+          {
+            _end_locked();
+            res = false;
+          }
+        }
+        if (res) { _begun.store(true, std::memory_order_release); }
+      }
     }
 
     return res;
   }
 
   void Mic_Class::end(void)
+  {
+    // taking _begin_lock keeps end() from tearing the port down while a
+    // begin() is still bringing it up
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+      vTaskDelay(1);
+    }
+    _end_locked();
+    _begin_lock.store(false);
+  }
+
+  void Mic_Class::_end_locked(void)
   {
     _begun.store(false, std::memory_order_release);
     if (!_task_running) { return; }

@@ -493,7 +493,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   }
 #endif
 
-  static void in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
+  /// @return true when every write in the table was acknowledged.
+  static bool in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
   {
     // bulk_data example..
     // const uint8_t bulk_data[] = {
@@ -501,17 +502,52 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     //   3, 0x01, 0x00, 0x02, // <- datalen = 3, reg = 0x01, data = 0x00, 0x02
     //   0 };                 // <- datalen 0 is end of data.
 
+    bool all_ok = true;
     while (*bulk_data) {
       uint8_t len = *bulk_data++;
       uint8_t r = retry + 1;
       while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { m5gfx::delay(1); }
+      all_ok &= (r != 0);
       bulk_data += len;
     }
+    return all_ok;
   }
 
   static constexpr uint8_t es7210_i2c_addr = 0x40;
   static constexpr uint8_t es8311_i2c_addr0 = 0x18;
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+  /// The ES8311 arms its capture path only through a SYSTEM(0x0D) write done
+  /// while the I2S clock is running; a pre-clock write is absorbed silently
+  /// (it even reads back). The arming is needed once per codec power-on
+  /// reset and survives I2C power-down/up cycles.
+  static std::atomic<bool> es8311_capture_armed { false };
+
+  /// Post-start callback: arms the capture path once the I2S clock runs.
+  /// The analog stage then warms up on its own (~1 s after power-up); that
+  /// is chip physics, so begin() pays only for the arming here.
+  static bool _microphone_post_start_cb_stopwatch(void* args)
+  {
+    (void)args;
+    if (es8311_capture_armed.load(std::memory_order_acquire)) { return true; }
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_47, GPIO_NUM_48);
+    bool ok = false;
+    bool last_ok = false;
+    for (int i = 0; i < 3; ++i)
+    { // writes at ~+30/+60/+90 ms after the clock start; the earliest arming
+      // observed on hardware is ~+25 ms, the later points are the margin
+      m5gfx::delay(30);
+      last_ok = M5.In_I2C.writeRegister8(es8311_i2c_addr0, 0x0D, 0x01, 100000);
+      ok |= last_ok;
+    }
+    backup_i2c_setting.restore();
+    /// an acknowledge proves only the transport, so the latch requires the
+    /// latest (most conservative) write to have been acknowledged
+    if (last_ok) { es8311_capture_armed.store(true, std::memory_order_release); }
+    return ok;
+  }
+#endif
   static constexpr uint8_t es8388_i2c_addr = 0x10;
   static constexpr uint8_t pi4io1_i2c_addr = 0x43;
   static constexpr uint8_t m5pm1_i2c_addr = 0x6E;
@@ -692,10 +728,17 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       ioe1.digitalWrite(M5IOE1_Class::gpio10, true); // Enable PA (M5IOE1_G10)
     }
     else
-    {
+    { /// Keep Audio Power (M5IOE1_G3) on: cutting it forces another codec
+      /// reset, re-arming and re-warm-up on the next capture (and a quickly
+      /// cycled rail misfires). Only the DAC is powered down; Mic disable
+      /// does the deeper I2C power-down.
       auto& ioe1 = self->getIOExpander(0);
       ioe1.digitalWrite(M5IOE1_Class::gpio10, false); // Disable PA (M5IOE1_G10)
-      ioe1.digitalWrite(M5IOE1_Class::gpio3, false); // Disable Audio Power (M5IOE1_G3)
+      static constexpr const uint8_t disabled_bulk_data[] = {
+        2, 0x12, 0x02,  // 0x12 SYSTEM/ power-down DAC
+        0
+      };
+      in_i2c_bulk_write(es8311_i2c_addr0, disabled_bulk_data, 100000, 3);
     }
 #endif
     return true;
@@ -1263,8 +1306,19 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       self->delay(5);
     }
     m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_47, GPIO_NUM_48);
-    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data, 100000, 3);
+    if (enabled)
+    { /// 0x17 loses the value a previous setup wrote on any codec reset,
+      /// so it witnesses a reset done outside this library: re-arm then.
+      uint8_t v = 0;
+      if (!M5.In_I2C.readRegister(es8311_i2c_addr0, 0x17, &v, 1, 100000) || v != 0xFF)
+      {
+        es8311_capture_armed.store(false, std::memory_order_release);
+      }
+    }
+    bool setup_ok = in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data, 100000, 3);
     backup_i2c_setting.restore();
+    /// a codec with an incomplete setup must not be published as working
+    if (enabled && !setup_ok) { return false; }
 #endif
     return true;
   }
@@ -2531,6 +2585,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   void M5Unified::_begin_audio(config_t& cfg)
   {
     bool(*mic_enable_cb)(void*, bool) = nullptr;
+    bool(*mic_post_start_cb)(void*) = nullptr;
     auto mic_cfg = Mic.config();
 
     bool(*spk_enable_cb)(void*, bool) = nullptr;
@@ -2637,6 +2692,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
           mic_cfg.pin_data_in = GPIO_NUM_16;
           mic_cfg.i2s_port = I2S_NUM_1;
           mic_enable_cb = _microphone_enabled_cb_stopwatch;
+          mic_post_start_cb = _microphone_post_start_cb_stopwatch;
         }
       break;
 
@@ -3226,6 +3282,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (mic_cfg.pin_data_in >= 0)
     {
       Mic.setCallback(this, mic_enable_cb);
+      Mic.setPostStartCallback(this, mic_post_start_cb);
       Mic.config(mic_cfg);
     }
     if (spk_cfg.pin_data_out >= 0)
