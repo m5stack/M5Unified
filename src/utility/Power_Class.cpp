@@ -11,6 +11,8 @@
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
 #include <sdkconfig.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include <soc/soc_caps.h>
 
@@ -402,7 +404,7 @@ namespace m5
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
-      M5.In_I2C.bitOn(aw9523_i2c_addr, 0x03, 0b10000000, i2c_freq);  // SY7088 BOOST_EN
+      _core_s3_aw9523_bit(0x03, 0b10000000, true);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
       static constexpr std::uint8_t reg_data_array[] =
@@ -873,37 +875,164 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
 
-  static constexpr const uint32_t _core_s3_bus_en = 0b00000010; // BUS EN
-  static constexpr const uint32_t _core_s3_usb_en = 0b00100000; // USB OTG EN
-  static void _core_s3_output(uint8_t mask, bool enable)
+  static constexpr const uint8_t _core_s3_bus_en = 0b00000010; // BUS EN
+  static constexpr const uint8_t _core_s3_usb_en = 0b00100000; // USB OTG EN
+
+  // AW9523 の出力ポートを操作する主体 (setExtOutput / setUsbOutput / スピーカー制御) を直列化する。
+  // BUS_OUT_EN を落とす手順は 200ms の待ちを挟むので、read-modify-write 同士の交差を排除する必要がある。
+  static SemaphoreHandle_t _core_s3_mutex(void)
+  {
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    static StaticSemaphore_t storage;
+    static SemaphoreHandle_t mutex = xSemaphoreCreateMutexStatic(&storage);
+#else
+    static SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+#endif
+    return mutex;
+  }
+  struct _core_s3_lock_t
+  {
+    SemaphoreHandle_t mutex;
+    bool locked;
+    _core_s3_lock_t(void) : mutex { _core_s3_mutex() }, locked { mutex != nullptr && xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE } {}
+    ~_core_s3_lock_t(void) { if (locked) { xSemaphoreGive(mutex); } }
+  };
+
+  static void _core_s3_output_locked(uint8_t mask, bool enable)
   {
     static constexpr const uint8_t port0_reg = 0x02;
-    //static constexpr const uint8_t port1_reg = 0x03;
-    static constexpr const uint32_t port1_bitmask_boost = 0b10000000; // BOOST_EN
+    static constexpr const uint8_t port1_reg = 0x03;
+    static constexpr const uint8_t port1_bitmask_boost = 0b10000000; // BOOST_EN
 
-    uint8_t buf[2];
+    uint8_t orig[2];
+    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq)) { return; }
 
-    if (M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, buf, sizeof(buf), i2c_freq))
+    uint8_t buf[2] = { (uint8_t)(orig[0] | mask), (uint8_t)(orig[1] | port1_bitmask_boost) };
+
+    if (!enable)
     {
-      uint8_t p0 = buf[0] | mask;
-      uint8_t p1 = buf[1] | port1_bitmask_boost;
-
-      if (!enable) {
-        p0 = buf[0] & ~mask;
-        // if (0 == (p0 & (_core_s3_bus_en | _core_s3_usb_en))) // 両方が無効の場合のみ BOOST_EN を無効化する
-        if (0 == (p0 & _core_s3_bus_en))
-        {
-          p1 &= ~port1_bitmask_boost;
-        }
+      buf[0] = orig[0] & ~mask;
+      // if (0 == (p0 & (_core_s3_bus_en | _core_s3_usb_en))) // 両方が無効の場合のみ BOOST_EN を無効化する
+      if (0 == (buf[0] & _core_s3_bus_en))
+      {
+        buf[1] &= ~port1_bitmask_boost;
       }
-// M5.Display.printf("%02x %02x\n", p0, p1);
-      buf[0] = p0;
-      buf[1] = p1;
-      M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, buf, sizeof(buf), i2c_freq);
-      // M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, p0, i2c_freq);
-      // M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, p1, i2c_freq);
+      if (orig[0] & mask & _core_s3_bus_en)
+      {
+        // BUS_OUT_EN を 1→0 にするときは BOOST_EN を先に落とし、BUS_OUT が放電してから切り替える。
+        // BUS_OUT_EN=0 は BUS 入力側スイッチを ON にする操作なので、BUS_OUT が 5V のまま切り替えると
+        // USB VBUS が BUS_OUT へ流れ込み続け、以後 BUS_OUT_EN=0 でも 5V が残る (TS 検出も張り付き、
+        // setExtOutput(true) が cancel され続ける)。放電は無負荷で約 80ms、余裕をみて 200ms 待つ。
+        // BOOST_EN が読み取り時点で既に 0 でも、いつ 0 になったかは分からないので待ちは省略しない。
+        auto restore = [&](void)
+        {
+          // I2C の失敗後はデバイス側の反映が不確定なので、latch を読み直して実状態から戻す。
+          // BUS_OUT_EN が残っていれば BOOST_EN を開始時の値へ、落ちていれば BOOST_EN=0 を確定する。
+          // 読めなければ開始時の値を書き戻す (有効化方向なので順序の問題は生じない)。
+          // 復旧の書込自体も失敗し得るので、読み戻して一致するまで有界で繰り返す。
+          for (int retry = 0; ; ++retry)
+          {
+            uint8_t cur[2];
+            if (M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq))
+            {
+              uint8_t want = (cur[0] & _core_s3_bus_en) ? ((cur[1] & ~port1_bitmask_boost) | (orig[1] & port1_bitmask_boost))
+                                                        : (cur[1] & ~port1_bitmask_boost);
+              if (want == cur[1] || retry >= 3) { return; }
+              M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, want, i2c_freq);
+            }
+            else
+            {
+              if (retry >= 3) { return; }
+              M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq);
+            }
+            m5gfx::delay(1);
+          }
+        };
+        if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, orig[1] & ~port1_bitmask_boost, i2c_freq)) { restore(); return; }
+        m5gfx::delay(200);
+        uint8_t cur[2];
+        if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return; }
+        if (cur[1] & port1_bitmask_boost) { return; } // BOOST_EN が立て直されている: 放電を保証できないので出力を有効のまま残す
+        cur[0] &= ~mask;
+        if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); }
+        return;
+      }
+    }
+    // 2 バイト一括書きは途中失敗で片方だけ反映され得るので 1 バイトずつ書き、先頭が失敗したら止める。
+    // 有効化は BOOST_EN → 出力 EN、無効化は出力 EN → BOOST_EN の順にすると、途中で止まっても
+    // 「出力 EN=1 で boost 停止」(出力が死んでいるのに有効と報告される) にはならない。
+    if (enable)
+    {
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return; }
+      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
+    }
+    else
+    {
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return; }
+      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq);
     }
 //      Axp2101.setReg0x20Bit0(enable);
+  }
+
+  static void _core_s3_output(uint8_t mask, bool enable)
+  {
+    _core_s3_lock_t lock;
+    if (lock.locked) { _core_s3_output_locked(mask, enable); }
+  }
+
+  // 無バッテリーで BUS_OUT (TS で検出) に外部 5V が来ている間は、有効化すると自身の給電を断つので取り消す。
+  // 既に BUS_OUT_EN=1 なら TS の 5V は自身の出力なので判定しない。
+  // 判定に使う読み出しが失敗したときは「危険」側に倒す (読めない状態で有効化しない)。
+  static bool _core_s3_ext_output_unsafe(AXP2101_Class& axp)
+  {
+    uint8_t r00;
+    if (!axp.readRegister(0x00, &r00, 1)) { return true; }
+    if ((r00 & 0x08) || !(r00 & 0x20)) { return false; } // バッテリーあり、または VBUS なし
+    uint8_t p0;
+    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, 0x02, &p0, 1, i2c_freq)) { return true; }
+    if (p0 & _core_s3_bus_en) { return false; }
+    uint8_t ts[2];
+    if (!axp.readRegister(0x36, ts, 2)) { return true; }
+    std::size_t raw = ((ts[0] & 0x3F) << 8) | ts[1];         // 14bit, 0.5mV/LSB
+    if (raw >= (0x3FFF - 32)) { return true; }                // ADC 無効値: 測れていないので危険側 (getTSVoltage の 0V 丸めは表示用)
+    return raw > 4000;                                        // 2.0V
+  }
+
+  // @return false = cancel した
+  static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable)
+  {
+    // 判定と切替を同じ排他区間で行う (判定後に別タスクの off が割り込むと、古い判定で有効化してしまう)。
+    // TS の ADC 値は実電圧に最大 0.7s ほど遅れる。自身 (または並行する別タスク) の off 直後は古い 5V を
+    // 読み得るので、危険と判定したときは排他を解いて 20ms 待ち、再取得して判定し直す (最大 1s)。
+    // 外部給電なら高いままなので cancel になる。待ちの間は他の AW9523 操作を塞がない。
+    // 待機中に後発の要求が処理されたら古い要求は破棄する (最後の要求が勝つ)。
+    static uint32_t generation = 0;
+    uint32_t my_generation = 0;
+    uint32_t t0 = 0;
+    for (bool first = true; ; first = false)
+    {
+      {
+        _core_s3_lock_t lock;
+        if (!lock.locked) { return true; }
+        if (first) { my_generation = ++generation; t0 = m5gfx::millis(); } // 待ち時間の起点は排他取得後 (mutex 待ちを含めない)
+        else if (my_generation != generation) { return true; }
+        if (!enable || !_core_s3_ext_output_unsafe(axp))
+        {
+          _core_s3_output_locked(_core_s3_bus_en, enable);
+          return true;
+        }
+      }
+      if ((m5gfx::millis() - t0) >= 1000) { return false; }
+      m5gfx::delay(20);
+    }
+  }
+
+  void Power_Class::_core_s3_aw9523_bit(uint8_t reg, uint8_t mask, bool on)
+  {
+    _core_s3_lock_t lock;
+    if (!lock.locked) { return; }
+    if (on) { M5.In_I2C.bitOn(aw9523_i2c_addr, reg, mask, i2c_freq); }
+    else    { M5.In_I2C.bitOff(aw9523_i2c_addr, reg, mask, i2c_freq); }
   }
 
 #endif
@@ -989,11 +1118,8 @@ namespace m5
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
       {
-        bool cancel = (enable && !Axp2101.getBatState() && Axp2101.getTSVoltage() > 2.0f && Axp2101.isVBUS());
-        if (!cancel)
+        if (!_core_s3_set_ext_output(Axp2101, enable))
         {
-          _core_s3_output(_core_s3_bus_en, enable);
-        } else {
           ESP_LOGW("Power","setExtPower(true) is canceled.");
         }
       }

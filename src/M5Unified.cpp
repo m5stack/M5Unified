@@ -603,7 +603,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     auto spk_cfg = self->Speaker.config();
     if (spk_cfg.pin_bck == GPIO_NUM_34 && enabled)
     {
-      self->In_I2C.bitOn(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+      Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, true);
       /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
       static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
       size_t reg0x06_value = 0;
@@ -620,7 +620,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
     {
       aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
-      self->In_I2C.bitOff(aw9523_i2c_addr, 0x02, 0b00000100, 400000);
+      Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, false);
     }
 #endif
     return true;
