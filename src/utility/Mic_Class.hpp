@@ -102,6 +102,10 @@ namespace m5
 
   public:
 
+    /// Config access (this getter included) is not synchronized with
+    /// begin()/end()/record(): read or reconfigure only while the port is
+    /// stopped or no other task is using this instance (an explicit-rate
+    /// record() writes the stored sample rate).
     mic_config_t config(void) const { return _cfg; }
     void config(const mic_config_t& cfg) { _cfg = cfg; }
 
@@ -122,36 +126,37 @@ namespace m5
     /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
     size_t isRecording(void) const volatile { return ((bool)_rec_info[0].length.load(std::memory_order_acquire)) + ((bool)_rec_info[1].length.load(std::memory_order_acquire)); }
 
-    /// set recording sampling rate.
+    /// set recording sampling rate. Not synchronized: to change the rate
+    /// while other tasks may be recording, pass it to record() instead.
     /// @param sample_rate the sampling rate (Hz)
     void setSampleRate(uint32_t sample_rate) { _cfg.sample_rate = sample_rate; }
 
     /// record raw sound wave data.
     /// @param rec_data Recording destination array.
     /// @param array_len Number of data array elements.
-    /// @param sample_rate the sampling rate (Hz)
+    /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
     /// @param stereo true=data is stereo / false=data is monaural.
     bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
-      return _rec_raw(rec_data, array_len, false, sample_rate, stereo);
+      return sample_rate != 0 && _rec_raw(rec_data, array_len, false, sample_rate, stereo);
     }
 
     /// record raw sound wave data.
     /// @param rec_data Recording destination array.
     /// @param array_len Number of data array elements.
-    /// @param sample_rate the sampling rate (Hz)
+    /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
     /// @param stereo true=data is stereo / false=data is monaural.
     bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
-      return _rec_raw(rec_data, array_len,  true, sample_rate, stereo);
+      return sample_rate != 0 && _rec_raw(rec_data, array_len,  true, sample_rate, stereo);
     }
 
     /// record raw sound wave data.
     /// @param rec_data Recording destination array.
     /// @param array_len Number of data array elements.
     bool record(uint8_t* rec_data, size_t array_len)
-    {
-      return _rec_raw(rec_data, array_len, false, _cfg.sample_rate, false);
+    { // sample_rate 0 == keep the current rate; resolved under the lock.
+      return _rec_raw(rec_data, array_len, false, 0, false);
     }
 
     /// record raw sound wave data.
@@ -159,13 +164,14 @@ namespace m5
     /// @param array_len Number of data array elements.
     bool record(int16_t* rec_data, size_t array_len)
     {
-      return _rec_raw(rec_data, array_len,  true, _cfg.sample_rate, false);
+      return _rec_raw(rec_data, array_len,  true, 0, false);
     }
 
   protected:
 
-    /// The callbacks run under the begin()/end() lock and must not call
-    /// begin() or end() themselves.
+    /// The callbacks run while the begin()/end() locks are held and must not
+    /// call begin(), end() or record() themselves (record() takes the same
+    /// non-recursive locks and would self-deadlock).
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
     struct recording_info_t
@@ -178,6 +184,10 @@ namespace m5
       /// why the slot cannot be copied as a whole.
       std::atomic<size_t> length { 0 };
       size_t index = 0;
+      /// Publish-order stamp (wrap-safe compare). The task consumes the
+      /// pending slot with the older stamp: slot identity cannot express
+      /// the order once a freed slot is refilled.
+      uint32_t seq = 0;
       bool is_stereo = false;
       bool is_16bit = false;
 
@@ -185,16 +195,17 @@ namespace m5
     };
 
     recording_info_t _rec_info[2];
-    /// Which of the two slots the next request goes into. The task moves it;
-    /// a writer picks it up once and stays with that slot.
-    std::atomic<bool> _rec_flip { false };
+    /// Next publish-order stamp. Guarded by _rec_lock.
+    uint32_t _wr_seq = 0;
 
     static void mic_task(void* args);
 
     uint32_t _calc_rec_rate(void) const;
+    int _begin_raw(uint32_t sample_rate);
     bool _begin_locked(void);
     esp_err_t _setup_i2s(void);
     bool _rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool stereo);
+    int _rec_try_locked(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool stereo);
 
     mic_config_t _cfg;
     uint32_t _rec_sample_rate = 0;
@@ -203,16 +214,32 @@ namespace m5
     void* _cb_set_enabled_args = nullptr;
 
     int32_t _offset = 0;
-    volatile bool _task_running = false;
+    /// Written by begin()/end(), polled by the capture task: atomic so the
+    /// stop request and the task's exit are actual synchronization, not a
+    /// volatile-based data race.
+    std::atomic<bool> _task_running { false };
     /// begin() runs from whichever task records first, and setup starts by
     /// tearing the port down - so only one call may go through.
     std::atomic<bool> _begin_lock { false };
+    /// serializes record() callers with each other and with end().
+    /// Lock order: _rec_lock before _begin_lock. Both locks are
+    /// per-instance: two Mic_Class instances driving the same I2S port
+    /// are not supported (the driver state is port-global).
+    std::atomic<bool> _rec_lock { false };
     /// true only once begin() has fully finished.
     std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
 #else
-    TaskHandle_t _task_handle = nullptr;
+    /// The task never touches this: it parks itself with vTaskSuspend and
+    /// _end_locked() deletes it and clears the handle. Atomic for the same
+    /// reason as _task_running.
+    std::atomic<TaskHandle_t> _task_handle { nullptr };
+    /// Set by the task once its I2S cleanup is done, right before it parks.
+    /// _end_locked() waits for this ack, not for a scheduler state: old
+    /// kernels (ESP-IDF 4.0-4.2) report an indefinite notification wait as
+    /// eSuspended, which would pass a state-only check before cleanup ran.
+    std::atomic<bool> _task_exited { false };
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
 #endif
 
