@@ -715,7 +715,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
       2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
       2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
-      2, 0x32, 0xEF,  // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
+      2, 0x32, 0xCB,  // 0x32 DAC/ DAC volume +6 dB (0xBF == 0 dB, 0.5 dB/step). Reaches full-scale at max master volume; higher values clip digitally without adding loudness
       2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
       0
     };
