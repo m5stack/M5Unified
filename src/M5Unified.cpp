@@ -715,7 +715,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
       2, 0x12, 0x00,  // 0x12 SYSTEM/ power-up DAC - NOT default
       2, 0x13, 0x10,  // 0x13 SYSTEM/ Enable output to HP drive - NOT default
-      2, 0x32, 0xEF,  // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
+      2, 0x32, 0xCB,  // 0x32 DAC/ DAC volume +6 dB (0xBF == 0 dB, 0.5 dB/step). Reaches full-scale at max master volume; higher values clip digitally without adding loudness
       2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
       0
     };
@@ -1289,9 +1289,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
       2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
       2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
-      2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
-      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN) // (0xBF == ± 0 dB )
-      2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
+      2, 0x14, 0x17,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / analog PGA +21 dB (gain code 7, 3 dB/code; SNR plateaus by this level)
+      2, 0x17, 0xCB,  // ES8311_ADC_REG17 : ADC_VOLUME +6 dB (0xBF == 0 dB, 0.5 dB/step)
+      2, 0x1C, 0x64,  // ES8311_ADC_REG1C : ADC EQ bypass, dynamic HPF, HPF stage-2 coeff 4 (cuts sub-200 Hz rumble at the default 16 kHz rate)
       0
     };
     static constexpr const uint8_t disabled_bulk_data[] = {
@@ -1310,7 +1310,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     { /// 0x17 loses the value a previous setup wrote on any codec reset,
       /// so it witnesses a reset done outside this library: re-arm then.
       uint8_t v = 0;
-      if (!M5.In_I2C.readRegister(es8311_i2c_addr0, 0x17, &v, 1, 100000) || v != 0xFF)
+      if (!M5.In_I2C.readRegister(es8311_i2c_addr0, 0x17, &v, 1, 100000) || v != 0xCB)
       {
         es8311_capture_armed.store(false, std::memory_order_release);
       }
