@@ -78,8 +78,11 @@ namespace m5
 
   uint32_t Mic_Class::_calc_rec_rate(void) const
   {
-    int rate = (_cfg.sample_rate * _cfg.over_sampling);
-    return rate;
+    // The capture task averages over_sampling samples per output but clamps
+    // it to 1..8; the port clock has to be built from the same value.
+    uint32_t os = _cfg.over_sampling;
+    if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
+    return _cfg.sample_rate * os;
   }
 
 #if __has_include(<driver/i2s_std.h>)
@@ -470,7 +473,15 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     // PDM録音時、DSR(データサンプリングレート) 64に設定する
     if (use_pdm) { bits = 64; div_m = 2; }
-    calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_cfg.sample_rate * oversampling);
+    // _rec_sample_rate is the rate the port was built for, fixed under
+    // _begin_lock before this task was created. _cfg.sample_rate must not be
+    // read here: a queued record() with a new rate may overwrite it while
+    // this request is still being captured.
+    calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_rec_sample_rate);
+
+    // false when the raw clock latch below times out: the channel must not
+    // report itself active with an unlatched clock configuration.
+    bool raw_clk_ok = true;
 
     auto dev = &I2S0;
 #if M5UNIFIED_I2S_PORT_COUNT >= 2
@@ -556,11 +567,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // Latch the whole clock/format configuration at once. This is the same
     // sequence as the HAL's i2s_ll_rx_update (the function itself does not exist
     // before ESP-IDF v5.5): the hardware self-clears the bit once the update has
-    // been synchronized into the I2S clock domain. The wait is deliberately
-    // unbounded to match the HAL implementation; the module clocks are already
-    // enabled by the driver at this point, so the bit always clears.
+    // been synchronized into the I2S clock domain, normally within a few cycles.
+    // The wait is bounded anyway: this runs before _i2s_active is published, and
+    // a wedged peripheral must not leave the task unstoppable - begin() would
+    // then hang in the teardown join instead of failing.
     dev->rx_conf.rx_update = 1;
-    while (dev->rx_conf.rx_update) {} // wait for the hardware to clear the update bit
+    for (int retry = 1000000; dev->rx_conf.rx_update && retry; --retry) {}
+    raw_clk_ok = (dev->rx_conf.rx_update == 0);
 
 #else
 
@@ -591,7 +604,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
 #endif
 
-    if (ESP_OK == _i2s_start(self->_cfg.i2s_port))
+    if (raw_clk_ok && ESP_OK == _i2s_start(self->_cfg.i2s_port))
     {
       self->_i2s_active.store(true, std::memory_order_release);
     }
@@ -620,28 +633,38 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     while (self->_task_running)
     {
-      bool rec_flip = self->_rec_flip.load(std::memory_order_relaxed);
-      recording_info_t* current_rec = &(self->_rec_info[!rec_flip]);
-      recording_info_t* next_rec    = &(self->_rec_info[ rec_flip]);
-
+      // Requests carry a sequence number stamped by the serialized writers:
+      // when both slots are pending, consume the older one. Slot identity
+      // cannot express the order - a freed slot can be refilled while the
+      // other one still holds an earlier request.
+      recording_info_t* current_rec = &(self->_rec_info[0]);
       size_t dst_remain = current_rec->length.load(std::memory_order_acquire);
+      size_t len1 = self->_rec_info[1].length.load(std::memory_order_acquire);
+      if (len1 && dst_remain == 0)
+      { // The two loads are not one snapshot: a publish pair can land
+        // between them. Re-read slot 0 now that slot 1 is known pending -
+        // the serialized writers make a still-empty slot 0 proof that
+        // nothing older than slot 1's request exists.
+        dst_remain = current_rec->length.load(std::memory_order_acquire);
+      }
+      // Unsigned half-range compare (no signed-conversion dependence): valid
+      // while pending stamps stay within 2^31 of each other, which two slots
+      // and a single consumer guarantee.
+      if (len1 && (dst_remain == 0
+                || ((self->_rec_info[1].seq - current_rec->seq) & 0x80000000u)))
+      {
+        current_rec = &(self->_rec_info[1]);
+        dst_remain = len1;
+      }
       if (dst_remain == 0)
       {
-        rec_flip = !rec_flip;
-        self->_rec_flip.store(rec_flip, std::memory_order_relaxed);
-        xSemaphoreGive(self->_task_semaphore);
-        std::swap(current_rec, next_rec);
-        dst_remain = current_rec->length.load(std::memory_order_acquire);
-        if (dst_remain == 0)
-        {
-          ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-          src_idx = ~0u;
-          src_len = 0;
-          sum_value[0] = 0;
-          sum_value[1] = 0;
-          os_remain = oversampling;
-          continue;
-        }
+        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+        src_idx = ~0u;
+        src_len = 0;
+        sum_value[0] = 0;
+        sum_value[1] = 0;
+        os_remain = oversampling;
+        continue;
       }
       for (;;)
       {
@@ -658,6 +681,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
             if (ESP_OK == _i2s_read(self->_cfg.i2s_port, src_buf, read_bytes, &src_len, 100)
              && src_len != 0 && 0 == (src_len & 3))
             { break; }
+            // An immediately-failing read must not become a tight loop: a
+            // high-priority capture task would then starve the very task
+            // trying to publish the stop request.
+            vTaskDelay(1);
           }
           if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
           src_len >>= 1;
@@ -762,6 +789,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         if ((int32_t)dst_remain <= 0)
         {
           current_rec->length.store(0, std::memory_order_release);
+          xSemaphoreGive(self->_task_semaphore);
           break;
         }
       }
@@ -769,11 +797,38 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     _i2s_stop(self->_cfg.i2s_port);
     self->_i2s_active.store(false, std::memory_order_release);
 
-    self->_task_handle = nullptr;
-    vTaskDelete(nullptr);
+    // Deleting itself here would race _end_locked()'s notify against the
+    // TCB teardown. Acknowledge that the cleanup is done, then park and
+    // let _end_locked() delete the task: the handle stays valid for as
+    // long as anyone can use it.
+    self->_task_exited.store(true, std::memory_order_release);
+    vTaskSuspend(nullptr);
   }
 
   bool Mic_Class::begin(void)
+  {
+    // The public path joins the same _rec_lock -> _begin_lock order as
+    // record() and end(): a lifecycle change (sample-rate teardown) must not
+    // interleave with a record() that is publishing a request.
+    for (;;)
+    {
+      bool zero = false;
+      while (!_rec_lock.compare_exchange_strong(zero, true))
+      {
+        zero = false;
+        vTaskDelay(1);
+      }
+      int result = _begin_raw(0);
+      _rec_lock.store(false);
+      if (result >= 0) { return result; }
+      vTaskDelay(1);
+    }
+  }
+
+  /// One begin attempt under _begin_lock: 1 = running, 0 = failed,
+  /// -1 = a rate change is waiting for pending recordings to drain
+  /// (the caller must release its locks, wait, and retry).
+  int Mic_Class::_begin_raw(uint32_t sample_rate)
   {
     // record() calls begin() lazily from whichever task gets there first,
     // and both the setup and the sample-rate change tear the port down: two
@@ -786,10 +841,30 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       zero = false;
       vTaskDelay(1);
     }
+    // The requested rate is validated before it is committed, and both
+    // happen under the lock so they cannot interleave with another caller's
+    // rate application or the rebuild decision below. 0 keeps the current
+    // rate. A rejected rate must not poison the live config.
+    {
+      uint32_t rate = sample_rate ? sample_rate : _cfg.sample_rate;
+      uint32_t os = _cfg.over_sampling;
+      if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
+      if (rate == 0 || rate > (0x7FFFFFFFu / os))
+      { // A zero rate cannot build a port clock. The effective rate
+        // (rate x over_sampling) is kept below 2^31 so the divider search
+        // never wraps internally; unreachable-but-representable rates are
+        // then handled by its too-high branch instead of dividing by zero.
+        // Rejected here so the default-rate overloads cannot smuggle a bad
+        // value in via setSampleRate().
+        _begin_lock.store(false);
+        return 0;
+      }
+      _cfg.sample_rate = rate;
+    }
     if (_begun.load(std::memory_order_acquire) && _rec_sample_rate == _calc_rec_rate())
     {
       _begin_lock.store(false);
-      return true;
+      return 1;
     }
 
     bool res = true;
@@ -798,7 +873,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       auto rate = _calc_rec_rate();
       if (_rec_sample_rate != rate)
       {
-        do { vTaskDelay(1); } while (isRecording());
+        if (isRecording())
+        { // Rebuilding at a new rate has to wait for the queue to drain, but
+          // never while holding the locks: end() could not get in meanwhile.
+          // The caller waits outside and retries.
+          _begin_lock.store(false);
+          return -1;
+        }
         _end_locked();
         _rec_sample_rate = rate;
       }
@@ -812,12 +893,15 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
     _begin_lock.store(false);
 
-    return res;
+    return res ? 1 : 0;
   }
 
   bool Mic_Class::_begin_locked(void)
   {
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
+    // The task and the record() retry loop hand this to FreeRTOS without
+    // null checks; running without it is not an option.
+    if (_task_semaphore == nullptr) { return false; }
 
     bool res = true;
     if (_cb_set_enabled) { res = _cb_set_enabled(_cb_set_enabled_args, true); }
@@ -834,34 +918,40 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     if (res)
     {
       size_t stack_size = 2048 + (_cfg.dma_buf_len * sizeof(uint32_t));
+      _task_exited.store(false, std::memory_order_release);
+      _i2s_active.store(false, std::memory_order_release); // defensive: never start against a stale ready flag
       _task_running = true;
+      TaskHandle_t handle = nullptr;
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        res = (pdPASS == xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
+        res = (pdPASS == xTaskCreatePinnedToCore(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &handle, _cfg.task_pinned_core));
       }
       else
 #endif
       {
-        res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &_task_handle));
+        res = (pdPASS == xTaskCreate(mic_task, "mic_task", stack_size, this, _cfg.task_priority, &handle));
       }
+      // The task cannot exit before end() clears _task_running, and end()
+      // cannot run while this holds _begin_lock, so storing the handle
+      // after creation cannot lose the task's own nullptr store.
+      _task_handle.store(handle, std::memory_order_release);
       // _end_locked() takes the driver and the callback back down; it still
       // sees the class as running, which is what lets it do that.
       if (!res) { _end_locked(); }
       else
-      {
-        if (_cb_post_start)
-        { // the callback needs the bus clock running: wait for the task to
-          // enable the channel, and fail the begin when that never happens
-          const uint32_t start_tick = xTaskGetTickCount();
-          while (!_i2s_active.load(std::memory_order_acquire)
-              && (uint32_t)(xTaskGetTickCount() - start_tick) < pdMS_TO_TICKS(1000)) { vTaskDelay(1); }
-          if (!_i2s_active.load(std::memory_order_acquire)
-           || !_cb_post_start(_cb_post_start_args))
-          {
-            _end_locked();
-            res = false;
-          }
+      { // Success means the port runs: wait for the task to enable the
+        // channel, and fail the begin when that never happens. Without
+        // this, an _i2s_start() failure would leave record() returning
+        // true for requests the task can never complete.
+        const uint32_t start_tick = xTaskGetTickCount();
+        while (!_i2s_active.load(std::memory_order_acquire)
+            && (uint32_t)(xTaskGetTickCount() - start_tick) < pdMS_TO_TICKS(1000)) { vTaskDelay(1); }
+        if (!_i2s_active.load(std::memory_order_acquire)
+         || (_cb_post_start && !_cb_post_start(_cb_post_start_args)))
+        {
+          _end_locked();
+          res = false;
         }
         if (res) { _begun.store(true, std::memory_order_release); }
       }
@@ -872,9 +962,17 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   void Mic_Class::end(void)
   {
-    // taking _begin_lock keeps end() from tearing the port down while a
-    // begin() is still bringing it up
+    // _rec_lock first, then _begin_lock - the same order _rec_raw() uses.
+    // The former keeps a record() caller from publishing a request into a
+    // port this end() is tearing down; the latter keeps end() from tearing
+    // the port down while a begin() is still bringing it up.
     bool zero = false;
+    while (!_rec_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+      vTaskDelay(1);
+    }
+    zero = false;
     while (!_begin_lock.compare_exchange_strong(zero, true))
     {
       zero = false;
@@ -882,6 +980,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
     _end_locked();
     _begin_lock.store(false);
+    _rec_lock.store(false);
   }
 
   void Mic_Class::_end_locked(void)
@@ -889,10 +988,26 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     _begun.store(false, std::memory_order_release);
     if (!_task_running) { return; }
     _task_running = false;
-    if (_task_handle)
+    TaskHandle_t handle = _task_handle.load(std::memory_order_acquire);
+    if (handle)
     {
-      if (_task_handle) { xTaskNotifyGive(_task_handle); }
-      do { vTaskDelay(1); } while (_task_handle);
+      // The task acks _task_exited after its I2S cleanup and then parks
+      // itself; it never self-deletes, so the handle stays valid
+      // throughout. The ack - not a scheduler state - is the completion
+      // proof: ESP-IDF 4.0-4.2 report an indefinite notification wait as
+      // eSuspended, so a state-only check could delete the task before
+      // its cleanup ran. Keep nudging it: a single notify can be consumed
+      // before it re-checks the stop flag.
+      while (!_task_exited.load(std::memory_order_acquire))
+      {
+        xTaskNotifyGive(handle);
+        vTaskDelay(1);
+      }
+      // Past the ack the task no longer blocks; wait for the actual park
+      // so it is not deleted while still running on the other core.
+      while (eTaskGetState(handle) != eSuspended) { vTaskDelay(1); }
+      vTaskDelete(handle);
+      _task_handle.store(nullptr, std::memory_order_release);
     }
 
     // an unfinished request would otherwise keep isRecording() reporting a recording.
@@ -914,24 +1029,53 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   bool Mic_Class::_rec_raw(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
   {
-    _cfg.sample_rate = sample_rate;
-
-    if (!begin()) { return false; }
-    if (array_len == 0) { return true; }
-    // The task moves the flip as it finishes a slot, so settle on one only
-    // once its own length says it is free, and keep that slot below.
-    bool flip;
+    // Serializes concurrent record() callers (two writers could otherwise
+    // claim the same slot and mix their buffer metadata) and record()
+    // against end() and begin() (a request could otherwise be published
+    // into a port that a lifecycle change was tearing down).
+    // The lock covers one begin plus one claim attempt: the wait for a free
+    // slot happens outside it, so end() does not have to wait for the queue
+    // to drain or for the capture side to make progress. The retry has no
+    // fairness order - competing callers that keep requesting conflicting
+    // sample rates can hold each other off indefinitely.
     for (;;)
     {
-      flip = _rec_flip.load(std::memory_order_relaxed);
-      if (_rec_info[flip].length.load(std::memory_order_acquire) == 0) { break; }
+      bool zero = false;
+      while (!_rec_lock.compare_exchange_strong(zero, true))
+      {
+        zero = false;
+        vTaskDelay(1);
+      }
+      int result = _rec_try_locked(recdata, array_len, flg_16bit, sample_rate, flg_stereo);
+      _rec_lock.store(false);
+      if (result >= 0) { return result; }
       xSemaphoreTake(_task_semaphore, 1);
+    }
+  }
+
+  /// One publish attempt under _rec_lock: 1 = published, 0 = begin failed,
+  /// -1 = try again (slot busy or a rate change is still draining);
+  /// the caller waits outside the lock and retries.
+  int Mic_Class::_rec_try_locked(void* recdata, size_t array_len, bool flg_16bit, uint32_t sample_rate, bool flg_stereo)
+  {
+    int res = _begin_raw(sample_rate);
+    if (res <= 0) { return res; }
+    if (array_len == 0) { return 1; }
+    // Any free slot will do: the consume order comes from the sequence
+    // number stamped below, not from which slot a request lands in. A full
+    // queue just means "come back later".
+    size_t idx = 0;
+    if (_rec_info[0].length.load(std::memory_order_acquire) != 0)
+    {
+      if (_rec_info[1].length.load(std::memory_order_acquire) != 0) { return -1; }
+      idx = 1;
     }
 
     // Assigning the whole struct would let the length reach the task ahead of
     // the fields describing the data, and the task acts on a slot the moment
     // the length is there. Fill those in first and publish with the length.
-    auto& slot = _rec_info[flip];
+    auto& slot = _rec_info[idx];
+    slot.seq = _wr_seq++;
     slot.data = recdata;
     slot.index = 0;
     slot.is_stereo = flg_stereo;
@@ -942,7 +1086,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     {
       xTaskNotifyGive(this->_task_handle);
     }
-    return true;
+    return 1;
   }
 #endif
 }
