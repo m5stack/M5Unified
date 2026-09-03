@@ -74,30 +74,53 @@ namespace m5
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable
-    void setBatteryCharge(bool enable);
+    /// @return false on I2C failure.
+    bool setBatteryCharge(bool enable);
+
+    /// get battery charge enable state with I2C error reporting. (REG18H bit1)
+    /// @param enabled output parameter, receives the charge enable state.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
 
     /// set battery precharge current
     /// @param max_mA milli ampere. (0 - 200).
     void setPreChargeCurrent(std::uint16_t max_mA);
 
     /// set battery charge current
-    /// @param max_mA milli ampere. (100 - 1320).
-    void setChargeCurrent(std::uint16_t max_mA);
+    /// @param max_mA milli ampere. (100 - 1000).
+    /// @param applied_mA optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mA is left untouched then.
+    bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
 
     /// set battery charge voltage
-    /// @param max_mV milli volt. (4100 - 4360).
+    /// @param max_mV milli volt. (4000 - 4400).
     /// set the constant-voltage charge target.
     /// @param max_mV the highest step at or below this value is selected.
     /// Supported steps are 4000 / 4100 / 4200 / 4350 / 4400 mV; a request under
     /// the lowest step selects that step, and one above the highest selects
     /// the highest.
-    void setChargeVoltage(std::uint16_t max_mV);
+    /// @param applied_mV optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mV is left untouched then.
+    bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
 
     /// @return -1:discharge / 0:standby / 1:charge
     int getChargeStatus(void);
 
     /// Get whether the battery is currently charging or not.
     bool isCharging(void);
+
+    /// read REG00H (PMU status 1) with I2C error reporting.
+    /// bit3 = battery present, bit5 = VBUS present.
+    /// @return false on I2C failure.
+    bool readPmuStatus1(std::uint8_t* value);
+
+    /// read REG01H (PMU status 2) with I2C error reporting.
+    /// bit[2:0] = charger state machine (0-3 charging / 4 charge done),
+    /// bit[6:5] = battery current direction (0b00 standby / 0b01 charge / 0b10 discharge).
+    /// @return false on I2C failure.
+    /// @note isCharging() folds a failed read into false; use this where the
+    /// difference between "not charging" and "could not read" matters.
+    bool readPmuStatus2(std::uint8_t* value);
 
 
     inline void setALDO1(int voltage) { _set_LDO(0, voltage); }

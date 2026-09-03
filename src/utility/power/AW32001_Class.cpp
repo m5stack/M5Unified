@@ -51,14 +51,26 @@ namespace m5
     }
   }
 
-  bool AW32001_Class::setChargeCurrent(std::uint16_t max_mA)
+  bool AW32001_Class::getBatteryCharge(bool* enabled)
+  {
+    uint8_t reg_value = 0;
+    if (!_init || enabled == nullptr) { return false; }
+    if (!readRegister(AW32001_REG_PWR_CFG, &reg_value, 1)) { return false; }
+    // bit3 disables charging, so the enable state is its inverse.
+    *enabled = (reg_value & (1 << 3)) == 0;
+    return true;
+  }
+
+  bool AW32001_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
   {
     if (!_init) return false;
     int value = max_mA / 8;     // Convert mA to register value (8mA per step)
     if (value > 0) { value -= 1;  // 0 = 8mA, 63 = 512mA
       if (value >= 64) value = 63; // max value is 512mA (8 + 63*8)
     }
-    return writeRegister8(AW32001_REG_CHR_CUR, value);
+    if (!writeRegister8(AW32001_REG_CHR_CUR, value)) { return false; }
+    if (applied_mA) { *applied_mA = (std::uint16_t)((value + 1) * 8); }
+    return true;
   }
 
   bool AW32001_Class::setChargeVoltage(std::uint16_t max_mV)

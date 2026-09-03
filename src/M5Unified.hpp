@@ -654,6 +654,10 @@ namespace m5
       {
         Display.setBrightness(brightness);
       }
+      /// The charge state API reports not_initialized until here: the PMIC
+      /// identity is settled in Power.begin(), but the contract is tied to the
+      /// completion of M5.begin() itself.
+      Power._initialized = true;
     }
 
     void setTouchButtonHeightByRatio(uint8_t ratio);
