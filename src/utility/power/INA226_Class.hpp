@@ -114,6 +114,13 @@ namespace m5
     float getShuntCurrent(void);
     float getPower(void);
 
+    /// read the shunt current with I2C error reporting.
+    /// @param ampere output parameter, receives the current in ampere.
+    /// @return false on I2C failure.
+    /// @note getShuntCurrent() folds a failed read into 0A, which is a
+    /// plausible reading; use this where that difference matters.
+    bool readShuntCurrent(float* ampere);
+
   private:
     std::size_t readRegister16(std::uint8_t addr);
     bool writeRegister16(std::uint8_t addr, std::uint16_t data);

@@ -32,9 +32,17 @@ namespace m5
     /// @param enable true=enable / false=disable
     bool setBatteryCharge(bool enable);
 
+    /// get battery charge enable state with I2C error reporting.
+    /// (PWR_CFG bit3, inverted : the register bit disables charging)
+    /// @param enabled output parameter, receives the charge enable state.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
+
     /// set battery charge current
     /// @param max_mA milli ampere. (8 - 512).
-    bool setChargeCurrent(std::uint16_t max_mA);
+    /// @param applied_mA optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mA is left untouched then.
+    bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
 
     /// set battery charge voltage
     /// @param max_mV milli volt. (3600 - 4545).

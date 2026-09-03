@@ -94,6 +94,13 @@ namespace m5
     /// bit2=VBAT node valid. Multiple sources may be present simultaneously.
     pwr_src_t getPowerSource(void);
 
+    /// get the PM1 PWR_SRC bitmap with I2C error reporting.
+    /// @param source output parameter, receives the PWR_SRC bitmap.
+    /// @return false on I2C failure.
+    /// @note the no-argument overload cannot tell a failed read from
+    /// "no source present"; use this one where that distinction matters.
+    bool getPowerSource(pwr_src_t* source);
+
     /// get whether PWR_SRC reports the VBAT node rail as powered.
     /// note: this tracks the node voltage, not physical battery presence.
     bool getVbatNodePowered(bool* powered);

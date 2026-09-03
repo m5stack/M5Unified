@@ -92,13 +92,29 @@ namespace m5
     return res;
   }
 
-  void AXP2101_Class::setBatteryCharge(bool enable)
+  bool AXP2101_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;
-    if (readRegister(0x18, &val, 1))
-    {
-      writeRegister8(0x18, (val & 0xFD) | (enable << 1));
-    }
+    if (!readRegister(0x18, &val, 1)) { return false; }
+    return writeRegister8(0x18, (val & 0xFD) | (enable << 1));
+  }
+
+  bool AXP2101_Class::getBatteryCharge(bool* enabled)
+  {
+    std::uint8_t val = 0;
+    if (enabled == nullptr || !readRegister(0x18, &val, 1)) { return false; }
+    *enabled = (val & 0x02) != 0;
+    return true;
+  }
+
+  bool AXP2101_Class::readPmuStatus1(std::uint8_t* value)
+  {
+    return value != nullptr && readRegister(0x00, value, 1);
+  }
+
+  bool AXP2101_Class::readPmuStatus2(std::uint8_t* value)
+  {
+    return value != nullptr && readRegister(0x01, value, 1);
   }
 
   void AXP2101_Class::setPreChargeCurrent(std::uint16_t max_mA)
@@ -112,19 +128,21 @@ namespace m5
     writeRegister8(0x61, i); 
   }
 
-  void AXP2101_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
+  bool AXP2101_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { /// reg 0x62 counts in steps of 25mA up to 200mA and 100mA above it, so the
+    /// register value is the table index + 4 (code 4 = the lowest step, 100mA).
     max_mA /= 5;
     if (max_mA > 1000/5) { max_mA = 1000/5; }
     static constexpr std::uint8_t table[] = { 125 / 5, 150 / 5, 175 / 5, 200 / 5, 300 / 5, 400 / 5, 500 / 5, 600 / 5, 700 / 5, 800 / 5, 900 / 5, 1000 / 5, 255 };
 
     size_t i = 0;
     while (table[i] <= max_mA) { ++i; }
-    i += 4;
-    writeRegister8(0x62, i);
+    if (!writeRegister8(0x62, i + 4)) { return false; }
+    if (applied_mA) { *applied_mA = i ? (std::uint16_t)(table[i - 1] * 5) : 100; }
+    return true;
   }
 
-  void AXP2101_Class::setChargeVoltage(std::uint16_t max_mV)
+  bool AXP2101_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
   { /// reg 0x64 selects the constant-voltage target: 1 = 4.0V through 5 = 4.4V,
     /// with 0 reserved. An early revision of the datasheet also documented a
     /// 4.6V setting, which later revisions dropped; nothing this library runs
@@ -143,7 +161,9 @@ namespace m5
     /// step when the request is under all of them.
     while (i && table[i] > max_mV) { --i; }
 
-    writeRegister8(0x64, static_cast<std::uint8_t>(i + 1));
+    if (!writeRegister8(0x64, static_cast<std::uint8_t>(i + 1))) { return false; }
+    if (applied_mV) { *applied_mV = table[i]; }
+    return true;
   }
 
   std::int8_t AXP2101_Class::getBatteryLevel(void)
