@@ -1,9 +1,14 @@
 #include <SD.h>
+#include <soc/soc_caps.h>
+#if __has_include(<SD_MMC.h>) && defined (SOC_SDMMC_HOST_SUPPORTED)
+#include <SD_MMC.h>
+#define MP3_HAS_SD_MMC
+#endif
 #include <math.h>
 
 /// need ESP8266Audio library. ( URL : https://github.com/earlephilhower/ESP8266Audio/ )
 #include <AudioOutput.h>
-#include <AudioFileSourceSD.h>
+#include <AudioFileSourceFS.h>
 #include <AudioFileSourceID3.h>
 #include <AudioGeneratorMP3.h>
 #include <AudioGeneratorWAV.h>
@@ -26,7 +31,8 @@ static constexpr uint8_t m5spk_virtual_channel = 0;
 static constexpr const char* mp3_dir = "/mp3";
 static std::vector<String> filename;
 
-static AudioFileSourceSD file;
+static fs::FS* card = nullptr; // &SD_MMC or &SD, whichever mountCard() opened
+static AudioFileSourceFS* file = nullptr;
 static AudioOutputM5Speaker out(&M5.Speaker, m5spk_virtual_channel);
 static AudioGeneratorMP3 mp3;
 static AudioGeneratorWAV wav;
@@ -41,10 +47,36 @@ static size_t fileindex = 0; // file the decode task is on
 // previous cancel out.
 static std::atomic<int> track_request { 0 };
 
+/// Mount the card with the pins M5Unified knows for the board: 4-bit SD_MMC
+/// where the extra data lines are wired (Tab5), SPI elsewhere. CS falls back
+/// to G4 when the table has none (ATOMIC Speaker base, boards without an entry).
+static fs::FS* mountCard(void)
+{
+#if defined (MP3_HAS_SD_MMC)
+  if (M5.hasSDMMC())
+  {
+    // on a fixed IO_MUX slot (ESP32-P4 slot 0) setPins rejects other pins; the core logs why
+    if (!SD_MMC.setPins(M5.getPin(m5::pin_name_t::sd_mmc_clk), M5.getPin(m5::pin_name_t::sd_mmc_cmd), M5.getPin(m5::pin_name_t::sd_mmc_d0)
+                      , M5.getPin(m5::pin_name_t::sd_mmc_d1),  M5.getPin(m5::pin_name_t::sd_mmc_d2),  M5.getPin(m5::pin_name_t::sd_mmc_d3)))
+    {
+      return nullptr;
+    }
+    return SD_MMC.begin("/sdcard", false) ? (fs::FS*)&SD_MMC : nullptr;
+  }
+#endif
+  int cs = M5.getPin(m5::pin_name_t::sd_spi_cs);
+  if (cs < 0) { cs = GPIO_NUM_4; }
+  if (M5.hasSD())
+  {
+    SPI.begin(M5.getPin(m5::pin_name_t::sd_spi_sclk), M5.getPin(m5::pin_name_t::sd_spi_miso), M5.getPin(m5::pin_name_t::sd_spi_mosi), cs);
+  }
+  return SD.begin(cs, SPI, 25000000) ? (fs::FS*)&SD : nullptr;
+}
+
 static void scanFiles(void)
 {
   filename.clear();
-  auto dir = SD.open(mp3_dir);
+  auto dir = card->open(mp3_dir);
   if (!dir) { return; }
   for (auto f = dir.openNextFile(); f; f = dir.openNextFile())
   {
@@ -84,7 +116,7 @@ static void stop(void)
     delete id3;
     id3 = nullptr;
   }
-  file.close();
+  file->close();
 }
 
 /// Start a file. false when it could not be opened or decoded (nothing is playing then).
@@ -94,7 +126,7 @@ static bool play(const char* fname)
   ui.clearMeta(); // nothing from the previous file stays on screen
   const char* base = strrchr(fname, '/');
   ui.setMeta(0, base ? base + 1 : fname, "file");
-  bool ok = file.open(fname);
+  bool ok = file->open(fname);
   if (ok)
   {
     String lower = fname;
@@ -102,11 +134,11 @@ static bool play(const char* fname)
     if (lower.endsWith(".wav"))
     {
       generator = &wav;
-      ok = generator->begin(&file, &out);
+      ok = generator->begin(file, &out);
     }
     else
     {
-      id3 = new AudioFileSourceID3(&file);
+      id3 = new AudioFileSourceID3(file);
       id3->RegisterMetadataCB(MDCallback, nullptr);
       id3->open(fname);
       generator = &mp3;
@@ -189,10 +221,11 @@ void setup(void)
   out.setup();
   out.setMonitor([](void* arg, const int16_t* stereo, size_t frames) { ((AudioUI*)arg)->feed(stereo, frames); }, &ui);
 
-  while (false == SD.begin(GPIO_NUM_4, SPI, 25000000))
+  while (nullptr == (card = mountCard()))
   {
     M5.delay(500);
   }
+  file = new AudioFileSourceFS(*card);
 
   scanFiles();
   if (filename.empty())
