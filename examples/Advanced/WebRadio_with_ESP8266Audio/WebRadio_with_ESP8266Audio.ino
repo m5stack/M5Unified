@@ -296,9 +296,8 @@ void setup(void)
   M5.Speaker.begin();
 
   M5.Display.println("Connecting to WiFi");
+  WiFi.mode(WIFI_STA); // first: on ESP-Hosted boards (Tab5) the radio is only brought up here
   WiFi.disconnect();
-  WiFi.softAPdisconnect(true);
-  WiFi.mode(WIFI_STA);
   // Modem sleep makes the station receive only at DTIM intervals; a stream
   // then arrives in bursts and the buffer drains between them.
   WiFi.setSleep(false);
