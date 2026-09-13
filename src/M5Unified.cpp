@@ -47,6 +47,13 @@
 #include "utility/led/LED_PowerHub_Class.hpp"
 #include "utility/led/LED_PaperMono_Class.hpp"
 
+#if defined (ARDUINO) && defined (CONFIG_IDF_TARGET_ESP32P4)
+// ESP-Hosted (Arduino core HAL) の SDIO ピン設定。弱参照にして、WiFi/BLE を使わないビルドには
+// ESP-Hosted のコードを引き込まない (リンカが解決しなければ nullptr になる)。
+extern "C" bool hostedSetPins(int8_t clk, int8_t cmd, int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t rst) __attribute__((weak));
+extern "C" bool hostedIsInitialized(void) __attribute__((weak));
+#endif
+
 #endif
 
 /// [[fallthrough]];
@@ -2561,6 +2568,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
     case board_t::board_M5UnitPoEP4:
       m5gfx::pinMode(GPIO_NUM_45, m5gfx::pin_mode_t::input);
+      break;
+
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+#if defined (ARDUINO)
+      // 汎用 esp32p4 ボード選択時、core 既定の SDIO ピンでは C6 (WiFi/BLE) に届かない。
+      // WiFi.begin より前 (ESP-Hosted 初期化前) に Tab5 の配線へ差し替える。
+      if (hostedSetPins && !(hostedIsInitialized && hostedIsInitialized()))
+      {
+        hostedSetPins(GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8, GPIO_NUM_15);
+      }
+#endif
       break;
 
 #endif
