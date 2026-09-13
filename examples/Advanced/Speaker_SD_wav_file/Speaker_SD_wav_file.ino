@@ -1,10 +1,15 @@
 #include <SD.h>
+#include <soc/soc_caps.h>
+#if __has_include(<SD_MMC.h>) && defined (SOC_SDMMC_HOST_SUPPORTED)
+#include <SD_MMC.h>
+#define WAV_HAS_SD_MMC
+#endif
 #include <M5Unified.h>
 #include <atomic>
 
 #include <esp_log.h>
 
-static constexpr const gpio_num_t SDCARD_CSPIN = GPIO_NUM_4;
+static fs::FS* card = nullptr; // &SD_MMC or &SD, whichever mountCard() opened
 
 /// Two buffers used alternately. A buffer is refilled only after the speaker
 /// task has released it, which it reports through setBufferReleaseCallback.
@@ -41,9 +46,35 @@ struct __attribute__((packed)) sub_chunk_t
   uint8_t data[1];
 };
 
+/// Mount the card with the pins M5Unified knows for the board: 4-bit SD_MMC
+/// where the extra data lines are wired (Tab5), SPI elsewhere. CS falls back
+/// to G4 when the table has none (ATOMIC Speaker base, boards without an entry).
+static fs::FS* mountCard(void)
+{
+#if defined (WAV_HAS_SD_MMC)
+  if (M5.hasSDMMC())
+  {
+    // on a fixed IO_MUX slot (ESP32-P4 slot 0) setPins rejects other pins; the core logs why
+    if (!SD_MMC.setPins(M5.getPin(m5::pin_name_t::sd_mmc_clk), M5.getPin(m5::pin_name_t::sd_mmc_cmd), M5.getPin(m5::pin_name_t::sd_mmc_d0)
+                      , M5.getPin(m5::pin_name_t::sd_mmc_d1),  M5.getPin(m5::pin_name_t::sd_mmc_d2),  M5.getPin(m5::pin_name_t::sd_mmc_d3)))
+    {
+      return nullptr;
+    }
+    return SD_MMC.begin("/sdcard", false) ? (fs::FS*)&SD_MMC : nullptr;
+  }
+#endif
+  int cs = M5.getPin(m5::pin_name_t::sd_spi_cs);
+  if (cs < 0) { cs = GPIO_NUM_4; }
+  if (M5.hasSD())
+  {
+    SPI.begin(M5.getPin(m5::pin_name_t::sd_spi_sclk), M5.getPin(m5::pin_name_t::sd_spi_miso), M5.getPin(m5::pin_name_t::sd_spi_mosi), cs);
+  }
+  return SD.begin(cs, SPI, 25000000) ? (fs::FS*)&SD : nullptr;
+}
+
 static bool playSdWav(const char* filename)
 {
-  auto file = SD.open(filename);
+  auto file = card->open(filename);
 
   if (!file) { return false; }
 
@@ -129,9 +160,10 @@ static bool playSdWav(const char* filename)
 void setup(void)
 {
   M5.begin();
+  M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_INFO); // so the file names below reach the log
 
   M5.Speaker.setBufferReleaseCallback(nullptr, wav_released);
-  SD.begin(SDCARD_CSPIN, SPI, 25000000);
+  card = mountCard();
 
   // M5.Speaker.setVolume(32);
 }
@@ -139,7 +171,8 @@ void setup(void)
 void loop(void)
 {
   // Play every *.wav in the root of the card, in directory order.
-  auto dir = SD.open("/");
+  if (!card) { card = mountCard(); } // a card inserted after start
+  auto dir = card ? card->open("/") : fs::File();
   if (!dir) {
     M5.Display.println("no SD card");
     M5.delay(1000);
@@ -155,6 +188,7 @@ void loop(void)
     if (is_dir || !lower.endsWith(".wav")) { continue; }
     String path = name.startsWith("/") ? name : "/" + name;
     M5.Display.println(path);
+    M5_LOGI("%s", path.c_str());
     if (playSdWav(path.c_str())) { ++played; }
     M5.delay(500);
   }
