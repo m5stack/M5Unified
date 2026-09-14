@@ -57,50 +57,71 @@ namespace m5
     return -1;
   }
 
-  void IP5306_Class::setBatteryCharge(bool enable)
-  {
-    static constexpr std::uint8_t CHARGE_OUT_BIT = 0x10;
+  static constexpr std::uint8_t CHARGE_EN_BIT = 0x10;
 
+  bool IP5306_Class::setBatteryCharge(bool enable)
+  {
     std::uint8_t val = 0;
-    if (readRegister(REG_SYS_CTL0, &val, 1))
-    {
-      writeRegister8(REG_SYS_CTL0, enable ? (val | CHARGE_OUT_BIT) : (val & (~CHARGE_OUT_BIT)));
-    }
+    if (!readRegister(REG_SYS_CTL0, &val, 1)) { return false; }
+    return writeRegister8(REG_SYS_CTL0, enable ? (val | CHARGE_EN_BIT) : (val & (~CHARGE_EN_BIT)));
   }
 
-  void IP5306_Class::setChargeCurrent(std::uint16_t max_mA)
+  bool IP5306_Class::getBatteryCharge(bool* enabled)
   {
-    max_mA = (max_mA > 50) ? (max_mA - 50) / 100 : 0;
-    if (max_mA > 31) { max_mA = 31; }
-
     std::uint8_t val = 0;
-    if (readRegister(REG_CHG_DIG_CTL0, &val, 1))
-    {
-      writeRegister8(REG_CHG_DIG_CTL0, (val & 0xE0) + max_mA);
-    }
+    if (enabled == nullptr || !readRegister(REG_SYS_CTL0, &val, 1)) { return false; }
+    *enabled = (val & CHARGE_EN_BIT) != 0;
+    return true;
   }
 
-  void IP5306_Class::setChargeVoltage(std::uint16_t max_mV)
+  bool IP5306_Class::readChargeActive(bool* active)
   {
-    max_mV = (max_mV / 10);
-    max_mV = (max_mV > 410) ? max_mV - 410 : 0;
-    if (max_mV > 436 - 410) { max_mV = 436 - 410; }
-    static constexpr std::uint8_t table[] = 
-      { 430 - 410  /// 4300mV
-      , 435 - 410  /// 4350mV
-      , 440 - 410  /// 4400mV
-      , 255
-      };
-    size_t i = 0;
-    while (table[i] <= max_mV) { ++i; }
+    std::uint8_t val = 0;
+    if (active == nullptr || !readRegister(REG_READ0, &val, 1)) { return false; }
+    *active = (val & 0x08) != 0;
+    return true;
+  }
 
+  bool IP5306_Class::readChargeFull(bool* full)
+  { /// REG_READ0 and REG_READ1 sit at adjacent addresses but are read
+    /// separately on purpose: the register document only ever shows a
+    /// single byte read and nowhere states that the address auto-increments.
+    std::uint8_t val = 0;
+    if (full == nullptr || !readRegister(REG_READ1, &val, 1)) { return false; }
+    *full = (val & 0x08) != 0;
+    return true;
+  }
+
+  bool IP5306_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { /// the register is a weighted sum with a 100mA step over a 50mA floor.
+    std::uint16_t steps = (max_mA > 50) ? (max_mA - 50) / 100 : 0;
+    if (steps > 31) { steps = 31; }
+
+    std::uint8_t val = 0;
+    if (!readRegister(REG_CHG_DIG_CTL0, &val, 1)) { return false; }
+    if (!writeRegister8(REG_CHG_DIG_CTL0, (val & 0xE0) + steps)) { return false; }
+    if (applied_mA) { *applied_mA = (std::uint16_t)(50 + steps * 100); }
+    return true;
+  }
+
+  bool IP5306_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
+  { /// reg CHG_CTL2 selects the constant-voltage target plus the boost the
+    /// datasheet recommends for each step (28mV at 4.2V, 14mV above). The
+    /// cell sees the sum, so the steps are compared and reported as the
+    /// effective values: the highest one not above the request, clamped up to
+    /// the lowest when the request is under all of them.
+    static constexpr std::uint16_t table[4] = { 4228, 4314, 4364, 4414 };
     static constexpr std::uint8_t regdata[4] =
       { 0x02 // 4.2v  + boost 28mV
       , 0x05 // 4.3v  + boost 14mV
       , 0x09 // 4.35v + boost 14mV
       , 0x0D // 4.4v  + boost 14mV
       };
-    writeRegister8(REG_CHG_CTL2, regdata[i]);
+    size_t i = 3;
+    while (i && table[i] > max_mV) { --i; }
+    if (!writeRegister8(REG_CHG_CTL2, regdata[i])) { return false; }
+    if (applied_mV) { *applied_mV = table[i]; }
+    return true;
   }
 
   bool IP5306_Class::isCharging(void)

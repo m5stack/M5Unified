@@ -56,6 +56,14 @@ namespace m5
     return (raw * _cur_lsb);
   }
 
+  bool INA226_Class::readShuntCurrent(float* ampere)
+  {
+    std::uint8_t buf[2] = {0};
+    if (!_init || ampere == nullptr || !readRegister(INA226_CURRENT, buf, 2)) { return false; }
+    *ampere = (float)(std::int16_t)(buf[0] << 8 | buf[1]) * _cur_lsb;
+    return true;
+  }
+
   float INA226_Class::getPower(void)
   {
     auto raw = (int16_t)readRegister16(INA226_POWER);

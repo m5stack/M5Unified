@@ -143,17 +143,16 @@ namespace m5
     writeRegister8(0x95, reg0x95 | (num ? 0x84 : 0x81)); // set GPIO mode
   }
 
-  void AXP192_Class::setBatteryCharge(bool enable)
+  bool AXP192_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0x7F) + (enable ? 0x80 : 0x00));
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    return writeRegister8(0x33, (val & 0x7F) + (enable ? 0x80 : 0x00));
   }
 
-  void AXP192_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
+  bool AXP192_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { /// reg 0x33 bit3:0 selects the step. table[] holds the steps above the
+    /// lowest one (100mA) in units of 10mA, so index i selects step i.
     max_mA /= 10;
     if (max_mA > 132) { max_mA = 132; }
     static constexpr std::uint8_t table[] = { 19, 28, 36, 45, 55, 63, 70, 78, 88, 96, 100, 108, 116, 124, 132, 255 };
@@ -162,13 +161,13 @@ namespace m5
     while (table[i] <= max_mA) { ++i; }
 
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0xF0) + i);
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    if (!writeRegister8(0x33, (val & 0xF0) + i)) { return false; }
+    if (applied_mA) { *applied_mA = i ? (std::uint16_t)(table[i - 1] * 10) : 100; }
+    return true;
   }
 
-  void AXP192_Class::setChargeVoltage(std::uint16_t max_mV)
+  bool AXP192_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
   { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts:
     /// the earlier form subtracted a bias first, which underflowed the
     /// unsigned argument for anything below the lowest step and then clamped
@@ -180,10 +179,26 @@ namespace m5
     while (i && table[i] > max_mV) { --i; }
 
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0x9F) + (i << 5));
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    if (!writeRegister8(0x33, (val & 0x9F) + (i << 5))) { return false; }
+    if (applied_mV) { *applied_mV = table[i]; }
+    return true;
+  }
+
+  bool AXP192_Class::readChargeActive(bool* charging)
+  {
+    std::uint8_t val = 0;
+    if (charging == nullptr || !readRegister(0x00, &val, 1)) { return false; }
+    *charging = (val & 0x04) != 0;
+    return true;
+  }
+
+  bool AXP192_Class::getBatteryCharge(bool* enabled)
+  {
+    std::uint8_t val = 0;
+    if (enabled == nullptr || !readRegister(0x33, &val, 1)) { return false; }
+    *enabled = (val & 0x80) != 0;
+    return true;
   }
 
   std::int8_t AXP192_Class::getBatteryLevel(void)

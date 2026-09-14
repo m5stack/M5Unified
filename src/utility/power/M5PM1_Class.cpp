@@ -112,10 +112,21 @@ namespace m5
     return static_cast<pwr_src_t>(readRegister8(M5PM1_REG_PWR_SRC) & 0x07);
   }
 
+  bool M5PM1_Class::getPowerSource(pwr_src_t* source)
+  {
+    if (!_init || source == nullptr) { return false; }
+    std::uint8_t value;
+    if (!readRegister(M5PM1_REG_PWR_SRC, &value, 1)) { return false; }
+    *source = static_cast<pwr_src_t>(value & 0x07);
+    return true;
+  }
+
   bool M5PM1_Class::getVbatNodePowered(bool* powered)
   {
     if (!_init || powered == nullptr) { return false; }
-    *powered = readRegister8(M5PM1_REG_PWR_SRC) & 0x04;
+    std::uint8_t value;
+    if (!readRegister(M5PM1_REG_PWR_SRC, &value, 1)) { return false; }
+    *powered = (value & 0x04) != 0;
     return true;
   }
 
@@ -127,7 +138,8 @@ namespace m5
     auto reg = num < 4 ? M5PM1_REG_GPIO_FUNC0 : M5PM1_REG_GPIO_FUNC1;
     auto shift = static_cast<std::uint8_t>((num < 4 ? num : num - 4) * 2);
     std::uint8_t mask = 0x03 << shift;
-    std::uint8_t reg_val = readRegister8(reg);
+    std::uint8_t reg_val = 0;
+    if (!readRegister(reg, &reg_val, 1)) { return false; }   // a folded read would rewrite the other pins of the register
     reg_val = (reg_val & ~mask) | (static_cast<std::uint8_t>(function) << shift);
     return writeRegister8(reg, reg_val);
   }
@@ -147,7 +159,8 @@ namespace m5
     auto reg = num < 4 ? M5PM1_REG_GPIO_PUPD0 : M5PM1_REG_GPIO_PUPD1;
     auto shift = static_cast<std::uint8_t>((num < 4 ? num : num - 4) * 2);
     std::uint8_t mask = 0x03 << shift;
-    std::uint8_t reg_val = readRegister8(reg);
+    std::uint8_t reg_val = 0;
+    if (!readRegister(reg, &reg_val, 1)) { return false; }   // a folded read would rewrite the other pins of the register
     reg_val = (reg_val & ~mask) | (static_cast<std::uint8_t>(pull) << shift);
     return writeRegister8(reg, reg_val);
   }

@@ -26,11 +26,14 @@ namespace m5
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable
-    void setBatteryCharge(bool enable);
+    /// @return false on I2C failure.
+    bool setBatteryCharge(bool enable);
 
     /// set battery charge current
     /// @param max_mA milli ampere. (100 - 1320).
-    void setChargeCurrent(std::uint16_t max_mA);
+    /// @param applied_mA optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mA is left untouched then.
+    bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
 
     /// set battery charge voltage
     /// @param max_mV milli volt. (4100 - 4360).
@@ -39,10 +42,22 @@ namespace m5
     /// Supported steps are 4100 / 4150 / 4200 / 4360 mV; a request under the
     /// lowest step selects that step, and one above the highest selects the
     /// highest.
-    void setChargeVoltage(std::uint16_t max_mV);
+    /// @param applied_mV optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mV is left untouched then.
+    bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
 
     /// Get whether the battery is currently charging or not.
     bool isCharging(void);
+
+    /// read REG00H bit2 (battery current direction : 1 = into the battery) with I2C error reporting.
+    /// @return false on I2C failure.
+    /// @note isCharging() folds a failed read into false; use this where the
+    /// difference between "not charging" and "could not read" matters.
+    bool readChargeActive(bool* charging);
+
+    /// read the charger enable (REG33H bit7) with I2C error reporting.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
 
     inline void setDCDC1(int voltage) { _set_DCDC(0, voltage); }
     inline void setDCDC2(int voltage) { _set_DCDC(1, voltage); }
