@@ -351,7 +351,12 @@ namespace m5
       if (_board != m5gfx::board_t::board_unknown) { return; }
 
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
-      // Power Hold pin for Capsule/Dial/DinMeter
+      // Power Hold pin for Capsule/Dial/DinMeter.
+      // Asserted before the board is known (those boards would power off otherwise).
+      // Boards where GPIO46 is exposed to the application (camera VSYNC on CoreS3, camera data on
+      // AtomS3R Cam, header pin on StampS3 / AtomS3R Ext) get the pad restored once the board is
+      // known, see below.
+      m5gfx::gpio::pin_backup_t gpio46_backup(GPIO_NUM_46);
       m5gfx::gpio_hi(GPIO_NUM_46);
       m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
 #endif
@@ -366,9 +371,29 @@ namespace m5
       }
       auto board = _check_boardtype(Display.getBoard());
       // printf("auto detect board:%d\n",board);
-      if (board == board_t::board_unknown) { board = cfg.fallback_board; }
+      bool board_detected = (board != board_t::board_unknown);
+      if (!board_detected) { board = cfg.fallback_board; }
       _board = board;
       _setup_pinmap(board);
+#if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+      // Restore only on boards positively identified as exposing GPIO46 to the application
+      // (camera VSYNC / data, header pin); every other case (power hold, display bus pins
+      // configured by Display.init(), a fallback board) keeps the previous behaviour.
+      switch (board_detected ? board : board_t::board_unknown)
+      {
+      case board_t::board_M5StackCoreS3:
+      case board_t::board_M5StackCoreS3SE:
+      case board_t::board_M5StackChan:
+      case board_t::board_M5AtomS3RCam:
+      case board_t::board_M5AtomS3RExt:
+      case board_t::board_M5StampS3:
+      case board_t::board_M5StampS3Bat:
+        gpio46_backup.restore();
+        break;
+      default:
+        break;
+      }
+#endif
       _setup_i2c(board);
       _setup_led(board);
       if (res && getDisplayCount() == 0) {
@@ -400,8 +425,25 @@ namespace m5
 #if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
       if (cfg.external_display.unit_poep4_hdmi && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
       {
+        // The bridge sits on the internal bus: unless the sketch chose a bus itself, share
+        // In_I2C's port and pins (lgfx::i2c underneath both). A partly filled config is
+        // completed from In_I2C too, with a warning, so nothing is mixed silently.
+        {
+          auto& h = cfg.unit_poep4_hdmi;
+          const bool none = (h.i2c_port < 0 && h.pin_sda < 0 && h.pin_scl < 0);
+          const bool all  = (h.i2c_port >= 0 && h.pin_sda >= 0 && h.pin_scl >= 0);
+#if defined (ESP_LOGW)
+          if (!none && !all) {
+            ESP_LOGW("M5Unified", "unit_poep4_hdmi: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
+          }
+#else
+          (void)none; (void)all;
+#endif
+          if (h.i2c_port < 0) { h.i2c_port = In_I2C.getPort(); }
+          if (h.pin_sda < 0) { h.pin_sda = In_I2C.getSDA(); }
+          if (h.pin_scl < 0) { h.pin_scl = In_I2C.getSCL(); }
+        }
         M5UnitPoEP4HDMI dsp(cfg.unit_poep4_hdmi);
-        dsp.setI2C(&In_I2C);
         if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
           addDisplay(dsp);
         }

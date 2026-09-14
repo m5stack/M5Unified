@@ -116,6 +116,38 @@ namespace m5
     /// @return number of channels that are playing.
     size_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load()); }
 
+    /// Register a function called when the playback task has finished reading
+    /// the buffer of a request: from then on the caller may overwrite or free
+    /// the memory that request used. The notice is per request, not per
+    /// memory region: if another request (a queued playRaw() of the same
+    /// data, a re-triggered tone) refers to the same memory, it is still in
+    /// use until that request is released too. Two buffers used alternately
+    /// are enough when the next one is filled from this point (three are
+    /// needed without it).
+    /// @param args passed through as the first argument.
+    /// @param func (args, data, channel): data is the pointer the request was
+    ///             read from - what was given to playRaw()/tone(), and for
+    ///             playWav() the PCM chunk inside the wav, not the wav pointer;
+    ///             channel is the virtual channel it was played on.
+    /// @attention Called from the playback task, not an ISR: keep it short,
+    ///            never block in it, never call begin()/end() from it. The
+    ///            sound itself may still be in the I2S queue - this is buffer
+    ///            release, not end of playback.
+    /// @attention Requests discarded without being played do not call back:
+    ///            a queued one replaced by stop() or stop_current_sound, and
+    ///            everything dropped by end(). The one being played when
+    ///            stop() cuts it does. Delivery follows the slot release, so
+    ///            it can arrive after isPlaying() has already dropped: track
+    ///            buffers by pointer, not by counting.
+    /// @attention play*() may be called from within: it never waits there and
+    ///            returns false if no queue slot is free.
+    /// @attention Set or clear it only before the first play*() or after
+    ///            end() has returned - not merely while the queue looks
+    ///            empty: the task may still be about to call the previous
+    ///            function, and the function and args are not swapped as one
+    ///            unit.
+    void setBufferReleaseCallback(void* args, void (*func)(void* args, const void* data, uint8_t channel)) { _cb_buffer_release_args = args; _cb_buffer_release = func; }
+
     /// sets the output master volume of the sound.
     /// @param master_volume master volume (0~255)
     void setVolume(uint8_t master_volume) { _master_volume = master_volume; }
@@ -172,7 +204,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
-    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
+    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -192,7 +225,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
-    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
+    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -212,7 +246,8 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
-    /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
+    /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
+    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -285,7 +320,9 @@ namespace m5
 
     static bool _slot_occupied(const volatile wav_slot_t& slot)
     {
-      uint8_t s = slot.state.load(std::memory_order_relaxed);
+      // acquire: a producer that sees the slot empty may overwrite the buffer
+      // the task has finished reading, so that read must be ordered before.
+      uint8_t s = slot.state.load(std::memory_order_acquire);
       return ((s & wav_phase_mask) != wav_phase_empty) && !(s & wav_state_stop_marker);
     }
 
@@ -308,6 +345,8 @@ namespace m5
     static void spk_task(void* args);
 
     esp_err_t _setup_i2s(void);
+    bool _in_task(void) const;
+    void _end_locked(void);
     bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
     bool _set_next_wav(size_t ch, const wav_info_t& wav);
 
@@ -316,6 +355,8 @@ namespace m5
 
     bool (*_cb_set_enabled)(void* args, bool enabled) = nullptr;
     void* _cb_set_enabled_args = nullptr;
+    void (*_cb_buffer_release)(void* args, const void* data, uint8_t channel) = nullptr;
+    void* _cb_buffer_release_args = nullptr;
 
     volatile bool _task_running = false;
     std::atomic<uint16_t> _play_channel_bits = { 0 };
@@ -326,9 +367,11 @@ namespace m5
     /// keys on this, so a caller can never see a half-built port as ready.
     std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
-    SDL_Thread* _task_handle = nullptr;
+    std::atomic<SDL_Thread*> _task_handle { nullptr };
 #else
-    TaskHandle_t _task_handle = nullptr;
+    /// atomic: _in_task() reads it from any caller of play*(), possibly
+    /// while begin() on another task is still creating the task.
+    std::atomic<TaskHandle_t> _task_handle { nullptr };
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
 #endif
   };

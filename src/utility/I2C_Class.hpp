@@ -5,10 +5,10 @@
 #define __M5_I2C_CLASS_H__
 
 #include "m5unified_common.h"
-#if __has_include ( <driver/i2c.h> )
-
-#include <driver/i2c.h>
-
+#if __has_include ( <driver/i2c_master.h> )
+ #include <driver/i2c_master.h>
+#elif __has_include ( <driver/i2c.h> )
+ #include <driver/i2c.h>
 #endif
 
 #include <cstdint>

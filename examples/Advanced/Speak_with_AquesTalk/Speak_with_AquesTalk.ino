@@ -2,6 +2,7 @@
 #include <M5UnitLCD.h>
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
+#include <atomic>
 
 /// need AquesTalk library. ( URL : https://www.a-quest.com/ )
 #include <aquestalk.h>
@@ -15,19 +16,35 @@ static uint32_t workbuf[AQ_SIZE_WORKBUF];
 static TaskHandle_t task_handle = nullptr;
 volatile bool is_talking = false;
 
+/// Two buffers used alternately. A buffer is refilled only after the speaker
+/// task has released it, which it reports through setBufferReleaseCallback.
+static int16_t wav[2][LEN_FRAME];
+// These flags are shared between tasks. Use std::atomic<bool> here;
+// plain bool or volatile does not safely share updates between tasks.
+static std::atomic<bool> wav_busy[2] = { {false}, {false} };
+
+static void wav_released(void*, const void* data, uint8_t)
+{ // The speaker has finished using this buffer; it can be refilled now.
+  for (int i = 0; i < 2; ++i) { if (data == wav[i]) { wav_busy[i] = false; } }
+}
+
 static void talk_task(void*)
 {
-  int16_t wav[3][LEN_FRAME];
-  int tri_index = 0;
+  int idx = 0;
   for (;;)
   {
     ulTaskNotifyTake( pdTRUE, portMAX_DELAY ); // wait notify
     while (is_talking)
     {
+      while (wav_busy[idx]) { vTaskDelay(1); } // wait until the speaker task has released this buffer
       uint16_t len;
-      if (CAqTkPicoF_SyntheFrame(wav[tri_index], &len)) { is_talking = false; break; }
-      M5.Speaker.playRaw(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false);
-      tri_index = tri_index < 2 ? tri_index + 1 : 0;
+      if (CAqTkPicoF_SyntheFrame(wav[idx], &len)) { is_talking = false; break; }
+      if (len == 0) { continue; }
+      // busy is set before playRaw: the release can only come after the
+      // request is queued. playRaw returns false when nothing was queued.
+      wav_busy[idx] = true;
+      if (!M5.Speaker.playRaw(wav[idx], len, 8000, false, 1, m5spk_virtual_channel, false)) { wav_busy[idx] = false; }
+      idx ^= 1;
     }
   }
 }
@@ -79,6 +96,7 @@ void setup(void)
 
   M5.begin(cfg);
 
+  M5.Speaker.setBufferReleaseCallback(nullptr, wav_released);
   xTaskCreateUniversal(talk_task, "talk_task", 4096, nullptr, 1, &task_handle, APP_CPU_NUM);
 /*
   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.

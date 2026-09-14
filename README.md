@@ -50,6 +50,7 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - ESP-IDF
  - Arduino IDE
 
+
 ## Supported devices (ESP32)
  - M5Stack Core (BASIC / GRAY / GO / FIRE)
  - M5Stack Core2 / Core2 v1.1 / Tough
@@ -127,6 +128,16 @@ or have explicit support in the M5Unified library.  To use these functions, simp
  - Unit RTC
  - Unit IMU
 
+
+## Notes
+
+### Arduino as an ESP-IDF component
+When arduino-esp32 is used as an ESP-IDF component together with this library, the library links
+the Arduino component automatically (it looks for a component named `arduino`, `arduino-esp32` or
+`espressif__arduino-esp32` in the build) so that it is compiled with the same `ARDUINO` definitions
+as the application. Without that, the application and the library would see different layouts of the
+same classes. Set `M5UNIFIED_ARDUINO_COMPONENT=<name>` (CMake cache variable) if your Arduino component
+has another name, or `M5UNIFIED_ARDUINO_COMPONENT=OFF` to disable this.
 
 # Hardware information
 

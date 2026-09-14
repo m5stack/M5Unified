@@ -91,6 +91,11 @@ namespace m5
     /// Set power output of the external ports.
     /// @param enable true=output / false=input
     /// @param port_mask for M5Station. ext_port (bitmask).
+    /// @note On the CoreS3 family (CoreS3 / CoreS3 SE / StackChan), disabling an enabled output blocks for
+    ///       about 200 ms (the boost converter is stopped first and the bus is left to discharge before the
+    ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
+    ///       waits for the TS reading to settle. The switch-over is serialized with setUsbOutput and the
+    ///       internal speaker enable, so those may wait for it as well.
     void setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
 
     /// deprecated : Change to "setExtOutput"
@@ -255,6 +260,8 @@ namespace m5
 #endif
 
   private:
+    /// CoreS3 family: AW9523 のビット操作を setExtOutput / setUsbOutput と同じ排他区間で行う (スピーカー制御用)
+    static void _core_s3_aw9523_bit(uint8_t reg, uint8_t mask, bool on);
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);

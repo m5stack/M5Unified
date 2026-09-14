@@ -698,6 +698,10 @@ label_next_wav:
             bool clear_idx = ((next_state & wav_state_stop_marker)
                           || !incoming.no_clear_index
                           || (incoming.data != current_wav->data));
+            // the request being replaced (finished or cut) is released below,
+            // once its slot is back with the writers; null once idle (see the
+            // idle path) so a request is never released twice.
+            const void* released = current_wav->data;
             *current_wav = incoming;
             if (next_state & wav_state_stop_marker)
             { // a pure stop: nothing to play. The slot itself is retired
@@ -716,6 +720,10 @@ label_next_wav:
 #if !defined (SDL_h_)
             xSemaphoreGive(self->_task_semaphore);
 #endif
+            if (released && self->_cb_buffer_release)
+            {
+              self->_cb_buffer_release(self->_cb_buffer_release_args, released, ch);
+            }
 
             if (clear_idx)
             {
@@ -734,6 +742,16 @@ label_next_wav:
             xSemaphoreGive(self->_task_semaphore);
 #endif
             self->_play_channel_bits.fetch_and(~(1 << ch));
+            if (current_wav->data)
+            { // finished with nothing queued behind it: release it here and
+              // forget it, so the next adoption does not release it again.
+              // (index is reset below anyway, so no_clear_index is unaffected.)
+              if (self->_cb_buffer_release)
+              {
+                self->_cb_buffer_release(self->_cb_buffer_release_args, current_wav->data, ch);
+              }
+              current_wav->data = nullptr;
+            }
             next_state = ch_info->wavinfo[flip].state.load(std::memory_order_acquire);
             if ((next_state & wav_phase_mask) != wav_phase_published)
             { // nothing to do; a writer caught mid-publish raises the bit itself.
@@ -1003,7 +1021,7 @@ label_continue_sample:
       m5gfx::pinMode(self->_cfg.pin_data_out, m5gfx::pin_mode_t::output);
     }
 #endif
-    self->_task_handle = nullptr;
+    self->_task_handle.store(nullptr, std::memory_order_release);
     vTaskDelete(nullptr);
 #endif
   }
@@ -1040,25 +1058,30 @@ label_continue_sample:
     {
       _task_running = true;
 #if defined (SDL_h_)
-      _task_handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
-      res = (_task_handle != nullptr);
+      auto handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
+      _task_handle.store(handle, std::memory_order_release);
+      res = (handle != nullptr);
 #else
       size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
 
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
       {
-        res = (pdPASS == xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle, _cfg.task_pinned_core));
+        TaskHandle_t handle = nullptr;
+        res = (pdPASS == xTaskCreatePinnedToCore(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &handle, _cfg.task_pinned_core));
+        _task_handle.store(handle, std::memory_order_release);
       }
       else
 #endif
       {
-        res = (pdPASS == xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &_task_handle));
+        TaskHandle_t handle = nullptr;
+        res = (pdPASS == xTaskCreate(spk_task, "spk_task", stack_size, this, _cfg.task_priority, &handle));
+        _task_handle.store(handle, std::memory_order_release);
       }
 #endif
-      // end() takes the driver and the callback back down; it still sees the
-      // class as running, which is what lets it do that.
-      if (!res) { end(); }
+      // the teardown takes the driver and the callback back down; it still
+      // sees the class as running, which is what lets it do that.
+      if (!res) { _end_locked(); }
       else { _begun.store(true, std::memory_order_release); }
     }
     _begin_lock.store(false);
@@ -1068,6 +1091,25 @@ label_continue_sample:
 
   void Speaker_Class::end(void)
   {
+    // Serialized with begin() by the same lock: a teardown must not slip in
+    // between the task being created and its handle being published, or it
+    // would miss the task and the stale handle would be published afterwards.
+    bool zero = false;
+    while (!_begin_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
+      vTaskDelay(1);
+#endif
+    }
+    _end_locked();
+    _begin_lock.store(false);
+  }
+
+  void Speaker_Class::_end_locked(void)
+  {
     _begun.store(false, std::memory_order_release);
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
     if (_task_running)
@@ -1076,14 +1118,15 @@ label_continue_sample:
       // already be tearing its handle down. The slots are reset below once
       // the task is gone, which is all the stop would have achieved.
       _task_running = false;
-      if (_task_handle)
+      auto handle = _task_handle.load(std::memory_order_acquire);
+      if (handle)
       {
 #if defined (SDL_h_)
-        SDL_WaitThread(_task_handle, nullptr);
-        _task_handle = nullptr;
+        SDL_WaitThread(handle, nullptr);
+        _task_handle.store(nullptr, std::memory_order_release);
 #else
-        xTaskNotifyGive(_task_handle);
-        do { vTaskDelay(1); } while (_task_handle);
+        xTaskNotifyGive(handle);
+        do { vTaskDelay(1); } while (_task_handle.load(std::memory_order_acquire));
 #endif
       }
     }
@@ -1170,7 +1213,7 @@ label_continue_sample:
                           , std::memory_order_release);
           _play_channel_bits.fetch_or(chmask);
 #if !defined (SDL_h_)
-          xTaskNotifyGive(_task_handle);
+          xTaskNotifyGive(_task_handle.load(std::memory_order_acquire));
 #endif
           return true;
         }
@@ -1183,6 +1226,11 @@ label_continue_sample:
       { // never a turn behind an endless request.
         return false;
       }
+      if (_in_task())
+      { // called from the release callback: only the task frees slots, so
+        // waiting here would be waiting on ourselves.
+        return false;
+      }
 #if !defined (SDL_h_)
       xSemaphoreTake(_task_semaphore, 1);
 #else
@@ -1191,10 +1239,31 @@ label_continue_sample:
     }
   }
 
+  // true while running on the playback task itself (i.e. inside the release
+  // callback), where nothing may be waited for and no lifecycle started.
+  bool Speaker_Class::_in_task(void) const
+  {
+    auto handle = _task_handle.load(std::memory_order_acquire);
+#if defined (SDL_h_)
+    return handle && SDL_ThreadID() == SDL_GetThreadID(handle);
+#else
+    return handle && xTaskGetCurrentTaskHandle() == handle;
+#endif
+  }
+
   bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
-    if (!begin() || (_task_handle == nullptr)) { return true; }
-    if (array_len == 0 || data == nullptr) { return true; }
+    // Only a queued request produces a release callback, so the answer is
+    // false whenever nothing was queued (this used to say true for a speaker
+    // that could not start and for an empty request).
+    if (_in_task())
+    { // from the release callback: an end() may be tearing the task down,
+      // and begin() from here would rebuild it underneath. Never start.
+      if (!_begun.load(std::memory_order_acquire)) { return false; }
+    }
+    else if (!begin()) { return false; }
+    if (_task_handle.load(std::memory_order_acquire) == nullptr) { return false; }
+    if (array_len == 0 || data == nullptr) { return false; }
     size_t ch = (size_t)channel;
     if (ch >= sound_channel_max)
     {

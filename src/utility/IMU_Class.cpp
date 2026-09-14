@@ -113,6 +113,11 @@ namespace m5
         { // ChainCaptain BMI270 : X=-Y, Y=-X, Z=-Z
           _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
           _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
+        } else
+        if (board == m5::board_t::board_M5StickS3)
+        { // StickS3 BMI270 : X=+Y, Y=-X, Z=+Z
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_y);
         }
 #elif defined(CONFIG_IDF_TARGET_ESP32C61)
         if (board == m5::board_t::board_M5CoreMatrix)

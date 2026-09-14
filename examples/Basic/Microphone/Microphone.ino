@@ -1,6 +1,7 @@
 #include <M5UnitLCD.h>
 #include <M5UnitOLED.h>
 #include <M5Unified.h>
+#include <atomic>
 
 static constexpr const size_t record_number = 256;
 static constexpr const size_t record_length = 200;
@@ -8,9 +9,20 @@ static constexpr const size_t record_size = record_number * record_length;
 static constexpr const size_t record_samplerate = 16000;
 static int16_t prev_y[record_length];
 static int16_t prev_h[record_length];
-static size_t rec_record_idx = 2;
-static size_t draw_record_idx = 0;
+static size_t rec_record_idx = 0;
 static int16_t *rec_data;
+
+/// The block the microphone task has just filled. It reports each finished
+/// record() through setBufferReleaseCallback; the loop draws that block.
+/// (A mailbox holding only the newest block: the display is not required to
+/// show every block.) std::atomic safely passes the pointer and recorded samples
+/// to the loop; a plain or volatile pointer would not provide this synchronization.
+static std::atomic<int16_t*> rec_done { nullptr };
+
+static void rec_released(void*, void* data, size_t)
+{
+  rec_done = (int16_t*)data;
+}
 
 void setup(void)
 {
@@ -37,6 +49,7 @@ void setup(void)
 
   /// Since the microphone and speaker cannot be used at the same time, turn off the speaker here.
   M5.Speaker.end();
+  M5.Mic.setBufferReleaseCallback(nullptr, rec_released);
   M5.Mic.begin();
 }
 
@@ -47,11 +60,17 @@ void loop(void)
   if (M5.Mic.isEnabled())
   {
     static constexpr int shift = 6;
-    auto data = &rec_data[rec_record_idx * record_length];
-    if (M5.Mic.record(data, record_length, record_samplerate))
+    /// record() waits here while both queue slots are taken, so the loop
+    /// runs once per finished block.
+    if (M5.Mic.record(&rec_data[rec_record_idx * record_length], record_length, record_samplerate))
     {
-      data = &rec_data[draw_record_idx * record_length];
+      if (++rec_record_idx >= record_number) { rec_record_idx = 0; }
+    }
 
+    // Take the newest completed block and clear the mailbox in one operation.
+    auto data = rec_done.exchange(nullptr);
+    if (data)
+    {
       int32_t w = M5.Display.width();
       if (w > record_length - 1) { w = record_length - 1; }
       for (int32_t x = 0; x < w; ++x)
@@ -72,9 +91,6 @@ void loop(void)
         M5.Display.writeFastVLine(x, y, h, TFT_WHITE);
       }
       M5.Display.display();
-
-      if (++draw_record_idx >= record_number) { draw_record_idx = 0; }
-      if (++rec_record_idx >= record_number) { rec_record_idx = 0; }
     }
   }
 
@@ -96,6 +112,7 @@ void loop(void)
 
       /// Since the microphone and speaker cannot be used at the same time, turn off the microphone here.
       M5.Mic.end();
+      rec_done = nullptr; // nothing recorded before the restart is shown again
       M5.Speaker.begin();
 
       M5.Display.setCursor(0,0);
