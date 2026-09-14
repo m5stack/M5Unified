@@ -29,7 +29,7 @@ namespace m5
     {
       return true;
     }
-    return true;
+    return false;
   }
 
   IMU_Base::imu_spec_t BMI270_Class::begin(I2C_Class* i2c)
