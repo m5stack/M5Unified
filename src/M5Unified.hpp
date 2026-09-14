@@ -425,8 +425,25 @@ namespace m5
 #if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
       if (cfg.external_display.unit_poep4_hdmi && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
       {
+        // The bridge sits on the internal bus: unless the sketch chose a bus itself, share
+        // In_I2C's port and pins (lgfx::i2c underneath both). A partly filled config is
+        // completed from In_I2C too, with a warning, so nothing is mixed silently.
+        {
+          auto& h = cfg.unit_poep4_hdmi;
+          const bool none = (h.i2c_port < 0 && h.pin_sda < 0 && h.pin_scl < 0);
+          const bool all  = (h.i2c_port >= 0 && h.pin_sda >= 0 && h.pin_scl >= 0);
+#if defined (ESP_LOGW)
+          if (!none && !all) {
+            ESP_LOGW("M5Unified", "unit_poep4_hdmi: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
+          }
+#else
+          (void)none; (void)all;
+#endif
+          if (h.i2c_port < 0) { h.i2c_port = In_I2C.getPort(); }
+          if (h.pin_sda < 0) { h.pin_sda = In_I2C.getSDA(); }
+          if (h.pin_scl < 0) { h.pin_scl = In_I2C.getSCL(); }
+        }
         M5UnitPoEP4HDMI dsp(cfg.unit_poep4_hdmi);
-        dsp.setI2C(&In_I2C);
         if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
           addDisplay(dsp);
         }
