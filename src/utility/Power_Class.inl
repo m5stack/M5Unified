@@ -155,7 +155,8 @@ namespace m5
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
       {
-        static constexpr std::uint8_t reg_array_0x43[] =
+        const std::uint8_t lcd_rst_pullup_mask = _tab5_lcd_rst_pullup ? (1 << 4) : 0;
+        const std::uint8_t reg_array_0x43[] =
         { ///     +--------- HP_DET : Headphone detect
           ///     |+-------- CAM_RST : Camera reset
           ///     ||+------- TP_RST : Touch reset
@@ -166,10 +167,10 @@ namespace m5
           ///     |||||||+-- RF_PTH_L_INT_H_EXT : antenna  L=internal / H=external
           ///     ||||||||
           0x05, 0b01110000,   // OUT_SET
-          0x03, 0b01110011,   // IO_DIR
+          0x03, std::uint8_t(0b01110011 & ~lcd_rst_pullup_mask),   // IO_DIR
           0x07, 0b00001000,   // OUT_H_IM
-          0x0D, 0b00000100,   // PULL_SEL
-          0x0B, 0b00000100,   // PULL_EN
+          0x0D, std::uint8_t(0b00000100 | lcd_rst_pullup_mask),   // PULL_SEL
+          0x0B, std::uint8_t(0b00000100 | lcd_rst_pullup_mask),   // PULL_EN
         };
         static constexpr std::uint8_t reg_array_0x44[] =
         { ///     +--------- CHG_EN

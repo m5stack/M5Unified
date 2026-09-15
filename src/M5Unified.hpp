@@ -369,6 +369,10 @@ namespace m5
       } else {
         res = Display.init_without_reset(false);
       }
+#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
+      // Capture the reset mode before an external display can replace Display.
+      Power._tab5_lcd_rst_pullup = Display.isST7121();
+#endif
       auto board = _check_boardtype(Display.getBoard());
       // printf("auto detect board:%d\n",board);
       bool board_detected = (board != board_t::board_unknown);
