@@ -111,6 +111,17 @@ namespace m5
       return ((value & 0x0F) <= 9) && ((value >> 4) <= 9);
     }
 
+    static std::uint8_t bcd2ToByte(std::uint8_t value)
+    {
+      return ((value >> 4) * 10) + (value & 0x0F);
+    }
+
+    static std::uint8_t byteToBcd2(std::uint8_t value)
+    {
+      std::uint_fast8_t bcdhigh = value / 10;
+      return (bcdhigh << 4) | (value - (bcdhigh * 10));
+    }
+
     /// Range-check decoded values before committing them to the output.
     static bool validateDateTime(const rtc_date_t* date, const rtc_time_t* time);
   };
