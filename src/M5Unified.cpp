@@ -17,6 +17,9 @@
 //   file that defines them. Constants shared by several files go in a header
 //   (utility/m5unified_i2c_addr.hpp for the on-board I2C addresses).
 // - M5Unified.inl (the former M5Unified.cpp) comes last; it uses the classes above.
+// - .github/scripts/check_inl_sources.py checks these rules (every *.inl is reachable from
+//   this file, directly or through another *.inl, and starts with the guard below); CI runs
+//   it (SourceCheck.yml).
 
 #define __STDC_FORMAT_MACROS
 
