@@ -19,13 +19,14 @@ namespace m5
 
     bool begin(void) override;
     led_type_t getLedType(size_t index) const override { return led_type_t::led_type_fullcolor; }
-    size_t getCount(void) const override { return 8; }
+    size_t getCount(void) const override { return led_count; }
     void setColors(const RGBColor* values, size_t index, size_t length) override;
     void setBrightness(const uint8_t brightness) override;
     void display(void) override;
     RGBColor* getBuffer(void) override { return _rgb_buffer.data(); }
 
   private:
+    static constexpr size_t led_count = 8;
     std::vector<RGBColor> _rgb_buffer;
     uint8_t _brightness = 63;
   };
