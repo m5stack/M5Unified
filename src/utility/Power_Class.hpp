@@ -501,9 +501,6 @@ namespace m5
     bool _initialized = false;
     bool _identity_settled = false;   ///< a probe answered with a positive chip ID (AXP192 / AXP2101 boards)
     bool _identity_unconfirmed = false;   ///< every chip-ID probe failed: the board default is provisional (see begin())
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    bool _tab5_lcd_rst_pullup = false;
-#endif
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
     pmic_t _pmic = pmic_t::pmic_unknown;
