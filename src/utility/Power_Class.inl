@@ -151,10 +151,10 @@ namespace m5
           ///     |||||||+-- RF_PTH_L_INT_H_EXT : antenna  L=internal / H=external
           ///     ||||||||
           0x05, 0b01110000,   // OUT_SET
-          0x03, 0b01110011,   // IO_DIR
+          0x03, 0b01100011,   // IO_DIR (LCD_RST input)
           0x07, 0b00001000,   // OUT_H_IM
-          0x0D, 0b00000100,   // PULL_SEL
-          0x0B, 0b00000100,   // PULL_EN
+          0x0D, 0b00010100,   // PULL_SEL (LCD_RST pull-up)
+          0x0B, 0b00010100,   // PULL_EN (LCD_RST pull-up enabled)
         };
         static constexpr std::uint8_t reg_array_0x44[] =
         { ///     +--------- CHG_EN
