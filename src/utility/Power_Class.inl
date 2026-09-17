@@ -1555,21 +1555,42 @@ namespace m5
 #endif
   }
 
-  void Power_Class::_powerOff(bool withTimer)
+  bool Power_Class::_powerOff(bool withTimer)
   {
 #if defined(M5UNIFIED_PC_BUILD)
     (void)withTimer;
 #else
     bool use_deepsleep = true;
+    bool gpio_wake_armed = false;  // GPIO wake armed by this call; released when the sleep is cancelled
+    gpio_num_t rtc_pin = (gpio_num_t)_rtcIntPin;
+    auto cancel_sleep = [&](const char* msg) -> bool {
+      M5_LOGE("_powerOff: %s not sleeping.", msg);
+      if (gpio_wake_armed)
+      { // Only the pin armed here is released; the GPIO wake source itself may
+        // carry other pins owned by the application.
+        gpio_wakeup_disable(rtc_pin);
+      }
+      M5.Display.wakeup();
+      return false;
+    };
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
-      gpio_num_t pin = (gpio_num_t)_rtcIntPin;
+      gpio_num_t pin = rtc_pin;
 #if SOC_PM_SUPPORT_EXT_WAKEUP
       if (ESP_OK != esp_sleep_enable_ext0_wakeup( pin, false))
 #endif
       {
-        gpio_wakeup_enable( pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
-        esp_sleep_enable_gpio_wakeup();
+        esp_err_t gpio_err = gpio_wakeup_enable(pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
+        esp_err_t wake_err = gpio_err == ESP_OK ? esp_sleep_enable_gpio_wakeup() : ESP_FAIL;
+        if (gpio_err == ESP_OK && wake_err != ESP_OK)
+        {
+          gpio_wakeup_disable(pin);  // best effort rollback
+        }
+        if (gpio_err != ESP_OK || wake_err != ESP_OK)
+        {
+          return cancel_sleep("the RTC GPIO cannot be used as a wakeup source.");
+        }
+        gpio_wake_armed = true;
         use_deepsleep = false;
       }
     }
@@ -1638,7 +1659,7 @@ namespace m5
               /// 再起動ループになるため、wake 経路を確保できなければ眠らない
               M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
               M5.Display.wakeup();
-              return;
+              return false;
             }
             /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
             M5_LOGE("_powerOff: cannot release the wakeup pin.");
@@ -1647,6 +1668,12 @@ namespace m5
           {
             if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
             {
+              if (withTimer)
+              {
+                M5_LOGE("_powerOff: GPIO%d cannot be used as a wakeup source. not sleeping.", (int)_wakeupPin);
+                M5.Display.wakeup();
+                return false;
+              }
               M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
             }
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
@@ -1669,7 +1696,12 @@ namespace m5
 #if SOC_PM_SUPPORT_EXT_WAKEUP
         if(_rtcIntPin == GPIO_NUM_MAX && _wakeupPin < GPIO_NUM_MAX)
         {
-          esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
+          if (ESP_OK != esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false) && withTimer)
+          {
+            M5_LOGE("_powerOff: GPIO%d cannot be used as a wakeup source. not sleeping.", (int)_wakeupPin);
+            M5.Display.wakeup();
+            return false;
+          }
         }
 #endif
         break;
@@ -1726,21 +1758,30 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5PowerHub:
-      uint8_t buf[6]={};
-      M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
-      M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq); 
-      use_deepsleep = false;
+      {
+        uint8_t buf[6]={};
+        M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
+        if (!M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq))
+        {
+          return cancel_sleep("PowerHub did not accept the power-off request.");
+        }
+        use_deepsleep = false;
+      }
       break;
 #endif
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }
-    esp_light_sleep_start();
+    if (esp_light_sleep_start() != ESP_OK)
+    {
+      return cancel_sleep("light sleep could not be entered.");
+    }
     esp_restart();
 #endif
+    return false;
   }
 
-  void Power_Class::_timerSleep(void)
+  bool Power_Class::_timerSleep(bool rtc_armed)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
 
@@ -1752,10 +1793,14 @@ namespace m5
     {
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
+      if (rtc_armed && ESP_OK != esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0))
+      {
+        M5_LOGE("_timerSleep: GPIO35 cannot be used as a wakeup source. not sleeping.");
+        M5.Display.wakeup();
+        return false;
+      }
       esp_deep_sleep_start();
-      return;
-      break;
+      return false;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
@@ -1779,7 +1824,7 @@ namespace m5
     }
 #endif
 #endif
-    _powerOff(true);
+    return _powerOff(rtc_armed);
   }
 
   bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
@@ -2038,31 +2083,183 @@ namespace m5
     _powerOff(false);
   }
 
-  void Power_Class::timerSleep( int seconds )
+  // Wake sources survive a light sleep, so a timer left by an earlier sleep must be
+  // dropped before an RTC-only sleep. "Not set" (ESP_ERR_INVALID_STATE) is fine.
+  bool Power_Class::_disableEspTimerWakeup(void)
   {
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(seconds);
-#if !defined (M5UNIFIED_PC_BUILD)
-    esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+#if defined (M5UNIFIED_PC_BUILD)
+    return true;
+#else
+    esp_err_t err = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+    return err == ESP_OK || err == ESP_ERR_INVALID_STATE;
 #endif
-    _timerSleep();
   }
 
-  void Power_Class::timerSleep( const rtc_time_t& time)
+  bool Power_Class::timerSleep( int seconds )
   {
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(time);
-    _timerSleep();
+    if (seconds <= 0 || (std::uint32_t)seconds > UINT32_MAX / 1000)
+    {
+      M5_LOGE("timerSleep: invalid duration. not sleeping.");
+      return false;
+    }
+    bool rtc_enabled = M5.Rtc.isEnabled();
+    if (rtc_enabled && !M5.Rtc.hasTimerIRQ())
+    { // Refused before the existing IRQ is touched.
+      M5_LOGE("timerSleep: this RTC has no timer, use timerSleep(time). not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (rtc_enabled)
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    std::uint32_t applied_msec = (std::uint32_t)seconds * 1000;
+    if (rtc_enabled && !M5.Rtc.setTimerIRQ((std::uint32_t)seconds * 1000, &applied_msec))
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+#if !defined (M5UNIFIED_PC_BUILD)
+    // The ESP timer is set to the period the RTC actually applies (the RTC rounds to
+    // its step) so that both wake sources agree on the deadline.
+    if (esp_sleep_enable_timer_wakeup((std::uint64_t)applied_msec * 1000ULL) != ESP_OK)
+    {
+      if (!_disableEspTimerWakeup())
+      {
+        if (rtc_enabled)
+        {
+          bool irq_disabled = M5.Rtc.disableIRQ();
+          bool irq_cleared = M5.Rtc.clearIRQ();
+          if (!(irq_disabled && irq_cleared)) {
+            M5_LOGE("timerSleep: RTC IRQ cleanup failed after ESP timer setup failed.");
+          }
+        }
+        M5_LOGE("timerSleep: ESP timer wakeup setup and cleanup failed. not sleeping.");
+        return false;
+      }
+      if (!rtc_enabled)
+      {
+        M5_LOGE("timerSleep: ESP timer wakeup could not be set. not sleeping.");
+        return false;
+      }
+      M5_LOGW("timerSleep: ESP timer wakeup could not be set; using the RTC alarm only.");
+    }
+#endif
+    if (_timerSleep(rtc_enabled)) { return true; }
+    if (rtc_enabled)
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared)) {
+        M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+      }
+    }
+    if (!_disableEspTimerWakeup()) {
+      M5_LOGE("timerSleep: ESP timer cleanup failed after sleep was cancelled.");
+    }
+    return false;
   }
 
-  void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
+  bool Power_Class::timerSleep( const rtc_time_t& time)
   {
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(date, time);
-    _timerSleep();
+    if ((time.hours < 0 && time.minutes < 0) || !M5.Rtc.canSetAlarm(nullptr, &time))
+    { // No alarm field at all would only clear the alarm; there would be nothing to wake on.
+      // Checked (including the driver's own limits) before the existing IRQ is touched.
+      M5_LOGE("timerSleep: invalid alarm time. not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (M5.Rtc.isEnabled())
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    if (!M5.Rtc.setAlarmIRQ(time))
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (!_disableEspTimerWakeup())
+    {
+      M5_LOGE("timerSleep: a leftover ESP timer wakeup could not be disabled. not sleeping.");
+      M5.Rtc.disableIRQ();
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (_timerSleep()) { return true; }
+    bool irq_disabled = M5.Rtc.disableIRQ();
+    bool irq_cleared = M5.Rtc.clearIRQ();
+    if (!(irq_disabled && irq_cleared)) {
+      M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+    }
+    return false;
+  }
+
+  bool Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
+  {
+    if ((time.hours < 0 && time.minutes < 0 && date.date < 0 && date.weekDay < 0)
+     || !M5.Rtc.canSetAlarm(&date, &time))
+    { // No alarm field at all would only clear the alarm; there would be nothing to wake on.
+      // Checked (including the driver's own limits) before the existing IRQ is touched.
+      M5_LOGE("timerSleep: invalid alarm time. not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (M5.Rtc.isEnabled())
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    if (!M5.Rtc.setAlarmIRQ(date, time))
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (!_disableEspTimerWakeup())
+    {
+      M5_LOGE("timerSleep: a leftover ESP timer wakeup could not be disabled. not sleeping.");
+      M5.Rtc.disableIRQ();
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (_timerSleep()) { return true; }
+    bool irq_disabled = M5.Rtc.disableIRQ();
+    bool irq_cleared = M5.Rtc.clearIRQ();
+    if (!(irq_disabled && irq_cleared)) {
+      M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+    }
+    return false;
   }
 
   std::int32_t Power_Class::_getBatteryAdcRaw(void)
