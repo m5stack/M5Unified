@@ -10,6 +10,28 @@
 
 namespace m5
 {
+  // flag_clear: W0C mask written to 0x1D once the timer is confirmed stopped
+  // (0xAF clears TF only, 0xA7 clears TF and AF).
+  // ctl_bits: the 0x1E bits to clear together with TE (0x10 = TIE, 0x18 = TIE and AIE).
+  static bool stop_rx8130_timer(RX8130_Class* rtc, std::uint8_t flag_clear, std::uint8_t ctl_bits = 0x10)
+  {
+    for (int retry = 0; retry < 3; ++retry)
+    {
+      std::uint8_t ext = 0, ctl = 0;
+      bool te_off = rtc->bitOff(0x1C, 0x10);
+      bool tie_off = rtc->bitOff(0x1E, ctl_bits);
+      bool ext_read = rtc->readRegister(0x1C, &ext, 1);
+      bool ctl_read = rtc->readRegister(0x1E, &ctl, 1);
+      if (te_off && tie_off && ext_read && ctl_read
+       && !(ext & 0x10) && !(ctl & ctl_bits)
+       && rtc->writeRegister8(0x1D, flag_clear))  // W0C: only the selected flags are cleared
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool RX8130_Class::begin(I2C_Class* i2c)
   {
     if (i2c)
@@ -85,6 +107,9 @@ namespace m5
 
   bool RX8130_Class::setDateTime(const rtc_date_t* date, const rtc_time_t* time)
   {
+    if (!isEnabled() || !validateDateTime(date, time)) { return false; }
+    // The year register holds two digits only (2000-2099).
+    if (date && (date->year < 2000 || date->year > 2099)) { return false; }
     std::uint8_t buf[7] = { 0 };
 
     int idx = 0;
@@ -108,8 +133,9 @@ namespace m5
     return writeRegister(reg_start, buf, idx);
   }
 
-  std::uint32_t RX8130_Class::setTimerIRQ(std::uint32_t msec)
+  bool RX8130_Class::setTimerIRQ(std::uint32_t msec, std::uint32_t* applied_msec)
   {
+    if (!isEnabled()) { return false; }
     // Source clocks in the order they are tried. period = mul_ms / div [ms].
     // max_ms  = 65535 * period, so msec <= max_ms keeps msec * div within uint32.
     // max_cnt = min(65535, 0xFFFFFFFF / mul_ms), so cnt * mul_ms (the period) stays within uint32.
@@ -130,6 +156,8 @@ namespace m5
 
     std::uint32_t cycle = 0;
     const clk_t* sel = nullptr;
+    const clk_t* fallback = nullptr;
+    std::uint32_t fallback_cycle = 0;
     if (msec != 0) {
       bool overflowed = false;  // a finer clock ran out of range: round up so the period never steps back
       for (std::size_t i = 0; i < NCLK; ++i) {
@@ -145,32 +173,30 @@ namespace m5
         if (i + 1 == NCLK || (cnt >= MIN_COUNT && (err << 8) <= num)) {
           sel = &c; cycle = cnt; break;
         }
+        // Remember the first clock that can hold the request at all: it is used instead of
+        // 4096 Hz when no clock meets the accuracy rule, because a 4096 Hz event (122us
+        // /IRQ pulse) is lost behind the M5PM1 relay while a rounded period is still a wake-up.
+        if (fallback == nullptr && cnt >= 1) { fallback = &c; fallback_cycle = cnt; }
       }
-      if (sel == nullptr) { return 0; }  // unreachable (1/3600Hz covers all of uint32); fail safe = stay stopped
+      if (sel == &clks[NCLK - 1] && fallback != nullptr && msec >= 250) {
+        sel = fallback; cycle = fallback_cycle;
+      }
+      if (sel == nullptr) { return false; }  // unreachable (1/3600Hz covers all of uint32); fail safe = stay stopped
     }
 
     // Sequence per datasheet Figure 48: TE=0 (+TSEL) -> clear TF -> TIE -> preset -> TE=1 last,
     // so the first event cannot precede TIE. On any I2C failure the timer is stopped (verified by
-    // read-back where the bus allows it) and 0 is returned; the caller cannot tell that from a
-    // requested stop, and if even the stop fails the hardware state is unknown.
+    // read-back where the bus allows it) and false is returned; if even the stop fails the
+    // hardware state is unknown.
     // 0x1D flags are write-0-to-clear (writing 1 is ignored, VBFF is read-only), so TF is cleared
     // with a single write that leaves the other flags untouched (a read-modify-write would drop
     // a flag raised in between).
     static constexpr std::uint8_t FLAG_CLEAR_TF = 0xAF;
-    auto stop_timer = [this](void) -> bool {
-      for (int retry = 0; retry < 3; ++retry) {
-        std::uint8_t ext = 0, ctl = 0;
-        if (bitOff(0x1C, 0x10) && bitOff(0x1E, 0x10)
-         && readRegister(0x1C, &ext, 1) && readRegister(0x1E, &ctl, 1)
-         && !(ext & 0x10) && !(ctl & 0x10)) { return true; }
-      }
-      return false;
-    };
     std::uint8_t reg0x1C = 0;
     if (cycle == 0) {
-      stop_timer();
-      writeRegister8(0x1D, FLAG_CLEAR_TF);
-      return 0;
+      if (!stop_rx8130_timer(this, FLAG_CLEAR_TF)) { return false; }
+      if (applied_msec) { *applied_msec = 0; }
+      return true;
     }
     bool ok = readRegister(0x1C, &reg0x1C, 1);
     if (ok) {
@@ -193,20 +219,24 @@ namespace m5
     }
     if (ok) { ok = writeRegister8(0x1C, reg0x1C | 0x10); }
     if (!ok) {
-      stop_timer();
-      return 0;
+      stop_rx8130_timer(this, FLAG_CLEAR_TF);
+      return false;
     }
-    // Actual period rounded to the nearest ms (cycle * mul_ms fits by max_cnt); never 0 while running.
-    std::uint32_t result = (cycle * sel->mul_ms + (sel->div >> 1)) / sel->div;
-    return result ? result : 1;
+    if (applied_msec) {
+      // Actual period rounded to the nearest ms (cycle * mul_ms fits by max_cnt); never 0 while running.
+      std::uint32_t result = (cycle * sel->mul_ms + (sel->div >> 1)) / sel->div;
+      *applied_msec = result ? result : 1;
+    }
+    return true;
   }
 
-  int RX8130_Class::setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time)
+  bool RX8130_Class::setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time)
   {
-    if (!isEnabled()) { return 0; }
+    if (!validateAlarmFields(date, time) || !isEnabled()) { return false; }
     std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x00 };
 
     bool irq_enable = false;
+    int flg_wada = -1;
     if (time) {
       if (time->minutes >= 0)
       {
@@ -223,7 +253,6 @@ namespace m5
     if (date) {
       // 0 Sets WEEK as target of alarm function
       // 1 Sets DAY as target of alarm function
-      int flg_wada = -1;
       if (date->date >= 0)
       {
         flg_wada = 1;
@@ -237,51 +266,61 @@ namespace m5
       if (flg_wada >= 0)
       {
         irq_enable = true;
-        if (flg_wada)
-        { // week alarm / day alarm selector
-          bitOn(0x1C, 0x08);
-        } else {
-          bitOff(0x1C, 0x08);
-        }
       }
     }
 
-    // MIN_ALARM_REG 0x17
-    writeRegister(0x17, buf, 3);
-
-    if (irq_enable)
-    {
-      bitOn(0x1E, 0x08);
-    }
-    else
+    // Keep AIE off until WADA and all alarm registers are committed.
+    // The initial disable is retried: if it never succeeds the old alarm stays armed.
+    bool disabled = false;
+    for (int retry = 0; retry < 3 && !disabled; ++retry) { disabled = bitOff(0x1E, 0x08); }
+    if (!disabled) { return false; }
+    if (flg_wada >= 0
+     && !(flg_wada ? bitOn(0x1C, 0x08) : bitOff(0x1C, 0x08)))
     {
       bitOff(0x1E, 0x08);
+      return false;
     }
-
-    return irq_enable;
+    if (!writeRegister(0x17, buf, 3))
+    {
+      bitOff(0x1E, 0x08);
+      return false;
+    }
+    // 0x1D is W0C: clear AF for both arming and clearing while retaining TF.
+    if (!writeRegister8(0x1D, 0xB7))
+    {
+      bitOff(0x1E, 0x08);
+      return false;
+    }
+    if (irq_enable)
+    {
+      if (!bitOn(0x1E, 0x08))
+      {
+        bitOff(0x1E, 0x08);
+        return false;
+      }
+    }
+    return true;
   }
 
   bool RX8130_Class::getIRQstatus(void)
   {
-    if (!isEnabled()) { return 0; }
+    if (!isEnabled()) { return false; }
     // 0x10: Timer IRQ
     // 0x08: Alarm IRQ
     return readRegister8(0x1D) & 0x18;
   }
 
-  void RX8130_Class::clearIRQ(void)
+  bool RX8130_Class::clearIRQ(void)
   {
-    if (isEnabled()) {
-      writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
-    }
+    if (!isEnabled()) { return false; }
+    return writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
   }
 
-  void RX8130_Class::disableIRQ(void)
+  bool RX8130_Class::disableIRQ(void)
   {
-    if (isEnabled()) {
-      bitOff(0x1E, 0x18);
-      writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
-    }
+    if (!isEnabled()) { return false; }
+    // TIE, AIE and TE are cleared together with read-back and retry; W0C clears TF and AF.
+    return stop_rx8130_timer(this, 0xA7, 0x18);
   }
 
   bool RX8130_Class::getVoltLow(void)
