@@ -246,20 +246,43 @@ namespace m5
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
     /// @param seconds Number of seconds to boot.
-    void timerSleep(int seconds);
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure, ESP timer wakeup
+    ///         registration failure without an RTC, wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered. Without an RTC the ESP32 timer wakeup is used.
+    /// @note This function owns the ESP timer wake source: it is set for this sleep and disabled
+    ///       again when the sleep is cancelled, a previous setting is not restored.
+    /// @note PowerHub has no periodic RTC timer; use a date/time overload on those boards.
+    /// @note When the ESP timer wakeup cannot be registered the RTC timer is used alone; that
+    ///       wakes only boards where the RTC IRQ is wired to a wake route (not an external RTC unit).
+    bool timerSleep(int seconds);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure,
+    ///         wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered.
+    /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
+    ///       an alarm from an external RTC unit does not wake the board.
+    /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
-    void timerSleep(const rtc_time_t& time);
+    bool timerSleep(const rtc_time_t& time);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
     /// @param date Date to boot. (only date and weekDay can be specified. Ignore year and month)
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure,
+    ///         wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered.
+    /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
+    ///       an alarm from an external RTC unit does not wake the board.
+    /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
-    void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
+    bool timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
     /// Value for micro_seconds of deepSleep / lightSleep, meaning "sleep without a timer wakeup".
     /// The device sleeps until a wakeup pin or another wakeup source is triggered.
@@ -458,8 +481,11 @@ namespace m5
     /// that the answer is one of the advertised capabilities.
     charge_state_t _getChargeState(void);
     std::int32_t _getBatteryAdcRaw(void);
-    void _powerOff(bool withTimer);
-    void _timerSleep(void);
+    bool _disableEspTimerWakeup(void);
+    /// withTimer: wake by an RTC IRQ is expected (an RTC timer/alarm was armed).
+    bool _powerOff(bool withTimer);
+    /// rtc_armed: false = no RTC wake-up was armed (ESP timer only), so the RTC IRQ pin is not registered.
+    bool _timerSleep(bool rtc_armed = true);
 
 #if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
     /// Check whether a battery is actually attached (non-blocking).

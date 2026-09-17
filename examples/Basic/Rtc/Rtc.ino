@@ -95,7 +95,10 @@ void setup(void)
 
     time_t t = time(nullptr)+1; // Advance one second.
     while (t > time(nullptr));  /// Synchronization in seconds
-    M5.Rtc.setDateTime( gmtime( &t ) );
+    if (!M5.Rtc.setDateTime( gmtime( &t ) ))
+    {
+      M5.Log.println("RTC write failed.");
+    }
   }
   else
   {
@@ -114,6 +117,11 @@ void loop(void)
 
   auto dt = M5.Rtc.getDateTime();
   M5.Display.setCursor(0,0);
+  if (!dt.isValid())
+  {
+    M5.Log.println("RTC read failed.");
+    return;
+  }
   M5.Log.printf("RTC   UTC  :%04d/%02d/%02d (%s)  %02d:%02d:%02d\r\n"
                , dt.date.year
                , dt.date.month
