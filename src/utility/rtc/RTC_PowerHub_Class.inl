@@ -43,6 +43,12 @@ namespace m5
   static constexpr std::uint8_t REG_ALARM_MIN    = 0xD0; // D0..D2: min, hour, mday (0 = any day)
   static constexpr std::uint8_t REG_ALARM_ENABLE = 0xD3;
   static constexpr std::uint8_t REG_FW_VERSION   = 0xFE;
+  // The STM32 collects D0..D3 writes behind one "update pending" bit that its
+  // main loop (about 13 ms per iteration) applies to the RX8130 and then clears.
+  // A write that lands while an older update is being applied can be dropped
+  // with that clear, so every alarm-register write is followed by a pause long
+  // enough for the loop to consume it before the next one is issued.
+  static constexpr std::uint32_t ALARM_APPLY_WAIT_MS = 50;
   // The firmware applies D0..D3 to the RX8130 from its main loop; there is no
   // reliable "applied" flag (0xD4 of firmware 0xF3 mirrors other registers), so
   // success means the firmware acknowledged the register write.
@@ -157,6 +163,13 @@ namespace m5
     return true;
   }
 
+  bool RTC_PowerHub_Class::writeAlarmRegisters(std::uint8_t reg, const std::uint8_t* data, std::size_t length)
+  {
+    bool result = writeRegister(reg, data, length);
+    m5gfx::delay(ALARM_APPLY_WAIT_MS);
+    return result;
+  }
+
   bool RTC_PowerHub_Class::setAlarmIRQ(const rtc_date_t *date, const rtc_time_t *time)
   {
     if (!canSetAlarm(date, time) || !isEnabled()) { return false; }
@@ -179,9 +192,12 @@ namespace m5
     // Disable the old alarm before changing any value register: after a failed
     // write nothing is armed (the previous alarm values are not re-enabled).
     bool disabled = false;
-    for (int retry = 0; retry < 3 && !disabled; ++retry) { disabled = writeRegister8(REG_ALARM_ENABLE, 0); }
+    const std::uint8_t disable = 0;
+    for (int retry = 0; retry < 3 && !disabled; ++retry)
+    {
+      disabled = writeAlarmRegisters(REG_ALARM_ENABLE, &disable, 1);
+    }
     if (!disabled) { return false; }
-    if (!writeRegister(REG_ALARM_MIN, buf, 3)) { return false; }
 
     if (buf[3])
     {
@@ -194,9 +210,14 @@ namespace m5
       // harmless, whereas restoring a flash-backed setting risks a new failure.
     }
 
-    if (buf[3] && !writeRegister8(REG_ALARM_ENABLE, 1))
+    // Values and the enable flag go out in one transaction. The STM32 collects
+    // every D0..D3 write behind a single "update pending" flag that its main loop
+    // applies to the RX8130 and then clears; an enable that arrives while an older
+    // update is being applied can be lost, so the whole alarm is handed over as
+    // one register-block write.
+    if (!writeAlarmRegisters(REG_ALARM_MIN, buf, 4))
     {
-      writeRegister8(REG_ALARM_ENABLE, 0);
+      writeAlarmRegisters(REG_ALARM_ENABLE, &disable, 1);
       return false;
     }
     return true;
@@ -218,6 +239,7 @@ namespace m5
   bool RTC_PowerHub_Class::disableIRQ(void)
   {
     if (!isEnabled()) { return false; }
-    return writeRegister8(REG_ALARM_ENABLE, 0);
+    const std::uint8_t disable = 0;
+    return writeAlarmRegisters(REG_ALARM_ENABLE, &disable, 1);
   }
 }

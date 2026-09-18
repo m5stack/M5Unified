@@ -81,6 +81,8 @@ namespace m5
     ///       Its STM32 applies the alarm asynchronously and exposes no confirmation, so
     ///       true means the request was accepted, not that the chip has already applied it.
     /// @note See setTimerIRQ() for the M5PM1 relay note.
+    /// @note PowerHub: each alarm register write is followed by a 50 ms pause so the STM32
+    ///       front-end can apply it; a set or clear takes about 100-200 ms.
     /// Removed. setAlarmIRQ(seconds) programmed the periodic timer, not the alarm;
     /// use setTimerIRQ(seconds * 1000). Deleted (instead of just removed) so that
     /// setAlarmIRQ(0) fails to compile rather than silently binding to the tm* overload.

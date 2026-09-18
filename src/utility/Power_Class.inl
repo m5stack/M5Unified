@@ -1759,15 +1759,29 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5PowerHub:
       {
+        // The STM32 applies the RTC alarm registers from its main loop (about
+        // 13 ms per iteration), after the I2C write was acknowledged, and a
+        // power-off request that overtakes that step leaves the device asleep
+        // with no alarm armed (firmware 0xF3: 0 of 6 wake-ups with no gap, 6 of 6
+        // with 500 ms). Give the firmware time to arm the alarm.
+        static constexpr uint32_t powerhub_alarm_settle_ms = 500;
+        // The power is cut a few loop iterations after the request. Wait for it
+        // without touching the I2C bus; a device that is still running after this
+        // is reported as not sleeping. The request itself cannot be withdrawn, so
+        // a firmware that stalls longer than this and then powers off is a known
+        // limitation of the "returned means still awake" contract.
+        static constexpr uint32_t powerhub_poweroff_timeout_ms = 3000;
+        if (withTimer) { m5gfx::delay(powerhub_alarm_settle_ms); }
         uint8_t buf[6]={};
         M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
         if (!M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq))
         {
           return cancel_sleep("PowerHub did not accept the power-off request.");
         }
-        use_deepsleep = false;
+        _poweroff_requested = true;
+        for (uint32_t waited = 0; waited < powerhub_poweroff_timeout_ms; waited += 100) { m5gfx::delay(100); }
+        return cancel_sleep("PowerHub did not power off.");
       }
-      break;
 #endif
     }
 
@@ -2157,6 +2171,9 @@ namespace m5
     }
 #endif
     if (_timerSleep(rtc_enabled)) { return true; }
+    // A PowerHub power-off request cannot be cancelled and may still complete;
+    // keep its RTC alarm armed instead of dismantling the wake path.
+    if (_poweroff_requested) { return false; }
     if (rtc_enabled)
     {
       bool irq_disabled = M5.Rtc.disableIRQ();
@@ -2208,6 +2225,8 @@ namespace m5
       return false;
     }
     if (_timerSleep()) { return true; }
+    // The accepted PowerHub request may still power off after the timeout.
+    if (_poweroff_requested) { return false; }
     bool irq_disabled = M5.Rtc.disableIRQ();
     bool irq_cleared = M5.Rtc.clearIRQ();
     if (!(irq_disabled && irq_cleared)) {
@@ -2254,6 +2273,8 @@ namespace m5
       return false;
     }
     if (_timerSleep()) { return true; }
+    // The accepted PowerHub request may still power off after the timeout.
+    if (_poweroff_requested) { return false; }
     bool irq_disabled = M5.Rtc.disableIRQ();
     bool irq_cleared = M5.Rtc.clearIRQ();
     if (!(irq_disabled && irq_cleared)) {
