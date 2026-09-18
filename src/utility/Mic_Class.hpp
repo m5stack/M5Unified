@@ -155,36 +155,38 @@ namespace m5
     void setSampleRate(uint32_t sample_rate) { _cfg.sample_rate = sample_rate; }
 
     /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// A completed request has exactly array_len elements written, never
+    /// more. A stereo buffer holds L/R pairs; with an odd array_len the last
+    /// element receives the left sample only. Requests that are already
+    /// queued when the previous one completes are continuous whatever their
+    /// length (a capture step that straddles two buffers is carried over).
+    /// @param rec_data Recording destination array. nullptr returns false.
+    /// @param array_len Number of data array elements. 0 returns false
+    ///                  (nothing is queued and the release callback is not called).
     /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
     /// @param stereo true=data is stereo / false=data is monaural.
+    /// @return false when the arguments are invalid, the mic cannot start, or
+    ///         (from the release callback only) no request slot is free.
     bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
       return sample_rate != 0 && _rec_raw(rec_data, array_len, false, sample_rate, stereo);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
-    /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
-    /// @param stereo true=data is stereo / false=data is monaural.
+    /// record raw sound wave data. See the uint8_t overload for the contract.
     bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
       return sample_rate != 0 && _rec_raw(rec_data, array_len,  true, sample_rate, stereo);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// record raw sound wave data at the current sample rate (monaural).
+    /// See the 4-argument overload for the contract.
     bool record(uint8_t* rec_data, size_t array_len)
     { // sample_rate 0 == keep the current rate; resolved under the lock.
       return _rec_raw(rec_data, array_len, false, 0, false);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// record raw sound wave data at the current sample rate (monaural).
+    /// See the 4-argument overload for the contract.
     bool record(int16_t* rec_data, size_t array_len)
     {
       return _rec_raw(rec_data, array_len,  true, 0, false);
