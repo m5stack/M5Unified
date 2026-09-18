@@ -616,9 +616,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     const float f_gain = (float)gain / (oversampling << 1);
     size_t src_idx = ~0u;
     size_t src_len = 0;
-    int32_t sum_value[4] = { 0,0 };
+    int32_t sum_value[2] = { 0, 0 };
     int32_t prev_value[2] = { 0, 0 };
     const bool in_stereo = self->_cfg.stereo;
+    // A mono capture step yields two time steps. When a buffer fills after
+    // the first one, the second is kept here for the next pending request so
+    // back-to-back recordings stay continuous whatever their length.
+    int32_t carry_value = 0;
+    bool carry_valid = false;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
     /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
@@ -666,8 +671,61 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         src_len = 0;
         sum_value[0] = 0;
         sum_value[1] = 0;
+        carry_valid = false; // buffered input is dropped here as well; the carry is only for back-to-back requests
         os_remain = oversampling;
         continue;
+      }
+
+      // Write one element in the request's sample format.
+      auto write_one = [&](int32_t value)
+      {
+        if (current_rec->is_16bit)
+        {
+          if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
+          else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
+          auto dst = (int16_t*)(current_rec->data);
+          *dst++ = value;
+          current_rec->data = dst;
+        }
+        else
+        {
+          value = ((value + 128) >> 8) + 128;
+          if (     value < 0) { value = 0; }
+          else if (value > 255) { value = 255; }
+          auto dst = (uint8_t*)(current_rec->data);
+          *dst++ = value;
+          current_rec->data = dst;
+        }
+        --dst_remain;
+      };
+      // Write one time step (left, right). A mono request takes left only
+      // (the caller has already averaged a stereo capture); a stereo request
+      // whose last element is reached after left drops right, so an odd
+      // stereo length ends with a lone left sample.
+      auto write_step = [&](int32_t left, int32_t right)
+      {
+        write_one(left);
+        if (current_rec->is_stereo && dst_remain) { write_one(right); }
+      };
+      auto release_current = [&](void)
+      {
+        // data has been walked forward while filling: step back over the
+        // whole buffer to hand the caller the pointer they gave record().
+        const size_t total = current_rec->length.load(std::memory_order_relaxed);
+        void* released = (uint8_t*)current_rec->data - total * (current_rec->is_16bit ? 2 : 1);
+        current_rec->length.store(0, std::memory_order_release);
+        xSemaphoreGive(self->_task_semaphore);
+        if (self->_cb_buffer_release)
+        {
+          self->_cb_buffer_release(self->_cb_buffer_release_args, released, total);
+        }
+      };
+
+      if (carry_valid)
+      {
+        carry_valid = false;
+        write_step(carry_value, carry_value);
+        if (dst_remain == 0) { release_current(); continue; }
       }
       for (;;)
       {
@@ -747,61 +805,22 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           }
         }
 
-        int output_num = 2;
-
-        if (in_stereo != current_rec->is_stereo)
-        {
-          if (in_stereo)
-          { // stereo -> mono  convert.
-            sum_value[0] = (sum_value[0] + sum_value[1] + 1) >> 1;
-            output_num = 1;
-          }
-          else
-          { // mono -> stereo  convert.
-            auto tmp = sum_value[1];
-            sum_value[3] = tmp;
-            sum_value[2] = tmp;
-            sum_value[1] = sum_value[0];
-            output_num = 4;
-          }
+        if (in_stereo)
+        { // one time step (L, R); a mono request takes the average
+          if (current_rec->is_stereo) { write_step(sum_value[0], sum_value[1]); }
+          else { write_one((sum_value[0] + sum_value[1] + 1) >> 1); }
         }
-        for (int i = 0; i < output_num; ++i)
-        {
-          auto value = sum_value[i];
-          if (current_rec->is_16bit)
-          {
-            if (     value < INT16_MIN+16) { value = INT16_MIN+16; }
-            else if (value > INT16_MAX-16) { value = INT16_MAX-16; }
-            auto dst = (int16_t*)(current_rec->data);
-            *dst++ = value;
-            current_rec->data = dst;
-          }
-          else
-          {
-            value = ((value + 128) >> 8) + 128;
-            if (     value < 0) { value = 0; }
-            else if (value > 255) { value = 255; }
-            auto dst = (uint8_t*)(current_rec->data);
-            *dst++ = value;
-            current_rec->data = dst;
-          }
+        else
+        { // two time steps; a stereo request duplicates each into L and R
+          write_step(sum_value[0], sum_value[0]);
+          if (dst_remain) { write_step(sum_value[1], sum_value[1]); }
+          else { carry_value = sum_value[1]; carry_valid = true; }
         }
         sum_value[0] = 0;
         sum_value[1] = 0;
-        dst_remain -= output_num;
-        if ((int32_t)dst_remain <= 0)
+        if (dst_remain == 0)
         {
-          // data has been walked forward while filling: step back over what
-          // was written to hand the caller the pointer they gave record().
-          const size_t total = current_rec->length.load(std::memory_order_relaxed);
-          const size_t written = total - dst_remain; // dst_remain may have wrapped below 0
-          void* released = (uint8_t*)current_rec->data - written * (current_rec->is_16bit ? 2 : 1);
-          current_rec->length.store(0, std::memory_order_release);
-          xSemaphoreGive(self->_task_semaphore);
-          if (self->_cb_buffer_release)
-          {
-            self->_cb_buffer_release(self->_cb_buffer_release_args, released, total);
-          }
+          release_current();
           break;
         }
       }
@@ -1065,6 +1084,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // From the release callback (the capture task itself) nothing may be
     // waited for: an end() holding _rec_lock waits for this task to exit, and
     // a free slot only comes from this task. Try once and report.
+    // Nothing to record into is a caller error, not a request: it used to
+    // return true without ever invoking the release callback.
+    if (recdata == nullptr || array_len == 0) { return false; }
     const bool in_task = (xTaskGetCurrentTaskHandle() == _task_handle.load(std::memory_order_acquire));
     for (;;)
     {
@@ -1090,7 +1112,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
   {
     int res = _begin_raw(sample_rate);
     if (res <= 0) { return res; }
-    if (array_len == 0) { return 1; }
     // Any free slot will do: the consume order comes from the sequence
     // number stamped below, not from which slot a request lands in. A full
     // queue just means "come back later".
