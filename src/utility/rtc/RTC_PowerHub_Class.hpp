@@ -35,6 +35,9 @@ namespace m5
     bool disableIRQ(void) override;
 
     bool getVoltLow(void) override;
+
+  private:
+    bool writeAlarmRegisters(std::uint8_t reg, const std::uint8_t* data, std::size_t length);
   };
 }
 

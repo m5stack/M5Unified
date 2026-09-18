@@ -242,6 +242,9 @@ namespace m5
     void setLed(uint8_t brightness = 255);
 
     /// all power off.
+    /// @note PowerHub: the STM32 front-end powers the board off asynchronously. If the
+    ///       device is still running about 3 s after the request the call returns, but
+    ///       may power off later because the request cannot be cancelled.
     void powerOff(void);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
@@ -266,6 +269,10 @@ namespace m5
     /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
     ///       an alarm from an external RTC unit does not wake the board.
     /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
+    /// @note PowerHub: the STM32 front-end arms the alarm and powers off asynchronously; the call
+    ///       spends about 0.75 s before the power-off request (alarm programming is paced at
+    ///       50 ms per register write, then 0.5 s settle) and up to 3 s waiting for the power to drop.
+    ///       It may power off later because the request cannot be cancelled; the alarm remains armed.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
     bool timerSleep(const rtc_time_t& time);
@@ -280,6 +287,9 @@ namespace m5
     /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
     ///       an alarm from an external RTC unit does not wake the board.
     /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
+    /// @note PowerHub: the call spends about 0.75 s before the asynchronous power-off request
+    ///       (paced alarm writes, then 0.5 s settle) and up to 3 s waiting for the power to drop.
+    ///       It may power off later because the request cannot be cancelled; the alarm remains armed.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
     bool timerSleep(const rtc_date_t& date, const rtc_time_t& time);
@@ -529,6 +539,7 @@ namespace m5
     bool _identity_unconfirmed = false;   ///< every chip-ID probe failed: the board default is provisional (see begin())
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
+    bool _poweroff_requested = false;
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
     uint8_t _batAdcCh;
