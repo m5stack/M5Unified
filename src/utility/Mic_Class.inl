@@ -1081,21 +1081,37 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // to drain or for the capture side to make progress. The retry has no
     // fairness order - competing callers that keep requesting conflicting
     // sample rates can hold each other off indefinitely.
-    // From the release callback (the capture task itself) nothing may be
-    // waited for: an end() holding _rec_lock waits for this task to exit, and
-    // a free slot only comes from this task. Try once and report.
+    // From the release callback (the capture task itself) a full queue is
+    // reported at once (a free slot only comes from this task), but the lock
+    // is waited for: the publisher notifies while still holding it, so the
+    // callback often arrives before the unlock. A delay, not a spin, so a
+    // one-core holder can run - and a bounded one, since the plain atomic
+    // has no priority inheritance and a middle-priority task can keep the
+    // holder off the CPU forever. A stop (end() / rate rebuild) holds the
+    // lock while waiting for this task, and clears _task_running first.
     // Nothing to record into is a caller error, not a request: it used to
     // return true without ever invoking the release callback.
     if (recdata == nullptr || array_len == 0) { return false; }
     const bool in_task = (xTaskGetCurrentTaskHandle() == _task_handle.load(std::memory_order_acquire));
+    if (in_task && _rec_info[0].length.load(std::memory_order_acquire) != 0
+                && _rec_info[1].length.load(std::memory_order_acquire) != 0)
+    { // both slots taken; only this task frees one, so waiting is pointless.
+      return false;
+    }
     for (;;)
     {
       bool zero = false;
+      uint32_t in_task_ticks = 0;
       while (!_rec_lock.compare_exchange_strong(zero, true))
       {
-        if (in_task) { return false; }
+        if (in_task && (!_task_running.load(std::memory_order_acquire) || ++in_task_ticks > in_task_lock_wait_ticks)) { return false; }
         zero = false;
         vTaskDelay(1);
+      }
+      if (in_task && !_task_running.load(std::memory_order_acquire))
+      { // a stop got the lock first and is now waiting for this task.
+        _rec_lock.store(false);
+        return false;
       }
       int result = _rec_try_locked(recdata, array_len, flg_16bit, sample_rate, flg_stereo);
       _rec_lock.store(false);
@@ -1133,6 +1149,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     slot.is_16bit = flg_16bit;
     slot.length.store(array_len, std::memory_order_release);
 
+    // Sent under _rec_lock on purpose: end() takes the same lock before it
+    // deletes the task, so the handle cannot go stale between the load and
+    // the notify.
     if (this->_task_handle)
     {
       xTaskNotifyGive(this->_task_handle);
