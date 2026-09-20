@@ -197,8 +197,17 @@ namespace m5
 
   bool M5PM1_Class::getGPIOOutputLatch(gpio_t pin)
   {
-    if (!_init || !is_valid_gpio(pin)) { return false; }
-    return readRegister8(M5PM1_REG_GPIO_OUT) & (1 << gpio_num(pin));
+    bool high;
+    return getGPIOOutputLatch(pin, &high) && high;
+  }
+
+  bool M5PM1_Class::getGPIOOutputLatch(gpio_t pin, bool* high)
+  {
+    if (!_init || !is_valid_gpio(pin) || high == nullptr) { return false; }
+    std::uint8_t v;
+    if (!readRegister(M5PM1_REG_GPIO_OUT, &v, 1)) { return false; }
+    *high = v & (1 << gpio_num(pin));
+    return true;
   }
 
   bool M5PM1_Class::setPwmFrequency(std::uint16_t frequency)

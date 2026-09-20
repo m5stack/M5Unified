@@ -951,14 +951,15 @@ namespace m5
     ~_core_s3_lock_t(void) { if (locked) { xSemaphoreGive(mutex); } }
   };
 
-  static void _core_s3_output_locked(uint8_t mask, bool enable)
+  // @return true = the requested state is on the device (every write acknowledged).
+  static bool _core_s3_output_locked(uint8_t mask, bool enable)
   {
     static constexpr const uint8_t port0_reg = 0x02;
     static constexpr const uint8_t port1_reg = 0x03;
     static constexpr const uint8_t port1_bitmask_boost = 0b10000000; // BOOST_EN
 
     uint8_t orig[2];
-    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq)) { return; }
+    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq)) { return false; }
 
     uint8_t buf[2] = { (uint8_t)(orig[0] | mask), (uint8_t)(orig[1] | port1_bitmask_boost) };
 
@@ -1001,14 +1002,14 @@ namespace m5
             m5gfx::delay(1);
           }
         };
-        if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, orig[1] & ~port1_bitmask_boost, i2c_freq)) { restore(); return; }
+        if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, orig[1] & ~port1_bitmask_boost, i2c_freq)) { restore(); return false; }
         m5gfx::delay(200);
         uint8_t cur[2];
-        if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return; }
-        if (cur[1] & port1_bitmask_boost) { return; } // BOOST_EN が立て直されている: 放電を保証できないので出力を有効のまま残す
+        if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
+        if (cur[1] & port1_bitmask_boost) { return false; } // BOOST_EN が立て直されている: 放電を保証できないので出力を有効のまま残す (要求は未達)
         cur[0] &= ~mask;
-        if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); }
-        return;
+        if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
+        return true;
       }
     }
     // 2 バイト一括書きは途中失敗で片方だけ反映され得るので 1 バイトずつ書き、先頭が失敗したら止める。
@@ -1016,21 +1017,18 @@ namespace m5
     // 「出力 EN=1 で boost 停止」(出力が死んでいるのに有効と報告される) にはならない。
     if (enable)
     {
-      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return; }
-      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return false; }
+      return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
     }
-    else
-    {
-      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return; }
-      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq);
-    }
+    if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return false; }
+    return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq);
 //      Axp2101.setReg0x20Bit0(enable);
   }
 
-  static void _core_s3_output(uint8_t mask, bool enable)
+  static bool _core_s3_output(uint8_t mask, bool enable)
   {
     _core_s3_lock_t lock;
-    if (lock.locked) { _core_s3_output_locked(mask, enable); }
+    return lock.locked && _core_s3_output_locked(mask, enable);
   }
 
   // 無バッテリーで BUS_OUT (TS で検出) に外部 5V が来ている間は、有効化すると自身の給電を断つので取り消す。
@@ -1051,8 +1049,9 @@ namespace m5
     return raw > 4000;                                        // 2.0V
   }
 
-  // @return false = cancel した
-  static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable)
+  // @return true = 要求状態へ遷移できた。false = cancel した / 排他を取れない / 後発の要求に破棄された / 書込失敗。
+  //   cancel だけは呼び出し側で警告を出すため、cancelled で区別して返す。
+  static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable, bool* cancelled)
   {
     // 判定と切替を同じ排他区間で行う (判定後に別タスクの off が割り込むと、古い判定で有効化してしまう)。
     // TS の ADC 値は実電圧に最大 0.7s ほど遅れる。自身 (または並行する別タスク) の off 直後は古い 5V を
@@ -1062,20 +1061,20 @@ namespace m5
     static uint32_t generation = 0;
     uint32_t my_generation = 0;
     uint32_t t0 = 0;
+    *cancelled = false;
     for (bool first = true; ; first = false)
     {
       {
         _core_s3_lock_t lock;
-        if (!lock.locked) { return true; }
+        if (!lock.locked) { return false; }
         if (first) { my_generation = ++generation; t0 = m5gfx::millis(); } // 待ち時間の起点は排他取得後 (mutex 待ちを含めない)
-        else if (my_generation != generation) { return true; }
+        else if (my_generation != generation) { return false; }
         if (!enable || !_core_s3_ext_output_unsafe(axp))
         {
-          _core_s3_output_locked(_core_s3_bus_en, enable);
-          return true;
+          return _core_s3_output_locked(_core_s3_bus_en, enable);
         }
       }
-      if ((m5gfx::millis() - t0) >= 1000) { return false; }
+      if ((m5gfx::millis() - t0) >= 1000) { *cancelled = true; return false; }
       m5gfx::delay(20);
     }
   }
@@ -1090,67 +1089,90 @@ namespace m5
 
 #endif
 
-  void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
+  // Accumulates the per-port results of a masked request: false until a port
+  // was selected, then the AND of every selected port.
+  struct _port_result_t
   {
+    bool any = false;
+    bool ok = true;
+    void add(bool r) { any = true; ok &= r; }
+    operator bool(void) const { return any && ok; }
+  };
+
+  bool Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
+  {
+    // Contract: true only when every selected port reached the requested state.
+    // Ports are attempted in turn without stopping at the first failure (best effort),
+    // so false says "at least one did not take effect", not which one.
+    // A mask that selects none of this model's ports is false (nothing was done).
+    bool result = false;
 #if defined (M5UNIFIED_PC_BUILD)
     (void)enable;
     (void)port_mask;
 #else
+    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (port_mask == ext_port_mask_t::ext_none) { return false; }   // nothing selected
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
       {
         auto& ioe1 = M5.getIOExpander(0);
+        _port_result_t r;
         if (port_mask & ext_port_mask_t::ext_PA)
         {
-          ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
-          ioe1.setDirection(M5IOE1_Class::gpio5, true);
-          ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+          r.add(ioe1.setHighImpedance(M5IOE1_Class::gpio5, false));
+          r.add(ioe1.setDirection(M5IOE1_Class::gpio5, true));
+          r.add(ioe1.digitalWrite(M5IOE1_Class::gpio5, enable));
         }
         if (port_mask & ext_port_mask_t::ext_USB)
         {
-          ioe1.setHighImpedance(M5IOE1_Class::gpio2, false);
-          ioe1.setDirection(M5IOE1_Class::gpio2, true);
-          ioe1.digitalWrite(M5IOE1_Class::gpio2, enable);
+          r.add(ioe1.setHighImpedance(M5IOE1_Class::gpio2, false));
+          r.add(ioe1.setDirection(M5IOE1_Class::gpio2, true));
+          r.add(ioe1.digitalWrite(M5IOE1_Class::gpio2, enable));
         }
+        result = r;
       }
       break;
 
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
-      if (port_mask & ext_port_mask_t::ext_PA)
       {
-        auto& ioe = M5.getIOExpander(0);
-        ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
-        ioe.digitalWrite(2, enable);
-      }
-      if (M5.getBoard() == board_t::board_M5Tab5X
-       && (port_mask & ext_port_mask_t::ext_EXT))
-      {
-        auto& ioe = M5.getIOExpander(0);
-        ioe.setHighImpedance(3, false);
-        ioe.setDirection(3, true);
-        ioe.digitalWrite(3, enable);
-      }
-      if (port_mask & ext_port_mask_t::ext_USB)
-      {
-        auto& ioe = M5.getIOExpander(1);
-        ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
-        ioe.digitalWrite(3, enable);
+        _port_result_t r;
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          auto& ioe = M5.getIOExpander(0);
+          r.add(ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down));
+          r.add(ioe.digitalWrite(2, enable));
+        }
+        if (M5.getBoard() == board_t::board_M5Tab5X
+         && (port_mask & ext_port_mask_t::ext_EXT))
+        {
+          auto& ioe = M5.getIOExpander(0);
+          r.add(ioe.setHighImpedance(3, false));
+          r.add(ioe.setDirection(3, true));
+          r.add(ioe.digitalWrite(3, enable));
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          auto& ioe = M5.getIOExpander(1);
+          r.add(ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down));
+          r.add(ioe.digitalWrite(3, enable));
+        }
+        result = r;
       }
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
-      M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
+      result = M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
       if (_pmic == pmic_t::pmic_m5pm1)
       {
-        M5pm1.setExtOutput(enable);
+        result = M5pm1.setExtOutput(enable);
       }
       break;
 
@@ -1158,9 +1180,9 @@ namespace m5
     case board_t::board_M5CoreMatrix:
       { /// IOE1 G5 gates the Grove port power (both the 3.3V rail and the 5V boost)
         auto& ioe1 = M5.getIOExpander(0);
-        ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
-        ioe1.setDirection(M5IOE1_Class::gpio5, true);
-        ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+        result = ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+        result &= ioe1.setDirection(M5IOE1_Class::gpio5, true);
+        result &= ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
       }
       break;
 
@@ -1171,7 +1193,9 @@ namespace m5
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
       {
-        if (!_core_s3_set_ext_output(Axp2101, enable))
+        bool cancelled;
+        result = _core_s3_set_ext_output(Axp2101, enable, &cancelled);
+        if (cancelled)
         {
           ESP_LOGW("Power","setExtPower(true) is canceled.");
         }
@@ -1183,105 +1207,157 @@ namespace m5
     case board_t::board_M5PaperColor:
       if (_pmic == pmic_t::pmic_m5pm1)
       {
-        M5pm1.setExtOutput(enable);
+        result = M5pm1.setExtOutput(enable);
       }
       break;
 
     case board_t::board_M5ChainCaptain:
     {
+      _port_result_t r;
       if (port_mask & ext_port_mask_t::ext_PA)
       {
-        M5pm1.setGPIOOutput(M5PM1_Class::gpio0, enable);
+        r.add(M5pm1.setGPIOOutput(M5PM1_Class::gpio0, enable));
       }
       if (port_mask & (ext_port_mask_t::ext_PB1 | ext_port_mask_t::ext_PB2))
       {
-        M5pm1.setGPIOOutput(M5PM1_Class::gpio3, enable);
+        r.add(M5pm1.setGPIOOutput(M5PM1_Class::gpio3, enable));
       }
-      const bool boost_enabled = M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0)
-                              || M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3);
-      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio4, boost_enabled);
+      if (r.any)
+      { /// the boost follows the latched port states, so it is only touched when a port was selected.
+        /// If a latch cannot be read the boost is left as it is (false): switching it on a guess
+        /// could cut a port that is still enabled.
+        bool pa, pb;
+        if (M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0, &pa) && M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3, &pb))
+        {
+          r.add(M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio4, pa || pb));
+        }
+        else { r.add(false); }
+      }
+      result = r;
       break;
     }
     case board_t::board_M5StampS3Bat:
       // Use G1 Control 5V output
-      M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable);
+      result = M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable);
       break;
 
     case board_t::board_M5PowerHub:
-      if (port_mask & ext_port_mask_t::ext_USB)
       {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x01, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PA)
-      {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x02, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PC1)
-      {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x03, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PWR485 || port_mask & ext_port_mask_t::ext_PWRCAN) {
-          M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x04, enable, i2c_freq);
+        _port_result_t r;
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x01, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x02, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PC1)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x03, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PWR485 || port_mask & ext_port_mask_t::ext_PWRCAN) {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x04, enable, i2c_freq));
+        }
+        result = r;
       }
       break;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       if (enable) { m5gfx::gpio_hi(M5Paper_EXT5V_ENABLE_PIN); }
       else        { m5gfx::gpio_lo(M5Paper_EXT5V_ENABLE_PIN); }
+      result = true;
       break;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
       {
+        // The protection check reads the PMIC; a failed read is treated as
+        // "cannot tell" and the enable request is refused without writing
+        // (a folded-to-zero reading would pass the check on the unsafe side).
         bool cancel = false;
+        bool ok = true;
         if (_pmic == pmic_axp2101) {
-          cancel = (enable && (Ina3221[0].getShuntVoltage(0) < 0.0f || Ina3221[0].getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
+          if (enable) {
+            // Without an INA3221 the previous behaviour is kept: omit the
+            // current-direction check. A detected device must remain readable.
+            // The battery level is read only once a negative current is seen.
+            if (Ina3221[0].isEnabled()) {
+              int32_t sh0 = 0, sh1 = 0;
+              if (!Ina3221[0].getShuntMilliVoltage(0, &sh0) || !Ina3221[0].getShuntMilliVoltage(1, &sh1)) {
+                ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+                break;
+              }
+              if (sh0 < 0 || sh1 < 0) {
+                uint8_t level;
+                if (!Axp2101.readRegister(0xA4, &level, 1)) {   // same reading as getBatteryLevel()
+                  ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+                  break;
+                }
+                cancel = (8 >= (int8_t)level);
+              }
+            }
+          }
           if (!cancel) {
-            Axp2101.setBLDO2(enable * 3300);
+            result = Axp2101.setBLDO2(enable * 3300);
             break;
           }
         } else {
           // If ACIN is false and VBUS current is detected and the battery is low, power supply from Core to the outside is inhibited.
           // This is because supplying power externally consumes battery power when there is no power supply from ACIN and power is supplied from VBUS.
           // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
-          cancel = (enable && !Axp192.isACIN() && (0.0f < Axp192.getVBUSCurrent()) && (8 >= Axp192.getBatteryLevel()));
-          if (!cancel) {
-            Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+          if (enable) {
+            uint8_t r00, vbus[2]; int8_t level;
+            if (!Axp192.readRegister(0x00, &r00, 1) || !Axp192.readRegister(0x5C, vbus, 2) || !Axp192.getBatteryLevel(&level)) {
+              ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+              break;
+            }
+            cancel = !(r00 & 0x80) && (((vbus[0] << 4) | vbus[1]) > 0) && (8 >= level);
           }
+          // GPIO0 : enable=LDO / disable=float. On failure EXTEN below is still written (best effort).
+          if (!cancel) { ok = Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); }
         }
         if (cancel)
         {
           ESP_LOGW("Power","setExtPower(true) is canceled.");
           break;
         }
+        result = Axp192.setEXTEN(enable) && ok;
       }
-      NON_BREAK;
+      break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      Axp192.setEXTEN(enable);
+      result = Axp192.setEXTEN(enable);
       break;
 
     case board_t::board_M5Station:
-      for (int i = 0; i < 5; ++i)
       {
-        if (port_mask & (1 << i)) { Axp192.setGPIO(i, enable); }
+        _port_result_t r;
+        for (int i = 0; i < 5; ++i)
+        {
+          if (port_mask & (1 << i)) { r.add(Axp192.setGPIO(i, enable)); }
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
+          else        { m5gfx::gpio_lo(GPIO_NUM_12); }
+          r.add(true);
+        }
+        if (port_mask & ext_port_mask_t::ext_MAIN)
+        {
+          r.add(Axp192.setEXTEN(enable));
+        }
+        result = r;
       }
-      if (port_mask & ext_port_mask_t::ext_USB)
-      {
-        if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
-        else        { m5gfx::gpio_lo(GPIO_NUM_12); }
-      }
-      if (port_mask & ext_port_mask_t::ext_MAIN)
-      {
-        Axp192.setEXTEN(enable);
-      }
+      break;
 #endif
 
     default:
       break;
     }
 #endif
+    return result;
   }
 
   bool Power_Class::getExtOutput(void)
@@ -1374,27 +1450,26 @@ namespace m5
     return false;
   }
 
-  void Power_Class::setUsbOutput(bool enable)
+  bool Power_Class::setUsbOutput(bool enable)
   {
     (void)enable;
+    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
-      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
-      break;
+      return M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
-      _core_s3_output(_core_s3_usb_en, enable);
-      break;
+      return _core_s3_output(_core_s3_usb_en, enable);
 
 #endif
     default:
-      break;
+      return false;
     }
   }
 
@@ -3738,8 +3813,10 @@ namespace m5
     }
   }
 
-  void Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
+  bool Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
   {
+    (void)config;
+    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
     switch (M5.getBoard()) {
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub: {
@@ -3749,51 +3826,122 @@ namespace m5
         buf[2] = config.currentLimit & 0xFF;
         buf[3] = config.enable;
         buf[4] = config.direction;
-        M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x20, buf, sizeof(buf), i2c_freq);
-      } break;
+        return M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x20, buf, sizeof(buf), i2c_freq);
+      }
     #endif
       default:
-        break;
+        return false;
     }
   }
 
 
-  void Power_Class::setVibration(uint8_t level)
+  bool Power_Class::setVibration(uint8_t level)
   {
+    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
 #if !defined (M5UNIFIED_PC_BUILD) && defined (CONFIG_IDF_TARGET_ESP32S3)
     if (M5.getBoard() == board_t::board_M5StopWatch)
     {
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
       auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
       if (level == 0) {
-        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
-      } else {
-        // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
-        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
-        ioe1.setDirection(M5IOE1_Class::gpio9, true);
-        uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
-        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
+        return ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
       }
-      return;
+      // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
+      if (!ioe1.setHighImpedance(M5IOE1_Class::gpio9, false)) { return false; }
+      if (!ioe1.setDirection(M5IOE1_Class::gpio9, true)) { return false; }
+      uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
+      return ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
     }
 #endif
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (M5.getBoard() == board_t::board_M5StackCore2)
     {
+      // A non-zero level is clamped up to the lowest voltage the rail can
+      // produce, so that every non-zero request drives the motor rather than
+      // silently mapping to "rail off" (AXP192 LDO3 starts at 1800 mV,
+      // AXP2101 DLDO1 at 500 mV).
       uint32_t mv = level ? 480 + level * 12 : 0;
       switch (_pmic)
       {
         case pmic_t::pmic_axp192:
-          Axp192.setLDO3(mv);
-          break;
+          if (mv && mv < 1800) { mv = 1800; }
+          return Axp192.setLDO3(mv);
 
         case pmic_t::pmic_axp2101:
-          Axp2101.setDLDO1(mv);
-          break;
+          if (mv && mv < 500) { mv = 500; }
+          return Axp2101.setDLDO1(mv);
 
         default:
           break;
       }
+    }
+#endif
+    (void)level;
+    return false;
+  }
+
+  std::uint8_t Power_Class::getPowerOutputCaps(void)
+  {
+#if defined (M5UNIFIED_PC_BUILD)
+    return 0;   // the setters are stubs on the PC build
+#else
+    if (!_initialized) { return 0; }
+    switch (M5.getBoard())
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return cap_set_ext_output | cap_set_usb_output;
+
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      return cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      return cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return (_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackChan:
+      return cap_set_ext_output | cap_set_usb_output;
+
+    case board_t::board_M5StopWatch:
+      return ((_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0) | cap_set_vibration;
+
+    case board_t::board_M5StickS3:
+    case board_t::board_M5PaperColor:
+      return (_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0;
+
+    case board_t::board_M5ChainCaptain:
+    case board_t::board_M5StampS3Bat:
+      return cap_set_ext_output;
+
+    case board_t::board_M5PowerHub:
+      return cap_set_ext_output | cap_set_ext_port_bus;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case board_t::board_M5StackCore2:
+      return cap_set_ext_output | cap_set_vibration;
+
+    case board_t::board_M5Paper:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+    case board_t::board_M5Station:
+      return cap_set_ext_output;
+#endif
+
+    default:
+      return 0;
     }
 #endif
   }

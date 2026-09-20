@@ -36,6 +36,9 @@ namespace m5
     /// @return voltage [mV]
     float getBusVoltage(uint8_t channel);
     float getShuntVoltage(uint8_t channel);
+    /// @return false on I2C failure, a null pointer, or an invalid channel (value is left untouched).
+    /// @note The unit follows getShuntMilliVoltage(uint8_t): raw register * 5.
+    bool getShuntMilliVoltage(uint8_t channel, int32_t* value);
     float getCurrent(uint8_t channel);
 
     int_fast16_t getBusMilliVoltage(uint8_t channel);
