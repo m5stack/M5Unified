@@ -565,7 +565,7 @@ namespace m5
     int32_t* sound_buf32 = (int32_t*)alloca(dma_buf_len * sizeof(int32_t));
 
 
-    while (self->_task_running)
+    while (self->_task_running.load(std::memory_order_acquire))
     {
       if (flg_nodata)
       {
@@ -1033,6 +1033,16 @@ label_continue_sample:
   {
     if (_begun.load(std::memory_order_acquire)) { return true; }
 
+    _lock_req();
+    bool res = _begin_raw();
+    _req_lock.store(false);
+    return res;
+  }
+
+  bool Speaker_Class::_begin_raw(void)
+  {
+    if (_begun.load(std::memory_order_acquire)) { return true; }
+
     // Playback calls begin() lazily from whichever task gets there first,
     // and _setup_i2s starts by uninstalling the port: two of these racing
     // rip the live channel out from under the playback task. One caller
@@ -1059,9 +1069,10 @@ label_continue_sample:
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      _task_running = true;
+      _task_running.store(true, std::memory_order_release);
 #if defined (SDL_h_)
       auto handle = SDL_CreateThread(reinterpret_cast<SDL_ThreadFunction>(spk_task), "spk_task", this);
+      _task_thread_id.store(handle ? SDL_GetThreadID(handle) : 0, std::memory_order_release);
       _task_handle.store(handle, std::memory_order_release);
       res = (handle != nullptr);
 #else
@@ -1094,9 +1105,9 @@ label_continue_sample:
 
   void Speaker_Class::end(void)
   {
-    // Serialized with begin() by the same lock: a teardown must not slip in
-    // between the task being created and its handle being published, or it
-    // would miss the task and the stale handle would be published afterwards.
+    // _req_lock keeps a publish/notify from another task (and a lazy begin)
+    // out of the teardown; _begin_lock then orders it with begin().
+    _lock_req();
     bool zero = false;
     while (!_begin_lock.compare_exchange_strong(zero, true))
     {
@@ -1109,24 +1120,26 @@ label_continue_sample:
     }
     _end_locked();
     _begin_lock.store(false);
+    _req_lock.store(false);
   }
 
   void Speaker_Class::_end_locked(void)
   {
     _begun.store(false, std::memory_order_release);
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
-    if (_task_running)
+    if (_task_running.load(std::memory_order_acquire))
     {
       // No stop() here: it would publish markers and notify a task that may
       // already be tearing its handle down. The slots are reset below once
       // the task is gone, which is all the stop would have achieved.
-      _task_running = false;
+      _task_running.store(false, std::memory_order_release);
       auto handle = _task_handle.load(std::memory_order_acquire);
       if (handle)
       {
 #if defined (SDL_h_)
         SDL_WaitThread(handle, nullptr);
         _task_handle.store(nullptr, std::memory_order_release);
+        _task_thread_id.store(0, std::memory_order_release);
 #else
         xTaskNotifyGive(handle);
         do { vTaskDelay(1); } while (_task_handle.load(std::memory_order_acquire));
@@ -1184,6 +1197,29 @@ label_continue_sample:
 
   bool Speaker_Class::_set_next_wav(size_t ch, const wav_info_t& wav)
   {
+    if (_in_task()) { return _set_next_wav_locked(ch, wav) > 0; }
+    for (;;)
+    {
+      _lock_req();
+      int result = (_begun.load(std::memory_order_acquire)
+                 && _task_handle.load(std::memory_order_acquire))
+                 ? _set_next_wav_locked(ch, wav) : 0;
+      _req_lock.store(false);
+      if (result >= 0) { return result; }
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
+      xSemaphoreTake(_task_semaphore, 1);
+#endif
+    }
+  }
+
+  /// One claim attempt: 1 = published, 0 = refused (never behind an endless
+  /// request), -1 = no free slot right now; the caller waits outside the
+  /// lock and retries. A lost claim is retried here: whoever changed the
+  /// slot made progress, so it cannot spin for long.
+  int Speaker_Class::_set_next_wav_locked(size_t ch, const wav_info_t& wav)
+  {
     auto chinfo = &_ch_info[ch];
     uint8_t chmask = 1 << ch;
     const uint8_t claimed = wav_phase_writing | ((wav.repeat == 0) ? wav_state_stop_marker : 0);
@@ -1218,26 +1254,30 @@ label_continue_sample:
 #if !defined (SDL_h_)
           xTaskNotifyGive(_task_handle.load(std::memory_order_acquire));
 #endif
-          return true;
+          return 1;
         }
-        continue; // lost the claim to whoever changed the state; they made
-                  // progress, so trying again right away cannot spin for long.
+        continue;
       }
       if (!wav.stop_current
        && ((chinfo->wavinfo[!f].state.load(std::memory_order_relaxed)
             & (wav_phase_mask | wav_state_infinite)) == (wav_phase_playing | wav_state_infinite)))
       { // never a turn behind an endless request.
-        return false;
+        return 0;
       }
-      if (_in_task())
-      { // called from the release callback: only the task frees slots, so
-        // waiting here would be waiting on ourselves.
-        return false;
-      }
-#if !defined (SDL_h_)
-      xSemaphoreTake(_task_semaphore, 1);
-#else
+      return -1;
+    }
+  }
+
+  void Speaker_Class::_lock_req(void)
+  {
+    bool zero = false;
+    while (!_req_lock.compare_exchange_strong(zero, true))
+    {
+      zero = false;
+#if defined (SDL_h_)
       SDL_Delay(1);
+#else
+      vTaskDelay(1);
 #endif
     }
   }
@@ -1246,10 +1286,11 @@ label_continue_sample:
   // callback), where nothing may be waited for and no lifecycle started.
   bool Speaker_Class::_in_task(void) const
   {
-    auto handle = _task_handle.load(std::memory_order_acquire);
 #if defined (SDL_h_)
-    return handle && SDL_ThreadID() == SDL_GetThreadID(handle);
+    auto id = _task_thread_id.load(std::memory_order_acquire);
+    return id && SDL_ThreadID() == id;
 #else
+    auto handle = _task_handle.load(std::memory_order_acquire);
     return handle && xTaskGetCurrentTaskHandle() == handle;
 #endif
   }
@@ -1259,23 +1300,11 @@ label_continue_sample:
     // Only a queued request produces a release callback, so the answer is
     // false whenever nothing was queued (this used to say true for a speaker
     // that could not start and for an empty request).
-    if (_in_task())
+    const bool in_task = _in_task();
+    if (in_task)
     { // from the release callback: an end() may be tearing the task down,
       // and begin() from here would rebuild it underneath. Never start.
       if (!_begun.load(std::memory_order_acquire)) { return false; }
-    }
-    else if (!begin()) { return false; }
-    if (_task_handle.load(std::memory_order_acquire) == nullptr) { return false; }
-    if (array_len == 0 || data == nullptr) { return false; }
-    size_t ch = (size_t)channel;
-    if (ch >= sound_channel_max)
-    {
-      size_t bits = _play_channel_bits.load();
-      for (ch = sound_channel_max - 1; ch < sound_channel_max; --ch)
-      {
-        if (0 == ((bits >> ch) & 1)) { break; }
-      }
-      if (ch >= sound_channel_max) { return false; }
     }
     wav_info_t info;
     info.data = data;
@@ -1288,7 +1317,36 @@ label_continue_sample:
     info.stop_current = stop_current_sound;
     info.no_clear_index = no_clear_index;
 
-    return _set_next_wav(ch, info);
+    for (;;)
+    {
+      if (!in_task) { _lock_req(); }
+      bool ready = in_task ? _begun.load(std::memory_order_acquire) : _begin_raw();
+      int result = 0;
+      if (ready && _task_handle.load(std::memory_order_acquire))
+      {
+        if (array_len != 0 && data != nullptr)
+        {
+          size_t ch = (size_t)channel;
+          if (ch >= sound_channel_max)
+          {
+            size_t bits = _play_channel_bits.load();
+            for (ch = sound_channel_max - 1; ch < sound_channel_max; --ch)
+            {
+              if (0 == ((bits >> ch) & 1)) { break; }
+            }
+          }
+          if (ch < sound_channel_max) { result = _set_next_wav_locked(ch, info); }
+        }
+      }
+      if (!in_task) { _req_lock.store(false); }
+      if (result >= 0) { return result; }
+      if (in_task) { return false; }
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
+      xSemaphoreTake(_task_semaphore, 1);
+#endif
+    }
   }
 
   bool Speaker_Class::playWav(const uint8_t* wav_data, size_t data_len, uint32_t repeat, int channel, bool stop_current_sound)
