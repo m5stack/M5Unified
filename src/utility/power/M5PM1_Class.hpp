@@ -128,6 +128,8 @@ namespace m5
 
     /// get PM1 GPIO output latch level, not the physical input level.
     bool getGPIOOutputLatch(gpio_t pin);
+    /// @return false before begin(), on I2C failure, or for an invalid pin (high is left untouched).
+    bool getGPIOOutputLatch(gpio_t pin, bool* high);
 
     /// set the PWM frequency in Hz.
     /// @note The frequency is shared by both PWM channels, so changing it also

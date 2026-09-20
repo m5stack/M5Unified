@@ -123,14 +123,14 @@ namespace m5
     bool readPmuStatus2(std::uint8_t* value);
 
 
-    inline void setALDO1(int voltage) { _set_LDO(0, voltage); }
-    inline void setALDO2(int voltage) { _set_LDO(1, voltage); }
-    inline void setALDO3(int voltage) { _set_LDO(2, voltage); }
-    inline void setALDO4(int voltage) { _set_LDO(3, voltage); }
-    inline void setBLDO1(int voltage) { _set_LDO(4, voltage); }
-    inline void setBLDO2(int voltage) { _set_LDO(5, voltage); }
-    inline void setDLDO1(int voltage) { _set_DLDO(0, voltage); }
-    inline void setDLDO2(int voltage) { _set_DLDO(1, voltage); }
+    inline bool setALDO1(int voltage) { return _set_LDO(0, voltage); }
+    inline bool setALDO2(int voltage) { return _set_LDO(1, voltage); }
+    inline bool setALDO3(int voltage) { return _set_LDO(2, voltage); }
+    inline bool setALDO4(int voltage) { return _set_LDO(3, voltage); }
+    inline bool setBLDO1(int voltage) { return _set_LDO(4, voltage); }
+    inline bool setBLDO2(int voltage) { return _set_LDO(5, voltage); }
+    inline bool setDLDO1(int voltage) { return _set_DLDO(0, voltage); }
+    inline bool setDLDO2(int voltage) { return _set_DLDO(1, voltage); }
 
     inline bool getALDO1Enabled(void) { return _get_LDOEn(0); }
     inline bool getALDO2Enabled(void) { return _get_LDOEn(1); }
@@ -220,8 +220,8 @@ namespace m5
     std::size_t readRegister14(std::uint8_t addr);
     std::size_t readRegister16(std::uint8_t addr);
 
-    void _set_LDO(std::uint8_t num, int voltage);
-    void _set_DLDO(std::uint8_t num, int voltage);
+    bool _set_LDO(std::uint8_t num, int voltage);
+    bool _set_DLDO(std::uint8_t num, int voltage);
     bool _get_LDOEn(std::uint8_t num);
 
     bool setIRQEnRegister(std::uint64_t registerEn, bool enable);

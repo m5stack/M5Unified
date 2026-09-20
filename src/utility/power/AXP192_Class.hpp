@@ -21,8 +21,13 @@ namespace m5
     bool begin(void);
 
     /// Get the remaining battery power.
-    /// @return 0-100 level
+    /// @return 0-100 level. -1 on I2C failure, but the value can also go slightly
+    /// negative while a nearly empty battery is being charged, so -1 is ambiguous:
+    /// use getBatteryLevel(int8_t*) where the difference matters.
     std::int8_t getBatteryLevel(void);
+    /// @return false on I2C failure or a null pointer (level is left untouched).
+    /// The level may be slightly negative while a nearly empty battery is being charged.
+    bool getBatteryLevel(std::int8_t* level);
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable
@@ -65,29 +70,30 @@ namespace m5
 
     /// set LDOio0 voltage
     /// @param voltage milli volt. (0 - 3300).
-    inline void setLDO0(int voltage) { _set_LDO(0, voltage); }
+    inline bool setLDO0(int voltage) { return _set_LDO(0, voltage); }
 
     /// set LDO2 voltage
     /// @param voltage milli volt. (0 - 3300).
-    inline void setLDO2(int voltage) { _set_LDO(2, voltage); }
+    inline bool setLDO2(int voltage) { return _set_LDO(2, voltage); }
 
     /// set LDO3 voltage
     /// @param voltage milli volt. (0 - 3300).
-    inline void setLDO3(int voltage) { _set_LDO(3, voltage); }
+    inline bool setLDO3(int voltage) { return _set_LDO(3, voltage); }
 
-    inline void setGPIO(uint8_t gpio_num, bool state) { if (gpio_num < 3) { _set_GPIO0_2(gpio_num, state); } else { _set_GPIO3_4(gpio_num - 3, state); } }
-    inline void setGPIO0(bool state) { _set_GPIO0_2(0, state); }
-    inline void setGPIO1(bool state) { _set_GPIO0_2(1, state); }
-    inline void setGPIO2(bool state) { _set_GPIO0_2(2, state); }
-    inline void setGPIO3(bool state) { _set_GPIO3_4(0, state); }
-    inline void setGPIO4(bool state) { _set_GPIO3_4(1, state); }
+    inline bool setGPIO(uint8_t gpio_num, bool state) { return (gpio_num < 3) ? _set_GPIO0_2(gpio_num, state) : _set_GPIO3_4(gpio_num - 3, state); }
+    inline bool setGPIO0(bool state) { return _set_GPIO0_2(0, state); }
+    inline bool setGPIO1(bool state) { return _set_GPIO0_2(1, state); }
+    inline bool setGPIO2(bool state) { return _set_GPIO0_2(2, state); }
+    inline bool setGPIO3(bool state) { return _set_GPIO3_4(0, state); }
+    inline bool setGPIO4(bool state) { return _set_GPIO3_4(1, state); }
 
     void powerOff(void);
 
     void setAdcState(bool enable);
     void setAdcRate( std::uint8_t rate );
 
-    void setEXTEN(bool enable);
+    /// @return false on I2C failure.
+    bool setEXTEN(bool enable);
     void setBACKUP(bool enable);
 
     bool isACIN(void);
@@ -119,10 +125,10 @@ namespace m5
     std::size_t readRegister32(std::uint8_t addr);
 
     void _set_DCDC(std::uint8_t num, int voltage);
-    void _set_LDO(std::uint8_t num, int voltage);
+    bool _set_LDO(std::uint8_t num, int voltage);
     void _set_LDO2_LDO3(std::uint8_t num, int voltage);
-    void _set_GPIO0_2(std::uint8_t num, bool state);
-    void _set_GPIO3_4(std::uint8_t num, bool state);
+    bool _set_GPIO0_2(std::uint8_t num, bool state);
+    bool _set_GPIO3_4(std::uint8_t num, bool state);
   };
 }
 

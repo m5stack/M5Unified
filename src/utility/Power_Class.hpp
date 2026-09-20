@@ -205,17 +205,44 @@ namespace m5
     , cap_set_charge_voltage = 1u << 2
     };
 
+    /// The power output paths a model provides. (see getPowerOutputCaps)
+    /// @note This mask is deliberately separate from ext_port_mask_t, so that a
+    /// port bit never gets tied to a capability bit.
+    enum power_output_capability_t : std::uint8_t
+    { cap_set_ext_output      = 1u << 0
+    , cap_set_usb_output      = 1u << 1
+    , cap_set_ext_port_bus    = 1u << 2
+    , cap_set_vibration       = 1u << 3
+    };
+
     bool begin(void);
 
     /// Set power output of the external ports.
     /// @param enable true=output / false=input
-    /// @param port_mask for M5Station. ext_port (bitmask).
+    /// @param port_mask for M5Station / M5PowerHub / Tab5 family / CoreP4X / ChainCaptain. ext_port (bitmask).
+    /// @return true if the requested state was reached on every selected port.
+    /// @note A successful return means the writes were accepted; state is not read back
+    ///       (except when disabling the CoreS3 family output).
+    /// @note false means a model without the path (see getPowerOutputCaps()),
+    ///       an I2C failure, or a protection check that cancelled the request
+    ///       (Core2 / Tough on a low battery, the CoreS3 family without a battery).
+    ///       Core2 / Tough with AXP2101: when the INA3221 did not respond at begin(),
+    ///       the current-direction part of that check is skipped.
+    ///       On the CoreS3 family it is also false when the request could not take the
+    ///       AW9523 lock or was superseded by a later request while it waited.
+    ///       Every selected port is still attempted; false says at least one
+    ///       did not take effect, not which one.
+    /// @note port_mask is honoured only on models with individually switched ports
+    ///       (M5Station, PowerHub, Tab5 family, CoreP4X, ChainCaptain); there a mask
+    ///       that selects none of the model's ports returns false without touching
+    ///       anything. Models with a single output ignore the mask, except that
+    ///       ext_none returns false on every model.
     /// @note On the CoreS3 family (CoreS3 / CoreS3 SE / StackChan), disabling an enabled output blocks for
     ///       about 200 ms (the boost converter is stopped first and the bus is left to discharge before the
     ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
     ///       waits for the TS reading to settle. The switch-over is serialized with setUsbOutput and the
     ///       internal speaker enable, so those may wait for it as well.
-    void setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
+    bool setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
 
     /// deprecated : Change to "setExtOutput"
     [[deprecated("Change to setExtOutput")]]
@@ -227,9 +254,12 @@ namespace m5
 
     /// Set power output of the main USB port.
     /// @param enable true=output / false=input
+    /// @return true if the requested state was reached.
+    /// @note false means a model without the path (see getPowerOutputCaps()), an I2C failure,
+    ///       or, on the CoreS3 family, failure to acquire the AW9523 lock.
     /// @attention for M5Stack CoreS3 main USB port.
     /// @attention ※ Not for M5Station/M5Tab external USB.
-    void setUsbOutput(bool enable);
+    bool setUsbOutput(bool enable);
 
     /// Get power output of the main USB port.
     /// @return true=output enabled / false=output disabled
@@ -439,12 +469,24 @@ namespace m5
 
     /// Set the configuration of the external port bus.
     /// @param config Configuration of the external port bus.
+    /// @return true if the configuration was written.
+    /// @note false means a model without the path (see getPowerOutputCaps()) or an I2C failure.
     /// @attention for M5PowerHub.
-    void setExtPortBusConfig(const ext_port_bus_t& config);
+    bool setExtPortBusConfig(const ext_port_bus_t& config);
 
     /// Operate the vibration motor
     /// @param level Vibration strength of the motor. (0=stop)
-    void setVibration(uint8_t level);
+    /// @return true if the requested level was applied.
+    /// @note false means a model without a motor (see getPowerOutputCaps()) or an I2C failure.
+    /// @note A nonzero level is clamped to the rail minimum: 1800 mV on AXP192
+    ///       LDO3 and 500 mV on AXP2101 DLDO1.
+    bool setVibration(uint8_t level);
+
+    /// Get which power output paths this model provides.
+    /// @return bitmask of power_output_capability_t. 0 = no output path, or M5.begin() has not completed yet.
+    /// @note A set bit says the path exists, not that a call on it will succeed:
+    ///       the setters still return false on an I2C failure or a cancelled request.
+    std::uint8_t getPowerOutputCaps(void);
 
     pmic_t getType(void) const { return _pmic; }
 

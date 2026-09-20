@@ -50,6 +50,15 @@ namespace m5
     return res;
   }
 
+  bool INA3221_Class::getShuntMilliVoltage(uint8_t channel, int32_t* value)
+  {
+    if (channel >= INA3221_CH_NUM_MAX || value == nullptr) { return false; }
+    std::uint8_t buf[2];
+    if (!readRegister(INA3221_CH1_SHUNT_V + (channel * 2), buf, 2)) { return false; }
+    *value = (int32_t)(int16_t)((buf[0] << 8) | buf[1]) * 5;
+    return true;
+  }
+
   float INA3221_Class::getBusVoltage(uint8_t channel)
   {
     return getBusMilliVoltage(channel) / 1000.0f;
