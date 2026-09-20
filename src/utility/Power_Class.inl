@@ -902,6 +902,10 @@ namespace m5
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // Re-arm the DCDC1/DCDC3 under-voltage power-off that setExtOutput(false)
+      // suspends; an ESP32 brownout reset during that call skips the restore.
+      // Forced like the table above: these bits are the chip default.
+      Axp2101.bitOn(0x23, 0x05);
 
       // for Core2 v1.1 (AXP2101+INA3221)
       if (Ina3221[0].begin())
@@ -1299,7 +1303,42 @@ namespace m5
             }
           }
           if (!cancel) {
-            result = Axp2101.setBLDO2(enable * 3300);
+            if (enable) {
+              result = Axp2101.setBLDO2(3300);
+              break;
+            }
+            // Core2 v1.1: BLDO2 drives both the boost enable and the /EN of the
+            // switch that ties USB VBUS to the 5V bus. While BLDO2 falls the switch
+            // closes before the boost stops, and the boost output feeds back into
+            // VBUS -> PMIC -> boost. With no battery this sags VSYS and the AXP2101
+            // powers off on DCDC under-voltage (latched until the power key).
+            // Suspending that power-off for the transition turns it into an ESP32
+            // brownout reset instead; begin() re-arms it after such a reset.
+            // (A Tough with the AXP2101 shares this path; the suspend is harmless there.)
+            uint8_t r90, r23 = 0;
+            if (!Axp2101.readRegister(0x90, &r90, 1)) { r90 = 0xFF; }   // unreadable: assume a transition
+            bool transition = (r90 & (1 << 5)) != 0;
+            bool suspended = false;
+            if (transition) {
+              // Fail closed: when the power-off cannot be suspended the output is left as is.
+              if (!Axp2101.readRegister(0x23, &r23, 1)) {
+                ESP_LOGW("Power", "setExtOutput(false): protection register unreadable, refused.");
+                break;
+              }
+              suspended = (r23 & 0x05) != 0;
+              if (suspended && !Axp2101.writeRegister8(0x23, r23 & ~0x05)) {
+                ESP_LOGW("Power", "setExtOutput(false): could not suspend the DCDC UVP power-off, refused.");
+                break;
+              }
+            }
+            result = Axp2101.setBLDO2(0);
+            if (suspended) {
+              m5gfx::delay(20);   // the transition completes within 10 ms (measured)
+              if (!Axp2101.writeRegister8(0x23, r23)) {
+                ESP_LOGW("Power", "setExtOutput(false): DCDC UVP power-off not re-armed.");
+                result = false;
+              }
+            }
             break;
           }
         } else {
