@@ -96,6 +96,15 @@ namespace m5
     ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
     ///       waits for the TS reading to settle. The switch-over is serialized with setUsbOutput and the
     ///       internal speaker enable, so those may wait for it as well.
+    /// @note Core2 v1.1 (AXP2101; a Tough with the AXP2101 takes the same path): disabling
+    ///       the output while powered from USB with no battery makes the ESP32 brownout and
+    ///       reset (the board's VBUS-to-bus switch closes before the boost stops and the
+    ///       transient pulls VSYS down). The PMIC stays on and the board reboots with the
+    ///       output enabled again, so a sketch that unconditionally disables it at startup
+    ///       will reboot in a loop on such a unit. With a battery, or with 5 V supplied on
+    ///       the bus, the transition itself does not disturb the board. Disabling an enabled
+    ///       output blocks for about 20 ms while the PMIC's DCDC under-voltage power-off is
+    ///       suspended; the output is left untouched when that protection cannot be suspended.
     void setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
 
     /// deprecated : Change to "setExtOutput"
