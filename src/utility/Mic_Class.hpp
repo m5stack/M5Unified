@@ -134,15 +134,21 @@ namespace m5
     /// @param func (args, data, length): data is the pointer given to record(),
     ///             length its array_len.
     /// @attention Called from the capture task, not an ISR: keep it short,
-    ///            never block in it, never call begin()/end() from it.
+    ///            never block in it (the record() exception is below), never
+    ///            call begin()/end() from it.
     /// @attention Requests dropped by end() do not call back. Delivery follows
     ///            the slot release, so it can arrive after isRecording() has
     ///            already dropped: track buffers by pointer, not by counting.
     /// @attention record() may be called from within at the current sample
-    ///            rate: it never waits there and returns false if the queue is
-    ///            full or a begin()/end() is in progress. A different rate is
-    ///            refused there (it would rebuild the calling task) and leaves
-    ///            the current rate untouched.
+    ///            rate. It never waits for a slot there: false at once when
+    ///            both slots are taken. It does wait, up to a few ticks, for
+    ///            another task holding the request lock (normally a record()
+    ///            that is publishing) to release it, and gives up
+    ///            with false past that or when an end() or rate change is
+    ///            stopping the task (whether the request would have fit is
+    ///            unknown then). A different rate is refused there (it would
+    ///            rebuild the calling task) and leaves the current rate
+    ///            untouched.
     /// @attention Set or clear it only before the first record() or after
     ///            end() has returned - not merely while isRecording() is 0:
     ///            the task may still be about to call the previous function,
@@ -155,36 +161,40 @@ namespace m5
     void setSampleRate(uint32_t sample_rate) { _cfg.sample_rate = sample_rate; }
 
     /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// A completed request has exactly array_len elements written, never
+    /// more. A stereo buffer holds L/R pairs; with an odd array_len the last
+    /// element receives the left sample only. Requests that are already
+    /// queued when the previous one completes are continuous whatever their
+    /// length (a capture step that straddles two buffers is carried over).
+    /// @param rec_data Recording destination array. nullptr returns false.
+    /// @param array_len Number of data array elements. 0 returns false
+    ///                  (nothing is queued and the release callback is not called).
     /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
     /// @param stereo true=data is stereo / false=data is monaural.
+    /// @return false when the arguments are invalid, the mic cannot start, or
+    ///         (from the release callback only) no request slot is free, the
+    ///         task is being stopped, another caller kept the request lock
+    ///         for too long, or the sample rate differs from the current one.
     bool record(uint8_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
       return sample_rate != 0 && _rec_raw(rec_data, array_len, false, sample_rate, stereo);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
-    /// @param sample_rate the sampling rate (Hz). 0 is invalid and returns false.
-    /// @param stereo true=data is stereo / false=data is monaural.
+    /// record raw sound wave data. See the uint8_t overload for the contract.
     bool record(int16_t* rec_data, size_t array_len, uint32_t sample_rate, bool stereo = false)
     {
       return sample_rate != 0 && _rec_raw(rec_data, array_len,  true, sample_rate, stereo);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// record raw sound wave data at the current sample rate (monaural).
+    /// See the 4-argument overload for the contract.
     bool record(uint8_t* rec_data, size_t array_len)
     { // sample_rate 0 == keep the current rate; resolved under the lock.
       return _rec_raw(rec_data, array_len, false, 0, false);
     }
 
-    /// record raw sound wave data.
-    /// @param rec_data Recording destination array.
-    /// @param array_len Number of data array elements.
+    /// record raw sound wave data at the current sample rate (monaural).
+    /// See the 4-argument overload for the contract.
     bool record(int16_t* rec_data, size_t array_len)
     {
       return _rec_raw(rec_data, array_len,  true, 0, false);
@@ -243,6 +253,10 @@ namespace m5
     /// stop request and the task's exit are actual synchronization, not a
     /// volatile-based data race.
     std::atomic<bool> _task_running { false };
+    /// how long record() from the release callback waits for another caller's
+    /// publish to finish before giving up (a legitimate holder releases within
+    /// microseconds; the bound covers priority inversion on the plain atomic).
+    static constexpr uint32_t in_task_lock_wait_ticks = 5;
     /// begin() runs from whichever task records first, and setup starts by
     /// tearing the port down - so only one call may go through.
     std::atomic<bool> _begin_lock { false };

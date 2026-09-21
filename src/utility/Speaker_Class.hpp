@@ -92,7 +92,7 @@ namespace m5
 
     void end(void);
 
-    bool isRunning(void) const { return _task_running; }
+    bool isRunning(void) const { return _task_running.load(std::memory_order_acquire); }
 
     bool isEnabled(void) const
     {
@@ -130,7 +130,8 @@ namespace m5
     ///             playWav() the PCM chunk inside the wav, not the wav pointer;
     ///             channel is the virtual channel it was played on.
     /// @attention Called from the playback task, not an ISR: keep it short,
-    ///            never block in it, never call begin()/end() from it. The
+    ///            never block in it, never call begin()/end() from it (both
+    ///            wait for this very task and deadlock). The
     ///            sound itself may still be in the I2S queue - this is buffer
     ///            release, not end of playback.
     /// @attention Requests discarded without being played do not call back:
@@ -140,7 +141,7 @@ namespace m5
     ///            it can arrive after isPlaying() has already dropped: track
     ///            buffers by pointer, not by counting.
     /// @attention play*() may be called from within: it never waits there and
-    ///            returns false if no queue slot is free.
+    ///            returns false if no queue slot is free or end() is stopping the task.
     /// @attention Set or clear it only before the first play*() or after
     ///            end() has returned - not merely while the queue looks
     ///            empty: the task may still be about to call the previous
@@ -205,7 +206,7 @@ namespace m5
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
-    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
+    /// @return true if queued. With an explicit channel a normal task waits for a slot; false includes an infinite request ahead, no free automatic channel, startup failure, or nothing to play. A queued request is reported by setBufferReleaseCallback() unless discarded first.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -226,7 +227,7 @@ namespace m5
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
-    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
+    /// @return true if queued. With an explicit channel a normal task waits for a slot; false includes an infinite request ahead, no free automatic channel, startup failure, or nothing to play. A queued request is reported by setBufferReleaseCallback() unless discarded first.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -247,7 +248,7 @@ namespace m5
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention For data generated at runtime, two buffers used alternately are enough if the next one is filled only after the previous one is released, as reported by setBufferReleaseCallback(). Without it use three buffers in sequence (or, with a single producer and no stop() or stop_current_sound in between, wait for isPlaying(channel) to drop below 2 before refilling).
-    /// @return true if the request was queued; false if not (no free channel, the speaker could not be started, nothing to play). A queued request is reported by setBufferReleaseCallback() unless it is discarded first (see there).
+    /// @return true if queued. With an explicit channel a normal task waits for a slot; false includes an infinite request ahead, no free automatic channel, startup failure, or nothing to play. A queued request is reported by setBufferReleaseCallback() unless discarded first.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
     bool playRaw(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
@@ -266,6 +267,7 @@ namespace m5
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
+    /// @return true if queued. With an explicit channel a normal task waits for a slot; false includes an infinite request ahead, no free automatic channel, startup failure, or invalid WAV data.
     bool playWav(const uint8_t* wav_data, size_t data_len = ~0u, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
 
   protected:
@@ -274,6 +276,8 @@ namespace m5
 
     static const uint8_t _default_tone_wav[16];
 
+    /// Called under the request lock from begin()/end(): it must not call
+    /// play*(), stop(), begin() or end() itself (deadlock).
     void setCallback(void* args, bool(*func)(void*, bool)) { _cb_set_enabled = func; _cb_set_enabled_args = args; }
 
     struct wav_info_t
@@ -346,9 +350,12 @@ namespace m5
 
     esp_err_t _setup_i2s(void);
     bool _in_task(void) const;
+    void _lock_req(void);
+    bool _begin_raw(void);
     void _end_locked(void);
     bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
     bool _set_next_wav(size_t ch, const wav_info_t& wav);
+    int _set_next_wav_locked(size_t ch, const wav_info_t& wav);
 
     speaker_config_t _cfg;
     volatile uint8_t _master_volume = 64;
@@ -358,16 +365,22 @@ namespace m5
     void (*_cb_buffer_release)(void* args, const void* data, uint8_t channel) = nullptr;
     void* _cb_buffer_release_args = nullptr;
 
-    volatile bool _task_running = false;
+    std::atomic<bool> _task_running { false };
     std::atomic<uint16_t> _play_channel_bits = { 0 };
     /// begin() runs from whichever task touches the speaker first, and setup
     /// starts by tearing the port down - so only one call may go through.
     std::atomic<bool> _begin_lock { false };
+    /// Serializes request publication with lifecycle changes.
+    /// Lock order: _req_lock before _begin_lock.
+    std::atomic<bool> _req_lock { false };
     /// True only once begin() has fully finished; the lock-free early return
     /// keys on this, so a caller can never see a half-built port as ready.
     std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     std::atomic<SDL_Thread*> _task_handle { nullptr };
+    /// _in_task() compares this, never the handle: SDL_WaitThread() frees
+    /// the SDL_Thread, and a reader outside the lock may still hold it.
+    std::atomic<SDL_threadID> _task_thread_id { 0 };
 #else
     /// atomic: _in_task() reads it from any caller of play*(), possibly
     /// while begin() on another task is still creating the task.

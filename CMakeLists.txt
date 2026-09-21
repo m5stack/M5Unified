@@ -1,15 +1,8 @@
 set(COMPONENT_ADD_INCLUDEDIRS
     src
     )
-file(GLOB SRCS
-     src/*.cpp
-     src/utility/*.cpp
-     src/utility/imu/*.cpp
-     src/utility/led/*.cpp
-     src/utility/power/*.cpp
-     src/utility/rtc/*.cpp
-     )
-set(COMPONENT_SRCS ${SRCS})
+# Single translation unit: src/M5Unified.cpp includes every *.inl (see the comment there).
+set(COMPONENT_SRCS src/M5Unified.cpp)
 
 # ESP-IDF uses the directory name as the component name (case sensitive).
 # Use "M5GFX" when a sibling components/M5GFX checkout exists, otherwise "m5gfx"
