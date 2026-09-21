@@ -846,9 +846,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+  // Callers are P4-only as well; keep the definition inside the guard to avoid an unused-function warning elsewhere.
   static void _corep4x_audio_power(M5Unified* self, bool enabled)
   {
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
     // Speaker and microphone share M5IOE1_G1, so keep the rail enabled at runtime.
     if (!enabled) { return; }
     auto& ioe1 = self->getIOExpander(0);
@@ -856,11 +857,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     ioe1.setDirection(M5IOE1_Class::gpio1, true);
     ioe1.digitalWrite(M5IOE1_Class::gpio1, true);
     self->delay(20);
-#else
-    (void)self;
-    (void)enabled;
-#endif
   }
+#endif
 
   bool M5Unified::_speaker_enabled_cb_corep4x(void* args, bool enabled)
   {

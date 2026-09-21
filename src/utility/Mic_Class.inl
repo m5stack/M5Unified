@@ -458,14 +458,6 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
-    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
-    const bool skip_raw_clk = !use_pdm;
-#else
-    const bool skip_raw_clk = false;
-#endif
-
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
@@ -507,6 +499,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #elif defined (I2S_RX_PDM2PCM_EN)
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
+    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    const bool skip_raw_clk = !use_pdm;
+#else
+    const bool skip_raw_clk = false;
 #endif
     if (!skip_raw_clk) {
 
