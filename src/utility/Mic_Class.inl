@@ -317,13 +317,18 @@ namespace m5
 if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     i2s_pdm_rx_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_pdm_rx_config_t));
-#if defined ( CONFIG_IDF_TARGET_ESP32P4 ) || defined (CONFIG_IDF_TARGET_ESP32H2)
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
-#else
-    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
-#endif
+#if defined ( M5UNIFIED_I2S_PLL_D2_HZ )
     i2s_config.clk_cfg.sample_rate_hz = 48000; // dummy setting
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128; // dummy setting
+#else
+    // No verified raw clock recipe on this chip: the driver keeps the clock, so the real
+    // port rate (over_sampling included, as the capture task expects) goes in here.
+    // DSR 16 matches what the raw path selects.
+    i2s_config.clk_cfg.sample_rate_hz = _calc_rec_rate();
+    i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+    i2s_config.clk_cfg.dn_sample_mode = i2s_pdm_dsr_t::I2S_PDM_DSR_16S;
+#endif
     i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
     i2s_config.slot_cfg.slot_mode = (_cfg.stereo) ? i2s_slot_mode_t::I2S_SLOT_MODE_STEREO :  i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -336,14 +341,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 {
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
-#if defined ( CONFIG_IDF_TARGET_ESP32P4 ) || defined (CONFIG_IDF_TARGET_ESP32H2)
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
-#else
-    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
-#endif
-#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    { // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (mic_task での raw 分周
-      // 上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
+#if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
+    { // クロックをドライバ管理で最終値に確定させる (mic_task での raw 分周上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
       // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
       int os = _cfg.over_sampling;
       if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
@@ -458,6 +458,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
+#if defined ( M5UNIFIED_I2S_PLL_D2_HZ )
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
 
     uint32_t bits = (self->_cfg.use_adc) ? 1 : 16; /// 1サンプリング当たりの出力ビット数;
@@ -473,6 +474,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // read here: a queued record() with a new rate may overwrite it while
     // this request is still being captured.
     calcClockDiv(&div_a, &div_b, &div_n, PLL_D2_CLK / (bits * div_m), self->_rec_sample_rate);
+#endif
 
     // false when the raw clock latch below times out: the channel must not
     // report itself active with an unlatched clock configuration.
@@ -489,7 +491,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 #endif
 #endif
 
-#if defined (M5UNIFIED_I2S_HW_V2)
+#if !defined ( M5UNIFIED_I2S_PLL_D2_HZ )
+    // No verified raw recipe for this chip: the driver keeps the mode and clock it configured.
+    (void)dev; (void)use_pdm;
+#elif defined (M5UNIFIED_I2S_HW_V2)
 
     dev->rx_conf.rx_pdm_en = use_pdm;
     dev->rx_conf.rx_tdm_en = !use_pdm;
@@ -500,9 +505,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm2pcm_en = use_pdm;
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    // ESP32-P4 の std 経路はクロックを _setup_i2s でドライバ管理により最終値に
-    // 設定済みのため、raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+#if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
+    // std 経路はクロックを _setup_i2s でドライバ管理により最終値に設定済みのため、
+    // raw 分周の上書きを行わない (PDM 経路は従来どおり)。
     const bool skip_raw_clk = !use_pdm;
 #else
     const bool skip_raw_clk = false;

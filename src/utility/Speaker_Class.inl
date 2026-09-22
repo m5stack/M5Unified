@@ -202,14 +202,12 @@ namespace m5
 
     i2s_std_config_t i2s_config;
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
-#if defined ( CONFIG_IDF_TARGET_ESP32H2 ) || defined ( CONFIG_IDF_TARGET_ESP32P4 )
+    // On every chip whose raw divider path runs (M5UNIFIED_I2S_PLL_D2_HZ), I2S_CLK_SRC_DEFAULT
+    // is the PLL_160M source that path expects, so no chip list is needed here. (The ESP32-P4
+    // default is chosen at run time, which is why its clock stays driver managed.)
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
-#else
-    i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
-#endif
-#if defined ( CONFIG_IDF_TARGET_ESP32P4 )
-    // ESP32-P4 はクロックをドライバ管理で最終値に確定させる (spk_task での raw 分周
-    // 上書きを行わない)。ここで実レートを渡すことで、begin 中のクロック遷移が
+#if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
+    // クロックをドライバ管理で最終値に確定させる (spk_task での raw 分周上書きを行わない)。ここで実レートを渡すことで、begin 中のクロック遷移が
     // 一度きりになり、外付け codec (Tab5=ES8388) のロック失敗を防ぐ。
     // クロック源既定 (minimum supported revision < 3 のビルドは XTAL 40MHz /
     // rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
@@ -400,7 +398,7 @@ namespace m5
 #else
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
+#if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
     // クロックは _setup_i2s でドライバ管理により最終値に設定済み (実レート +
     // 256fs、40MHz source ビルドの高レートのみ 128fs)。
     // ドライバの分数分周 (a/b ≤ 511) は十分高精度のため、レート換算は公称値でよい。
@@ -537,7 +535,7 @@ namespace m5
     dev->conf.tx_fifo_reset = 0;
 
 #endif
-#endif // !CONFIG_IDF_TARGET_ESP32P4 (raw クロック設定ブロック全体)
+#endif // !M5UNIFIED_I2S_DRIVER_MANAGED_CLK (raw クロック設定ブロック全体)
     // i2s_zero_dma_buffer(i2s_port);
 
     enum spk_i2s_state
