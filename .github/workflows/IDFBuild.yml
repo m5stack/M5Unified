@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '**.cpp'
+      - '**.inl'
       - '**.hpp'
       - '**.h'
       - '**.c'
