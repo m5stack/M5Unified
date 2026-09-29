@@ -412,6 +412,7 @@ namespace m5
       _core_s3_aw9523_bit(0x03, 0b10000000, true);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
+      Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable (see the Core2 v1.1 setup)
       static constexpr std::uint8_t reg_data_array[] =
       { 0x90, 0xBF  // LDOS ON/OFF control 0
       , 0x92, 18 -5 // ALDO1 set to 1.8v // for AW88298
@@ -858,10 +859,10 @@ namespace m5
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
-      // Re-arm the DCDC1/DCDC3 under-voltage power-off that setExtOutput(false)
-      // suspends; an ESP32 brownout reset during that call skips the restore.
-      // Forced like the table above: these bits are the chip default.
-      Axp2101.bitOn(0x23, 0x05);
+      // A DCDC dip below 85% (inrush on a weak USB supply, or the 5V bus switch-over in
+      // setExtOutput) makes the AXP2101 power itself off, and it stays off until the power
+      // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
+      Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
 
       // for Core2 v1.1 (AXP2101+INA3221)
       if (Ina3221[0].begin())
@@ -1200,34 +1201,10 @@ namespace m5
             // Core2 v1.1: BLDO2 drives both the boost enable and the /EN of the
             // switch that ties USB VBUS to the 5V bus. While BLDO2 falls the switch
             // closes before the boost stops, and the boost output feeds back into
-            // VBUS -> PMIC -> boost. With no battery this sags VSYS and the AXP2101
-            // powers off on DCDC under-voltage (latched until the power key).
-            // Suspending that power-off for the transition turns it into an ESP32
-            // brownout reset instead; begin() re-arms it after such a reset.
-            // (A Tough with the AXP2101 shares this path; the suspend is harmless there.)
-            uint8_t r90, r23 = 0;
-            if (!Axp2101.readRegister(0x90, &r90, 1)) { r90 = 0xFF; }   // unreadable: assume a transition
-            bool transition = (r90 & (1 << 5)) != 0;
-            bool suspended = false;
-            if (transition) {
-              // Fail closed: when the power-off cannot be suspended the output is left as is.
-              if (!Axp2101.readRegister(0x23, &r23, 1)) {
-                ESP_LOGW("Power", "setExtOutput(false): protection register unreadable, refused.");
-                break;
-              }
-              suspended = (r23 & 0x05) != 0;
-              if (suspended && !Axp2101.writeRegister8(0x23, r23 & ~0x05)) {
-                ESP_LOGW("Power", "setExtOutput(false): could not suspend the DCDC UVP power-off, refused.");
-                break;
-              }
-            }
+            // VBUS -> PMIC -> boost. With no battery this sags VSYS; begin() disables
+            // the DCDC under-voltage power-off, so this ends in an ESP32 brownout reset
+            // at worst instead of a PMIC power-off latched until the power key.
             Axp2101.setBLDO2(0);
-            if (suspended) {
-              m5gfx::delay(20);   // the transition completes within 10 ms (measured)
-              if (!Axp2101.writeRegister8(0x23, r23)) {
-                ESP_LOGW("Power", "setExtOutput(false): DCDC UVP power-off not re-armed.");
-              }
-            }
             break;
           }
         } else {
