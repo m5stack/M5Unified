@@ -427,6 +427,7 @@ namespace m5
       _core_s3_aw9523_bit(0x03, 0b10000000, true);  // SY7088 BOOST_EN
       _pmic = Power_Class::pmic_t::pmic_axp2101;
       Axp2101.begin();
+      Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable (see the Core2 v1.1 setup)
       static constexpr std::uint8_t reg_data_array[] =
       { 0x90, 0xBF  // LDOS ON/OFF control 0
       , 0x92, 18 -5 // ALDO1 set to 1.8v // for AW88298
@@ -902,10 +903,10 @@ namespace m5
       // , 0x18, 0x0E
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
-      // Re-arm the DCDC1/DCDC3 under-voltage power-off that setExtOutput(false)
-      // suspends; an ESP32 brownout reset during that call skips the restore.
-      // Forced like the table above: these bits are the chip default.
-      Axp2101.bitOn(0x23, 0x05);
+      // A DCDC dip below 85% (inrush on a weak USB supply, or the 5V bus switch-over in
+      // setExtOutput) makes the AXP2101 power itself off, and it stays off until the power
+      // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
+      Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
 
       // for Core2 v1.1 (AXP2101+INA3221)
       if (Ina3221[0].begin())
@@ -954,6 +955,50 @@ namespace m5
     _core_s3_lock_t(void) : mutex { _core_s3_mutex() }, locked { mutex != nullptr && xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE } {}
     ~_core_s3_lock_t(void) { if (locked) { xSemaphoreGive(mutex); } }
   };
+
+  // Before BUS_OUT_EN goes 0 -> 1, precharge BUS_OUT with short pulses of growing on-time.
+  // Connecting the empty BUS_OUT at once on a weak USB supply pulls the AXP2101 DCDC under
+  // its threshold through the inrush, and the PMIC powers the board off.
+  // BUS_OUT has a constant discharge path, so short fixed pulses do not accumulate. Once it
+  // passes about 1.7 V it is pulled up from VBUS even with BUS_OUT_EN = 0, and the final
+  // enable is a small step. Each on-time is one register write (about 0.3 ms at 100 kHz)
+  // plus i * 16 us; M5GFX's board detection runs the same sequence at 100 kHz.
+  // After a failed on- or off-pulse write, OFF is rewritten and read back up to three times:
+  // confirmed off aborts a failed on-pulse or continues the ramp after a failed off-pulse,
+  // still on goes to the final enable, and an unknown state returns false.
+  static bool _core_s3_bus_precharge(uint8_t port0_off)
+  {
+    static constexpr const uint8_t port0_reg = 0x02;
+    enum class off_state_t { unknown, off, on };
+    auto confirm_off = [&]() {
+      uint8_t cur = 0;
+      bool read_ok = false;
+      for (int retry = 0; retry < 3; ++retry)
+      {
+        M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq);
+        read_ok = M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq);
+        if (read_ok && !(cur & _core_s3_bus_en)) { return off_state_t::off; }
+      }
+      return read_ok ? off_state_t::on : off_state_t::unknown;
+    };
+    for (int i = 0; i < 8; ++i)
+    {
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off | _core_s3_bus_en, i2c_freq))
+      {
+        if (confirm_off() == off_state_t::on) { break; }
+        return false;
+      }
+      m5gfx::delayMicroseconds(i * 16);
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq))
+      {
+        const auto state = confirm_off();
+        if (state == off_state_t::unknown) { return false; }
+        if (state == off_state_t::on) { break; }
+      }
+      m5gfx::delayMicroseconds(1000);
+    }
+    return true;
+  }
 
   // @return true = the requested state is on the device (every write acknowledged).
   static bool _core_s3_output_locked(uint8_t mask, bool enable)
@@ -1022,6 +1067,20 @@ namespace m5
     if (enable)
     {
       if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return false; }
+      if ((mask & _core_s3_bus_en) && !(orig[0] & _core_s3_bus_en))
+      {
+        if (!_core_s3_bus_precharge(orig[0])) { return false; }
+        // A precharged BUS_OUT left with BUS_OUT_EN = 0 is pulled up from VBUS, and every later
+        // enable is then cancelled by the TS check; read the final write back, bounded retries.
+        for (int retry = 0; retry < 3; ++retry)
+        {
+          uint8_t cur;
+          if (M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)
+           && M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq)
+           && cur == buf[0]) { return true; }
+        }
+        return false;
+      }
       return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
     }
     if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return false; }
@@ -1310,35 +1369,14 @@ namespace m5
             // Core2 v1.1: BLDO2 drives both the boost enable and the /EN of the
             // switch that ties USB VBUS to the 5V bus. While BLDO2 falls the switch
             // closes before the boost stops, and the boost output feeds back into
-            // VBUS -> PMIC -> boost. With no battery this sags VSYS and the AXP2101
-            // powers off on DCDC under-voltage (latched until the power key).
-            // Suspending that power-off for the transition turns it into an ESP32
-            // brownout reset instead; begin() re-arms it after such a reset.
-            // (A Tough with the AXP2101 shares this path; the suspend is harmless there.)
-            uint8_t r90, r23 = 0;
-            if (!Axp2101.readRegister(0x90, &r90, 1)) { r90 = 0xFF; }   // unreadable: assume a transition
-            bool transition = (r90 & (1 << 5)) != 0;
-            bool suspended = false;
-            if (transition) {
-              // Fail closed: when the power-off cannot be suspended the output is left as is.
-              if (!Axp2101.readRegister(0x23, &r23, 1)) {
-                ESP_LOGW("Power", "setExtOutput(false): protection register unreadable, refused.");
-                break;
-              }
-              suspended = (r23 & 0x05) != 0;
-              if (suspended && !Axp2101.writeRegister8(0x23, r23 & ~0x05)) {
-                ESP_LOGW("Power", "setExtOutput(false): could not suspend the DCDC UVP power-off, refused.");
-                break;
-              }
-            }
+            // VBUS -> PMIC -> boost. With no battery this sags VSYS for about 1 ms; whether
+            // the ESP32 browns out depends on the USB supply's headroom, and no input-limit,
+            // load or BLDO2-timing change avoided it. On USB the bus stays powered from VBUS
+            // afterwards. Reapply the DCDC under-voltage power-off disable before switching,
+            // in case begin() could not write REG23, so the PMIC does not latch off; leave
+            // BLDO2 untouched if that write fails.
+            if (!Axp2101.bitOff(0x23, 0x1F)) { break; }
             result = Axp2101.setBLDO2(0);
-            if (suspended) {
-              m5gfx::delay(20);   // the transition completes within 10 ms (measured)
-              if (!Axp2101.writeRegister8(0x23, r23)) {
-                ESP_LOGW("Power", "setExtOutput(false): DCDC UVP power-off not re-armed.");
-                result = false;
-              }
-            }
             break;
           }
         } else {
