@@ -356,9 +356,16 @@ namespace m5
       // Boards where GPIO46 is exposed to the application (camera VSYNC on CoreS3, camera data on
       // AtomS3R Cam, header pin on StampS3 / AtomS3R Ext) get the pad restored once the board is
       // known, see below.
+      // Skipped when the application already ran Display.init(): GPIO46 may then carry the display
+      // bus (StopWatch QSPI io2), which this output would overwrite. The hold is applied below,
+      // once the pin map is known, only on boards that use GPIO46 as their power hold.
+      const bool gpio46_hold = (Display.getBoard() == m5gfx::board_t::board_unknown);
       m5gfx::gpio::pin_backup_t gpio46_backup(GPIO_NUM_46);
-      m5gfx::gpio_hi(GPIO_NUM_46);
-      m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
+      if (gpio46_hold)
+      {
+        m5gfx::gpio_hi(GPIO_NUM_46);
+        m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
+      }
 #endif
 
       auto brightness = Display.getBrightness();
@@ -376,10 +383,15 @@ namespace m5
       _board = board;
       _setup_pinmap(board);
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
+      if (!gpio46_hold && getPin(pin_name_t::power_hold) == GPIO_NUM_46)
+      {
+        m5gfx::gpio_hi(GPIO_NUM_46);
+        m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
+      }
       // Restore only on boards positively identified as exposing GPIO46 to the application
       // (camera VSYNC / data, header pin); every other case (power hold, display bus pins
       // configured by Display.init(), a fallback board) keeps the previous behaviour.
-      switch (board_detected ? board : board_t::board_unknown)
+      switch (board_detected && gpio46_hold ? board : board_t::board_unknown)
       {
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackCoreS3SE:
