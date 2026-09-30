@@ -956,6 +956,50 @@ namespace m5
     ~_core_s3_lock_t(void) { if (locked) { xSemaphoreGive(mutex); } }
   };
 
+  // Before BUS_OUT_EN goes 0 -> 1, precharge BUS_OUT with short pulses of growing on-time.
+  // Connecting the empty BUS_OUT at once on a weak USB supply pulls the AXP2101 DCDC under
+  // its threshold through the inrush, and the PMIC powers the board off.
+  // BUS_OUT has a constant discharge path, so short fixed pulses do not accumulate. Once it
+  // passes about 1.7 V it is pulled up from VBUS even with BUS_OUT_EN = 0, and the final
+  // enable is a small step. Each on-time is one register write (about 0.3 ms at 100 kHz)
+  // plus i * 16 us; M5GFX's board detection runs the same sequence at 100 kHz.
+  // After a failed on- or off-pulse write, OFF is rewritten and read back up to three times:
+  // confirmed off aborts a failed on-pulse or continues the ramp after a failed off-pulse,
+  // still on goes to the final enable, and an unknown state returns false.
+  static bool _core_s3_bus_precharge(uint8_t port0_off)
+  {
+    static constexpr const uint8_t port0_reg = 0x02;
+    enum class off_state_t { unknown, off, on };
+    auto confirm_off = [&]() {
+      uint8_t cur = 0;
+      bool read_ok = false;
+      for (int retry = 0; retry < 3; ++retry)
+      {
+        M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq);
+        read_ok = M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq);
+        if (read_ok && !(cur & _core_s3_bus_en)) { return off_state_t::off; }
+      }
+      return read_ok ? off_state_t::on : off_state_t::unknown;
+    };
+    for (int i = 0; i < 8; ++i)
+    {
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off | _core_s3_bus_en, i2c_freq))
+      {
+        if (confirm_off() == off_state_t::on) { break; }
+        return false;
+      }
+      m5gfx::delayMicroseconds(i * 16);
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq))
+      {
+        const auto state = confirm_off();
+        if (state == off_state_t::unknown) { return false; }
+        if (state == off_state_t::on) { break; }
+      }
+      m5gfx::delayMicroseconds(1000);
+    }
+    return true;
+  }
+
   // @return true = the requested state is on the device (every write acknowledged).
   static bool _core_s3_output_locked(uint8_t mask, bool enable)
   {
@@ -1023,6 +1067,20 @@ namespace m5
     if (enable)
     {
       if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return false; }
+      if ((mask & _core_s3_bus_en) && !(orig[0] & _core_s3_bus_en))
+      {
+        if (!_core_s3_bus_precharge(orig[0])) { return false; }
+        // A precharged BUS_OUT left with BUS_OUT_EN = 0 is pulled up from VBUS, and every later
+        // enable is then cancelled by the TS check; read the final write back, bounded retries.
+        for (int retry = 0; retry < 3; ++retry)
+        {
+          uint8_t cur;
+          if (M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)
+           && M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq)
+           && cur == buf[0]) { return true; }
+        }
+        return false;
+      }
       return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
     }
     if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return false; }

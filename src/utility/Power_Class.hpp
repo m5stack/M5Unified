@@ -240,7 +240,9 @@ namespace m5
     /// @note On the CoreS3 family (CoreS3 / CoreS3 SE / StackChan), disabling an enabled output blocks for
     ///       about 200 ms (the boost converter is stopped first and the bus is left to discharge before the
     ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
-    ///       waits for the TS reading to settle. The switch-over is serialized with setUsbOutput and the
+    ///       waits for the TS reading to settle. Enabling also precharges the bus with short pulses first
+    ///       (about 10 ms), so that the empty bus does not pull the PMIC under its DCDC under-voltage
+    ///       threshold on a weak USB supply. The switch-over is serialized with setUsbOutput and the
     ///       internal speaker enable, so those may wait for it as well.
     /// @note Core2 v1.1 (AXP2101; a Tough with the AXP2101 takes the same path): while USB
     ///       powers the board, disabling the output does not remove 5 V from the bus; it only
