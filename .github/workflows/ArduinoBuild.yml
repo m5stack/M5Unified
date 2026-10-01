@@ -26,58 +26,55 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ===================
-          # Espressif Board Manager
-          # ===================
-          # ESP32
+          # Versions are split with the M5Unified / M5GFX CI so that the two together cover every
+          # arduino-esp32 series from 2.0 to 3.3 without building the same one twice.
+          # Minimums: C6 / H2 3.0, P4 3.1, C5 3.3.
+          # Espressif Board Manager: 3.0.7
           - board: esp32:esp32:esp32
-            esp32_version: 2.0.17
-            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          - board: esp32:esp32:esp32
-            esp32_version: 3.1.1
-            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ESP32-S3
-          - board: esp32:esp32:esp32s3
-            esp32_version: 2.0.17
+            esp32_version: 3.0.7
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           - board: esp32:esp32:esp32s3
-            esp32_version: 3.1.1
-            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ESP32-C3
-          - board: esp32:esp32:esp32c3
-            esp32_version: 2.0.17
+            esp32_version: 3.0.7
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           - board: esp32:esp32:esp32c3
-            esp32_version: 3.1.1
+            esp32_version: 3.0.7
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ESP32-C5 (v3.3+ only)
-          - board: esp32:esp32:esp32c5
-            esp32_version: 3.3.11
-            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-
-          # ESP32-C6 (v3 only)
           - board: esp32:esp32:esp32c6
-            esp32_version: 3.1.1
+            esp32_version: 3.0.7
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ESP32-P4 (v3 only)
-          - board: esp32:esp32:esp32p4
-            esp32_version: 3.1.1
-            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ESP32-H2 (v3 only)
           - board: esp32:esp32:esp32h2
-            esp32_version: 3.1.1
+            esp32_version: 3.0.7
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # ===================
+          # Espressif Board Manager: 3.2.1
+          - board: esp32:esp32:esp32
+            esp32_version: 3.2.1
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32s3
+            esp32_version: 3.2.1
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32c6
+            esp32_version: 3.2.1
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32p4
+            esp32_version: 3.2.1
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          # Espressif Board Manager: 3.3.12 (latest)
+          - board: esp32:esp32:esp32
+            esp32_version: 3.3.12
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32s3
+            esp32_version: 3.3.12
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32c5
+            esp32_version: 3.3.12
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32p4
+            esp32_version: 3.3.12
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           # M5Stack Board Manager
-          # ===================
-          # M5Core (ESP32)
-          - board: m5stack:esp32:m5stack_core
-            esp32_version: 2.1.4
-            board_manager_url: https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
           - board: m5stack:esp32:m5stack_core
             esp32_version: 3.2.5
             board_manager_url: https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
-          # M5CoreS3 (ESP32-S3, v3 only)
           - board: m5stack:esp32:m5stack_cores3
             esp32_version: 3.2.5
             board_manager_url: https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
