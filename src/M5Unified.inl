@@ -501,7 +501,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #endif
 
   /// @return true when every write in the table was acknowledged.
-  static bool in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
+  static bool in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t freq = 100000u, const uint8_t retry = 0)
   {
     // bulk_data example..
     // const uint8_t bulk_data[] = {
@@ -513,7 +513,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     while (*bulk_data) {
       uint8_t len = *bulk_data++;
       uint8_t r = retry + 1;
-      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { m5gfx::delay(1); }
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, freq) && --r) { m5gfx::delay(1); }
       all_ok &= (r != 0);
       bulk_data += len;
     }
