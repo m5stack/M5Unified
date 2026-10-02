@@ -132,7 +132,7 @@ namespace m5
       bitOn(0xD3, irq_enable);
     } else {
       bitOff(0xB0, irq_enable);
-      bitOff(0xD3, irq_enable);
+      writeRegister8(0xD3, 0); // A zero bit mask would leave the alarm enabled.
     }
     m5gfx::delay(powerhub_alarm_apply_wait_ms);
 
@@ -155,7 +155,7 @@ namespace m5
   void RTC_PowerHub_Class::disableIRQ(void)
   {
     if (!_init) { return; }
-    bitOff(0xD3, 0); // disable alarm
+    writeRegister8(0xD3, 0); // Clear the enable register; bitOff with a zero mask is a no-op.
     m5gfx::delay(powerhub_alarm_apply_wait_ms);
   }
 }
