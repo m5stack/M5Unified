@@ -10,6 +10,10 @@
 
 namespace m5
 {
+  // The STM32 applies D0..D3 from its main loop after acknowledging I2C writes.
+  // Pace the writes so an older update cannot clear the pending flag for a newer one.
+  static constexpr std::uint32_t powerhub_alarm_apply_wait_ms = 50;
+
   static std::uint8_t weekdayToPowerHub(std::int8_t weekDay)
   {
     static constexpr std::uint8_t weekDayTable[] = { 1, 2, 4, 8, 10, 20, 40 };
@@ -120,6 +124,7 @@ namespace m5
     }
 
     writeRegister(0xD0, buf, 3);
+    m5gfx::delay(powerhub_alarm_apply_wait_ms);
 
     if (irq_enable) {
       bitOn(0xB0, irq_enable);
@@ -128,6 +133,7 @@ namespace m5
       bitOff(0xB0, irq_enable);
       bitOff(0xD3, irq_enable);
     }
+    m5gfx::delay(powerhub_alarm_apply_wait_ms);
 
     return irq_enable;
   }
@@ -142,11 +148,13 @@ namespace m5
     if (!_init) { return; }
     static constexpr const std::uint8_t buf[4] = {};
     writeRegister(0xD0, buf, sizeof(buf));
+    m5gfx::delay(powerhub_alarm_apply_wait_ms);
   }
 
   void RTC_PowerHub_Class::disableIRQ(void)
   {
     if (!_init) { return; }
     bitOff(0xD3, 0); // disable alarm
+    m5gfx::delay(powerhub_alarm_apply_wait_ms);
   }
 }

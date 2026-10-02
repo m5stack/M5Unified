@@ -1693,11 +1693,18 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5PowerHub:
-      uint8_t buf[6]={};
-      M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
-      M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq); 
-      use_deepsleep = false;
-      break;
+      {
+        // The STM32 arms the RTC alarm asynchronously after acknowledging the writes.
+        // Let it finish before the power-off request can overtake the alarm update.
+        static constexpr uint32_t powerhub_alarm_settle_ms = 500;
+        if (withTimer) { m5gfx::delay(powerhub_alarm_settle_ms); }
+        uint8_t buf[6]={};
+        M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
+        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq);
+        // Do not resume the sketch with outputs off and the alarm still armed.
+        use_deepsleep = false;
+        break;
+      }
 #endif
     }
 
