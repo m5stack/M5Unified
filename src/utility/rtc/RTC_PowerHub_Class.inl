@@ -117,7 +117,8 @@ namespace m5
 
       }
     }
-    if (date->date >= 0)
+    // A time-only alarm has no date; zero in D2 means every day.
+    if (date && date->date >= 0)
     {
       irq_enable = true;
       buf[2] = date->date & 0x1f;
