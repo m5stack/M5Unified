@@ -132,9 +132,12 @@ namespace m5
     void setLed(uint8_t brightness = 255);
 
     /// all power off.
+    /// @note PowerHub enters light sleep after requesting power-off and restarts if it wakes.
     void powerOff(void);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note PowerHub paces alarm writes by 50 ms, settles for 500 ms before requesting
+    ///       power-off, then enters light sleep and restarts if it wakes.
     /// @param seconds Number of seconds to boot.
     void timerSleep(int seconds);
 
