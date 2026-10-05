@@ -440,6 +440,10 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // TS senses the 5V bus (no battery thermistor). Its power-on default comes from the
+      // EFUSE and differs between chips; when it is left as the temperature input, the
+      // charger treats the bus voltage as a cold battery and never charges.
+      Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
       // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
       // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
       // AXP2101 IRQ pin is shared with the RTC INT, so neither reaches the ESP32.
@@ -907,6 +911,8 @@ namespace m5
       // setExtOutput) makes the AXP2101 power itself off, and it stays off until the power
       // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
       Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
+      // No battery thermistor on TS (reads about 2.9V); see the CoreS3 setup.
+      Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
 
       // for Core2 v1.1 (AXP2101+INA3221)
       if (Ina3221[0].begin())
