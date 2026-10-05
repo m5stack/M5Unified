@@ -102,6 +102,9 @@ namespace m5
       uint16_t t1l_ns = 300;
       uint16_t reset_us = 280;
       int8_t pin_data = -1;
+      /// GPIO that switches the LED power supply on (active high); -1 if the LEDs are always powered.
+      /// It is driven at init(), i.e. when the LEDs are first used, so an unused LED stays unpowered.
+      int8_t pin_power = -1;
     };
     const config_t& config(void) const { return _config; }
     const config_t& getConfig(void) const { return _config; }
