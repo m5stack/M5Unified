@@ -23,6 +23,7 @@
 #include <freertos/semphr.h>
 
 #include <soc/soc_caps.h>
+#include <soc/gpio_reg.h>
 
 // ESP-IDF v4 defines only the generic SOC_PM_SUPPORT_EXT_WAKEUP; the split into
 // SOC_PM_SUPPORT_EXT0_WAKEUP / SOC_PM_SUPPORT_EXT1_WAKEUP came later.
@@ -86,11 +87,6 @@ namespace m5
     ioe1.digitalWrite(M5IOE1_Class::gpio11, false);
   }
 
-  static bool set_papermono_ip2315_enabled(bool enable)
-  {
-    return M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio11, enable);
-  }
-
   static bool wait_papermono_ip2315_ready(void)
   {
     m5gfx::delay(2);
@@ -99,6 +95,130 @@ namespace m5
       if (M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq)) { return true; }
     }
     return false;
+  }
+
+  /// The IP2316 latches its mode when VIN is applied: I2C mode only if SCL and SDA
+  /// are both High at that moment, otherwise LED mode until VIN is removed. On this
+  /// board the lines are only pulled High while the gate (IOE1 GPIO11, the level
+  /// shifter OE) is open, so plugging USB in with the gate closed (always the case
+  /// while powered off) gives LED mode. In LED mode the charger drives LED1/LED2
+  /// (= SCL/SDA) at about 500 Hz, and opening the gate disturbs the internal I2C bus:
+  /// I2C traffic in that state stalls the board, and writes can land corrupted.
+  /// So the bus is checked with plain GPIO reads right after opening, and in LED mode
+  /// the gate is closed again without touching the charger. The result is kept until
+  /// VIN is seen removed.
+  static constexpr std::uint8_t papermono_ioe1_out_reg = 0x06;  // M5IOE1 GPIO_OUT_H (GPIO9..)
+  static constexpr std::uint8_t papermono_gate_bit = 1 << 2;    // GPIO11
+  /// LED mode is remembered until VIN is seen removed. A gate that could not be
+  /// confirmed closed is remembered too, with the byte to restore, and closing is
+  /// retried before anything else. Like the rest of this class, the sequence
+  /// assumes no other task uses the internal I2C bus meanwhile.
+  /// Limits: VIN removed and reapplied between two calls is not seen, so LED mode
+  /// stays remembered (the charger stays untouched); only the two charge APIs retry
+  /// an unconfirmed close, other users of the internal bus do not.
+  static bool papermono_ip2315_led_mode = false;
+  static bool papermono_gate_unclosed = false;
+  static std::uint8_t papermono_gate_saved = 0;
+
+  enum class papermono_gate_t : std::uint8_t { opened, led_mode, error };
+
+  static constexpr std::uint32_t papermono_bus_mask = (1u << (GPIO_NUM_47 - 32)) | (1u << (GPIO_NUM_48 - 32));
+
+  enum class papermono_bus_t : std::uint8_t { quiet, disturbed, unobserved };
+
+  /// quiet when neither SCL (G48) nor SDA (G47) goes Low for 4.5 ms after the gate
+  /// write. The ESP32's own outputs are disabled meanwhile so that only the bus is
+  /// read. IOE1 applies the write to its pin about 1.1 ms later; in LED mode SDA is
+  /// Low half of every 2 ms period. A watch with a gap between two reads longer
+  /// than 200 us (preemption) proves nothing and is repeated; unobserved when every
+  /// try had such a gap.
+  static papermono_bus_t papermono_bus_watch(void)
+  {
+    for (int retry = 0; retry < 4; ++retry)
+    {
+      std::uint32_t en = REG_READ(GPIO_ENABLE1_REG) & papermono_bus_mask;
+      REG_WRITE(GPIO_ENABLE1_W1TC_REG, en);
+      bool low = false;
+      std::uint32_t gap_max = 0;
+      auto t0 = m5gfx::micros();
+      auto prev = t0;
+      for (;;)
+      {
+        auto now = m5gfx::micros();
+        if (now - prev > gap_max) { gap_max = now - prev; }
+        prev = now;
+        if (now - t0 >= 4500) { break; }
+        if ((REG_READ(GPIO_IN1_REG) & papermono_bus_mask) != papermono_bus_mask) { low = true; break; }
+      }
+      REG_WRITE(GPIO_ENABLE1_W1TS_REG, en);
+      if (low) { return papermono_bus_t::disturbed; }
+      if (gap_max <= 200) { return papermono_bus_t::quiet; }
+    }
+    return papermono_bus_t::unobserved;
+  }
+
+  /// Close the gate, writing back the output byte saved before opening, and confirm
+  /// the whole byte by reading it back. When the bus is disturbed, each write is
+  /// placed right after both lines return High (the gap between the charger's
+  /// pulses), waiting at most 3 ms for each edge.
+  static bool papermono_gate_close(std::uint8_t saved, bool disturbed)
+  {
+    auto& ioe1 = M5.getIOExpander(0);
+    const std::uint8_t closed = saved & ~papermono_gate_bit;
+    for (int i = 0; i < 20; ++i)
+    {
+      if (disturbed)
+      {
+        std::uint32_t en = REG_READ(GPIO_ENABLE1_REG) & papermono_bus_mask;
+        REG_WRITE(GPIO_ENABLE1_W1TC_REG, en);
+        auto t = m5gfx::micros();
+        while (m5gfx::micros() - t < 3000 && (REG_READ(GPIO_IN1_REG) & papermono_bus_mask) == papermono_bus_mask) {}
+        t = m5gfx::micros();
+        while (m5gfx::micros() - t < 3000 && (REG_READ(GPIO_IN1_REG) & papermono_bus_mask) != papermono_bus_mask) {}
+        REG_WRITE(GPIO_ENABLE1_W1TS_REG, en);
+      }
+      std::uint8_t rb;
+      if (ioe1.writeRegister8(papermono_ioe1_out_reg, closed)
+       && ioe1.readRegister(papermono_ioe1_out_reg, &rb, 1) && rb == closed)
+      {
+        papermono_gate_unclosed = false;
+        return true;
+      }
+    }
+    papermono_gate_unclosed = true;
+    papermono_gate_saved = saved;
+    return false;
+  }
+
+  /// Retry closing a gate left unconfirmed by an earlier call. Call this before any
+  /// other access to the internal bus. false: still unconfirmed.
+  static bool papermono_gate_recover(void)
+  {
+    return !papermono_gate_unclosed || papermono_gate_close(papermono_gate_saved, true);
+  }
+
+  /// Open the gate. Call papermono_gate_recover() first. vin_present: the caller's
+  /// PM1 power-source reading.
+  /// opened: the bus is quiet, the charger can be accessed, close afterwards with the
+  /// saved byte; led_mode: the charger is in LED mode and the gate is closed;
+  /// error: the bus could not be judged, or the gate state is not confirmed (a failed
+  /// close is retried by the next papermono_gate_recover()).
+  static papermono_gate_t papermono_gate_open(bool vin_present, std::uint8_t* saved)
+  {
+    if (!vin_present) { papermono_ip2315_led_mode = false; }
+    if (papermono_ip2315_led_mode) { return papermono_gate_t::led_mode; }
+    auto& ioe1 = M5.getIOExpander(0);
+    if (!ioe1.readRegister(papermono_ioe1_out_reg, saved, 1)) { return papermono_gate_t::error; }
+    /// a write reported as failed may still have been applied: close in any case.
+    bool opened = ioe1.writeRegister8(papermono_ioe1_out_reg, *saved | papermono_gate_bit);
+    auto bus = papermono_bus_watch();
+    if (opened && bus == papermono_bus_t::quiet) { return papermono_gate_t::opened; }
+    bool closed = papermono_gate_close(*saved, bus != papermono_bus_t::quiet);
+    /// LED mode is remembered only on a clean judgement: the gate was opened, a line
+    /// went Low, the gate is closed again, and the charger is powered.
+    if (!closed || !opened || bus != papermono_bus_t::disturbed || !vin_present) { return papermono_gate_t::error; }
+    papermono_ip2315_led_mode = true;
+    return papermono_gate_t::led_mode;
   }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
@@ -2996,16 +3116,18 @@ namespace m5
         // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
         if (M5.getBoard() == board_t::board_M5PaperMono) {
           /// every write of the sequence counts: a gate left in the wrong
-          /// state after a failed close is not a success.
-          bool res = set_papermono_ip2315_enabled(true);
-          if (res && wait_papermono_ip2315_ready()) {
-            res = enable ? M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq)
-                         : M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq);
-          } else {
-            res = false;
-          }
-          res = set_papermono_ip2315_enabled(false) && res;
-          return res;
+          /// state after a failed close is not a success. A charger in LED mode
+          /// cannot be controlled until VIN is reapplied.
+          if (!papermono_gate_recover()) { return false; }
+          M5PM1_Class::pwr_src_t sources;
+          if (!M5pm1.getPowerSource(&sources)) { return false; }
+          std::uint8_t saved;
+          if (papermono_gate_open((sources & (M5PM1_Class::vin | M5PM1_Class::vinout)) != 0, &saved)
+              != papermono_gate_t::opened) { return false; }
+          bool res = wait_papermono_ip2315_ready()
+                  && (enable ? M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq)
+                             : M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq));
+          return papermono_gate_close(saved, false) && res;
         }
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32C5)
@@ -3612,10 +3734,16 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PaperMono:
       {
+        if (!papermono_gate_recover()) { return charge_state_t::io_error; }
         // No external power -> not charging. PWR_SRC is a bitmap, and the battery bit may coexist with VIN.
         M5PM1_Class::pwr_src_t sources;
         if (!M5pm1.getPowerSource(&sources)) { return charge_state_t::io_error; }
-        if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout))) { return charge_state_t::not_charging; }
+        // VIN removed: the charger mode is decided again on the next plug-in.
+        if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout)))
+        {
+          papermono_ip2315_led_mode = false;
+          return charge_state_t::not_charging;
+        }
         // External power present. The IP2316 charger reports
         // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
         // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
@@ -3624,16 +3752,23 @@ namespace m5
         /// a charger that does not answer through the gate is an unfinished
         /// procedure, not missing evidence: io_error, not undetermined. The
         /// gate writes themselves are part of the procedure, so a failed open
-        /// or close is io_error as well.
+        /// or close is io_error as well. A charger in LED mode has no readable
+        /// state until VIN is reapplied: undetermined.
+        std::uint8_t saved;
+        switch (papermono_gate_open(true, &saved))
+        {
+        case papermono_gate_t::led_mode: return charge_state_t::undetermined;
+        case papermono_gate_t::error:    return charge_state_t::io_error;
+        default: break;
+        }
         charge_state_t res = charge_state_t::io_error;
         uint8_t chg_stat;
-        if (set_papermono_ip2315_enabled(true)
-         && wait_papermono_ip2315_ready()
+        if (wait_papermono_ip2315_ready()
          && M5.In_I2C.readRegister(ip2315_i2c_addr, 0xC7, &chg_stat, 1, i2c_freq))
         {
           res = (chg_stat & (1 << 7)) ? charge_state_t::charging : charge_state_t::not_charging;
         }
-        if (!set_papermono_ip2315_enabled(false)) { res = charge_state_t::io_error; }
+        if (!papermono_gate_close(saved, false)) { res = charge_state_t::io_error; }
         return res;
       }
 
