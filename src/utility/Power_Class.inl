@@ -443,6 +443,10 @@ namespace m5
       // TS senses the 5V bus (no battery thermistor). Its power-on default comes from the
       // EFUSE and differs between chips; when it is left as the temperature input, the
       // charger treats the bus voltage as a cold battery and never charges.
+      // The charge voltage (0x64) is not always at the datasheet default either: a unit read 0x00,
+      // which is reserved (4.6V in an early datasheet revision). The cell is a 4.2V type.
+      // Set it before the TS change below lets the charger start.
+      if (!Axp2101.setChargeVoltage(4200)) { ESP_LOGW("Power", "AXP2101: failed to set the charge voltage."); }
       Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
       // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
       // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
@@ -911,6 +915,8 @@ namespace m5
       // setExtOutput) makes the AXP2101 power itself off, and it stays off until the power
       // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
       Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
+      // Charge voltage: the power-on value may be reserved; see the CoreS3 setup.
+      if (!Axp2101.setChargeVoltage(4200)) { ESP_LOGW("Power", "AXP2101: failed to set the charge voltage."); }
       // No battery thermistor on TS (reads about 2.9V); see the CoreS3 setup.
       Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
 
