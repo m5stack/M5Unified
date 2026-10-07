@@ -1902,6 +1902,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
             board = board_t::board_M5Capsule;
             // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
             // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
+            // Release the Grove pins afterwards: left as push-pull outputs they keep driving High,
+            // and drivers that only enable the input (e.g. RMT RX on ESP-IDF 5.4+) cannot see the line.
+            m5gfx::gpio::pin_backup_t grove_backup[] = { GPIO_NUM_15, GPIO_NUM_13 };
             m5gfx::gpio::command(
               (const uint8_t[]) {
               m5gfx::gpio::command_mode_output, GPIO_NUM_15,
@@ -1913,6 +1916,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               m5gfx::gpio::command_end
               }
             );
+            for (auto &backup : grove_backup) {
+              backup.restore();
+            }
           }
         }
         for (auto &backup : pin_backup) {
