@@ -374,7 +374,7 @@ namespace m5
     /// step: use setBatteryCharge(false) to stop charging.
     /// @note applied_mA is left untouched when false is returned.
     /// @note CoreMatrix selects 180 mA below 650 mA, otherwise 650 mA.
-    /// @note ToughC5 selects 180 mA below 830 mA, otherwise 830 mA.
+    /// @note ToughC5 selects 180 mA below 650 mA, otherwise 650 mA.
     /// @note 0 is not a step: where a current path exists it selects the
     /// lowest one, and a warning is logged once. Use setBatteryCharge(false)
     /// to stop charging.
