@@ -380,7 +380,6 @@ namespace m5
 #endif
 #endif
         if (board == board_t::board_unknown) { board = Display.getBoardCandidate(); }
-        if (board == board_t::board_unknown) { board = _check_boardtype(board); }
         if (board == board_t::board_unknown) { board = _default_fallback_board(); }
       }
       _board = board;
@@ -784,7 +783,6 @@ namespace m5
     void _begin_audio(config_t& cfg);
     bool _begin_rtc_imu(const config_t& cfg);
 
-    board_t _check_boardtype(board_t);
     static board_t _default_fallback_board(void);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
