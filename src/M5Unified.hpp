@@ -364,6 +364,14 @@ namespace m5
       if (!board_detected)
       {
         board = cfg.fallback_board;
+        // UIFlow selects board-specific firmware with BOARD_ID and M5GFX_BOARD.
+#if defined (CONFIG_IDF_TARGET_ESP32P4) && defined (BOARD_ID)
+#if BOARD_ID == 31
+        if (board == board_t::board_unknown) { board = board_t::board_M5CoreP4X; }
+#elif BOARD_ID == 35
+        if (board == board_t::board_unknown) { board = board_t::board_M5Tab5X; }
+#endif
+#endif
         if (board == board_t::board_unknown) { board = Display.getBoardCandidate(); }
         if (board == board_t::board_unknown) { board = _check_boardtype(board); }
         if (board == board_t::board_unknown) { board = _default_fallback_board(); }

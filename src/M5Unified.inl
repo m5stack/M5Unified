@@ -1626,12 +1626,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
-      // Preserve legacy build-time selection before GPIO observations.
-#if defined (BOARD_ID) && BOARD_ID == 31
-      return board_t::board_M5CoreP4X;
-#elif defined (BOARD_ID) && BOARD_ID == 35
-      return board_t::board_M5Tab5X;
-#endif
       // GPIO observations remain here until the P4 family moves into the detector.
       m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
       m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
