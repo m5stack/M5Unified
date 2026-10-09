@@ -1623,32 +1623,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
   board_t M5Unified::_check_boardtype(board_t board)
   {
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    if (board == board_t::board_unknown)
-    {
-      // GPIO observations remain here until the P4 family moves into the detector.
-      m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
-      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-      if (m5gfx::gpio_in(GPIO_NUM_32))
-      {
-        esp_chip_info_t chip_info;
-        esp_chip_info(&chip_info);
-        board = chip_info.revision >= 300
-              ? board_t::board_M5Tab5X : board_t::board_M5Tab5;
-      }
-      else if (m5gfx::gpio_in(GPIO_NUM_0))
-      {
-        board = board_t::board_M5UnitPoEP4;
-      }
-      else
-      {
-        esp_chip_info_t chip_info;
-        esp_chip_info(&chip_info);
-        board = chip_info.revision >= 300
-              ? board_t::board_M5StampP4X : board_t::board_M5StampP4;
-      }
-    }
-#endif
     return board;
   }
 
@@ -1706,7 +1680,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     return board_t::board_M5StampC5;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    return board_t::board_M5Tab5;
+    // Unidentified P4 modules have no display or board-specific power contract.
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+    return info.revision >= 300 ? board_t::board_M5StampP4X : board_t::board_M5StampP4;
 #else
     return board_t::board_unknown;
 #endif
