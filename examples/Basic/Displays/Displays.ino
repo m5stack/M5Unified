@@ -43,7 +43,7 @@
 #include <M5UnitRCA.h>
 
 // If you use AddOn Display Out For PoE-P4, write this.
-#include <M5UnitPoEP4HDMI.h>
+#include <M5UnitPoEP4DisplayOut.h>
 
 // * The display header must be included before the M5Unified library.
 
@@ -67,7 +67,7 @@ void setup(void)
   cfg.external_display.unit_lcd       = false; // default=true. use UnitLCD
   cfg.external_display.unit_rca       = false; // default=true. use UnitRCA VideoOutput
   cfg.external_display.module_rca     = false; // default=true. use ModuleRCA VideoOutput
-  cfg.external_display.unit_poep4_hdmi = false; // default=true. use AddOn Display Out For PoE-P4
+  cfg.external_display.unit_poep4_display_out = false; // default=true. use AddOn Display Out For PoE-P4
 /*
 ※ Unit OLED, Unit Mini OLED, Unit GLASS2 cannot be distinguished at runtime and may be misidentified as each other.
 
@@ -167,15 +167,15 @@ void setup(void)
 // cfg.unit_lcd.i2c_freq = 400000;
 // cfg.unit_lcd.i2c_port = I2C_NUM_0;
 #endif
-#if defined ( __M5GFX_M5UNITPOEP4HDMI__ ) // setting for AddOn Display Out For PoE-P4.
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ ) // setting for AddOn Display Out For PoE-P4.
 // Supported timings only. Choose one of the following two modes:
-cfg.unit_poep4_hdmi.width = 1280;
-cfg.unit_poep4_hdmi.height = 720;
-cfg.unit_poep4_hdmi.refresh_rate = 60;
+cfg.unit_poep4_display_out.width = 1280;
+cfg.unit_poep4_display_out.height = 720;
+cfg.unit_poep4_display_out.refresh_rate = 60;
 
-// cfg.unit_poep4_hdmi.width = 1920;
-// cfg.unit_poep4_hdmi.height = 1080;
-// cfg.unit_poep4_hdmi.refresh_rate = 30;
+// cfg.unit_poep4_display_out.width = 1920;
+// cfg.unit_poep4_display_out.height = 1080;
+// cfg.unit_poep4_display_out.refresh_rate = 30;
 #endif
 
 
@@ -207,7 +207,7 @@ cfg.unit_poep4_hdmi.refresh_rate = 60;
 //    m5::board_t::board_M5UnitOLED,
 //    m5::board_t::board_M5UnitLCD,
 //    m5::board_t::board_M5UnitRCA,
-//    m5::board_t::board_M5UnitPoEP4HDMI
+//    m5::board_t::board_M5UnitPoEP4DisplayOut
   } );
 
 
@@ -225,7 +225,7 @@ cfg.unit_poep4_hdmi.refresh_rate = 60;
   int index_unit_mini_oled = M5.getDisplayIndex(m5::board_t::board_M5UnitMiniOLED);
   int index_unit_lcd = M5.getDisplayIndex(m5::board_t::board_M5UnitLCD);
   int index_unit_rca = M5.getDisplayIndex(m5::board_t::board_M5UnitRCA);
-  int index_unit_poep4_hdmi = M5.getDisplayIndex(m5::board_t::board_M5UnitPoEP4HDMI);
+  int index_unit_poep4_display_out = M5.getDisplayIndex(m5::board_t::board_M5UnitPoEP4DisplayOut);
   if (index_module_display >= 0) {
     M5.Displays(index_module_display).print("This is Module Display\n");
   }
@@ -253,8 +253,8 @@ cfg.unit_poep4_hdmi.refresh_rate = 60;
   if (index_unit_rca >= 0) {
     M5.Displays(index_unit_rca).print("This is Unit RCA\n");
   }
-  if (index_unit_poep4_hdmi >= 0) {
-    M5.Displays(index_unit_poep4_hdmi).print("This is Unit PoE-P4 HDMI\n");
+  if (index_unit_poep4_display_out >= 0) {
+    M5.Displays(index_unit_poep4_display_out).print("This is Unit PoE-P4 Display Out\n");
   }
   M5.delay(5000);
 }
