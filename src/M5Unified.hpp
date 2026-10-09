@@ -82,6 +82,10 @@ namespace m5
   class M5Unified
   {
   public:
+    // Suppress deprecated-member initialization in the implicit constructor;
+    // sketch accesses outside this definition still receive warnings.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     struct config_t
     {
 #if defined ( ARDUINO )
@@ -120,8 +124,9 @@ namespace m5
           uint16_t unit_glass2 : 1;
           uint16_t unit_rca : 1;
           uint16_t module_rca : 1;
-          uint16_t unit_poep4_hdmi : 1;
-          uint16_t reserve : 6;
+          uint16_t unit_poep4_display_out : 1;
+          uint16_t unit_poep4_hdmi : 1 __attribute__((deprecated("Use unit_poep4_display_out; after clearing external_display_value, the legacy bit alone cannot enable Display Out")));
+          uint16_t reserve : 5;
         } external_display;
         uint16_t external_display_value = 0xFFFF;
       };
@@ -200,13 +205,15 @@ namespace m5
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
 #endif
-#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
-      M5UnitPoEP4HDMI::config_t unit_poep4_hdmi;
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+      M5UnitPoEP4DisplayOut::config_t unit_poep4_display_out;
+      M5UnitPoEP4DisplayOut::config_t unit_poep4_hdmi __attribute__((deprecated("Use unit_poep4_display_out")));
 #endif
 #if defined ( __M5GFX_M5UNITRCA__ )
       M5UnitRCA::config_t unit_rca;
 #endif
     };
+#pragma GCC diagnostic pop
 
     M5GFX Display;  // setPrimaryされたディスプレイのインスタンス
     M5GFX &Lcd = Display;
@@ -364,6 +371,14 @@ namespace m5
       if (!board_detected)
       {
         board = cfg.fallback_board;
+        // UIFlow selects board-specific firmware with BOARD_ID and M5GFX_BOARD.
+#if defined (CONFIG_IDF_TARGET_ESP32P4) && defined (BOARD_ID)
+#if BOARD_ID == 31
+        if (board == board_t::board_unknown) { board = board_t::board_M5CoreP4X; }
+#elif BOARD_ID == 35
+        if (board == board_t::board_unknown) { board = board_t::board_M5Tab5X; }
+#endif
+#endif
         if (board == board_t::board_unknown) { board = Display.getBoardCandidate(); }
         if (board == board_t::board_unknown) { board = _check_boardtype(board); }
         if (board == board_t::board_unknown) { board = _default_fallback_board(); }
@@ -429,20 +444,27 @@ namespace m5
       _begin(cfg);
 
 
-      // Unit PoEP4 has no built-in LCD; attach its LT8912B HDMI output as a board display.
-#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
-      if (cfg.external_display.unit_poep4_hdmi && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
+      // Unit PoEP4 has no built-in LCD; attach its LT8912B Display Out as a board display.
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+      // Either spelling can disable the addon; bit 9 keeps its raw-mask meaning.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      const bool use_poep4_display_out = cfg.external_display.unit_poep4_hdmi
+                                     && cfg.external_display.unit_poep4_display_out;
+#pragma GCC diagnostic pop
+      if (use_poep4_display_out && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
       {
+        auto& display_out_cfg = _select_poep4_display_out_config(cfg);
         // The bridge sits on the internal bus: unless the sketch chose a bus itself, share
         // In_I2C's port and pins (lgfx::i2c underneath both). A partly filled config is
         // completed from In_I2C too, with a warning, so nothing is mixed silently.
         {
-          auto& h = cfg.unit_poep4_hdmi;
+          auto& h = display_out_cfg;
           const bool none = (h.i2c_port < 0 && h.pin_sda < 0 && h.pin_scl < 0);
           const bool all  = (h.i2c_port >= 0 && h.pin_sda >= 0 && h.pin_scl >= 0);
 #if defined (ESP_LOGW)
           if (!none && !all) {
-            ESP_LOGW("M5Unified", "unit_poep4_hdmi: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
+            ESP_LOGW("M5Unified", "unit_poep4_display_out: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
           }
 #else
           (void)none; (void)all;
@@ -451,7 +473,7 @@ namespace m5
           if (h.pin_sda < 0) { h.pin_sda = In_I2C.getSDA(); }
           if (h.pin_scl < 0) { h.pin_scl = In_I2C.getSCL(); }
         }
-        M5UnitPoEP4HDMI dsp(cfg.unit_poep4_hdmi);
+        M5UnitPoEP4DisplayOut dsp(display_out_cfg);
         if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
           addDisplay(dsp);
         }
@@ -692,6 +714,45 @@ namespace m5
     IOExpander_Base& getIOExpander(size_t idx) { return *_io_expander[idx & 1]; };
 
   private:
+
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+    static bool _poep4_display_out_config_changed(const M5UnitPoEP4DisplayOut::config_t& cfg)
+    {
+      const M5UnitPoEP4DisplayOut::config_t defaults{};
+      return cfg.width != defaults.width
+          || cfg.height != defaults.height
+          || cfg.refresh_rate != defaults.refresh_rate
+          || cfg.fb_num != defaults.fb_num
+          || cfg.dsi_bus_id != defaults.dsi_bus_id
+          || cfg.dsi_lane_num != defaults.dsi_lane_num
+          || cfg.dsi_lane_mbps != defaults.dsi_lane_mbps
+          || cfg.dsi_ldo_chan_id != defaults.dsi_ldo_chan_id
+          || cfg.dsi_ldo_voltage_mv != defaults.dsi_ldo_voltage_mv
+          || cfg.i2c_freq != defaults.i2c_freq
+          || cfg.output_depth != defaults.output_depth
+          || cfg.i2c_port != defaults.i2c_port
+          || cfg.pin_sda != defaults.pin_sda
+          || cfg.pin_scl != defaults.pin_scl
+          || cfg.i2c_master_bus != defaults.i2c_master_bus;
+    }
+
+    static M5UnitPoEP4DisplayOut::config_t& _select_poep4_display_out_config(config_t& cfg)
+    {
+      // Separate live objects avoid inactive-union-member access. Changed legacy
+      // settings take precedence, including when both spellings were configured.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      if (_poep4_display_out_config_changed(cfg.unit_poep4_hdmi))
+      {
+#if defined (ESP_LOGW)
+        ESP_LOGW("M5Unified", "Deprecated unit_poep4_hdmi settings override unit_poep4_display_out");
+#endif
+        return cfg.unit_poep4_hdmi;
+      }
+#pragma GCC diagnostic pop
+      return cfg.unit_poep4_display_out;
+    }
+#endif
     /// Power_Class needs to release the interrupt path of the wakeup pin before sleeping,
     /// which requires knowledge of how the board is wired. That knowledge lives here.
     friend class Power_Class;
