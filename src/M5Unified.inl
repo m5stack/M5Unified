@@ -1621,11 +1621,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #endif
   }
 
-  board_t M5Unified::_check_boardtype(board_t board)
-  {
-    return board;
-  }
-
   board_t M5Unified::_default_fallback_board(void)
   {
     // Build selection follows explicit fallback and detector candidates.
