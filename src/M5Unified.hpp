@@ -159,27 +159,9 @@ namespace m5
       /// system LED brightness (0=off / 255=max) (※ not RGBcolorLED)
       uint8_t led_brightness = 0;
 
-      /// If auto-detection fails, the board will operate as the board configured here.
-      board_t fallback_board
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-                             = board_t::board_M5AtomS3Lite;
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-                             = board_t::board_M5StampC3;
-#elif defined (CONFIG_IDF_TARGET_ESP32P4)
-#if defined (BOARD_ID) && BOARD_ID == 31
-                             = board_t::board_M5CoreP4X;
-#elif defined (BOARD_ID) && BOARD_ID == 35
-                             = board_t::board_M5Tab5X;
-#else
-                             = board_t::board_M5Tab5;
-#endif
-#elif defined (CONFIG_IDF_TARGET_ESP32C5)
-                             = board_t::board_M5StampC5;
-#elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
-                             = board_t::board_M5AtomLite;
-#else
-                             = board_t::board_unknown;
-#endif
+      /// Explicit override when detection cannot confirm a board; unknown uses
+      /// the detector's candidate, then the build and chip defaults.
+      board_t fallback_board = board_t::board_unknown;
 
       union
       {
@@ -376,11 +358,25 @@ namespace m5
       } else {
         res = Display.init_without_reset(false);
       }
-      auto board = _check_boardtype(Display.getBoard());
+      auto board = Display.getBoard();
       // printf("auto detect board:%d\n",board);
       bool board_detected = (board != board_t::board_unknown);
-      if (!board_detected) { board = cfg.fallback_board; }
+      if (!board_detected)
+      {
+        board = cfg.fallback_board;
+        if (board == board_t::board_unknown) { board = Display.getBoardCandidate(); }
+        if (board == board_t::board_unknown) { board = _check_boardtype(board); }
+        if (board == board_t::board_unknown) { board = _default_fallback_board(); }
+      }
       _board = board;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      if (board == board_t::board_M5DualKey)
+      {
+        // Keep DualKey switch pins released regardless of how it was selected.
+        m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input);
+        m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input);
+      }
+#endif
       _setup_pinmap(board);
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
       if (!gpio46_hold && getPin(pin_name_t::power_hold) == GPIO_NUM_46)
@@ -388,10 +384,10 @@ namespace m5
         m5gfx::gpio_hi(GPIO_NUM_46);
         m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
       }
-      // Restore only on boards positively identified as exposing GPIO46 to the application
-      // (camera VSYNC / data, header pin); every other case (power hold, display bus pins
-      // configured by Display.init(), a fallback board) keeps the previous behaviour.
-      switch (board_detected && gpio46_hold ? board : board_t::board_unknown)
+      // Restore GPIO46 on boards exposing it to the application, including
+      // candidates and package defaults, as the legacy detector did. Power hold
+      // and display bus pins configured by Display.init() retain their state.
+      switch (gpio46_hold ? board : board_t::board_unknown)
       {
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackCoreS3SE:
@@ -728,6 +724,7 @@ namespace m5
     bool _begin_rtc_imu(const config_t& cfg);
 
     board_t _check_boardtype(board_t);
+    static board_t _default_fallback_board(void);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
     /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
