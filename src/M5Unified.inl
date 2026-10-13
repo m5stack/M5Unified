@@ -2250,6 +2250,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if !defined (M5UNIFIED_PC_BUILD)
     int led_count = 1;
     int byte_per_led = 3;
+    int pin_power = -1;
     switch (board)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -2273,6 +2274,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PaperColor:
       led_count = 2;
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_M5NanoC6:
+      pin_power = GPIO_NUM_19;  // RGB LED power switch
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32H2)
+    case board_t::board_M5NanoH2:
+      pin_power = GPIO_NUM_10;  // RGB LED power switch
+      break;
 #else
     case board_t::board_M5AtomMatrix:
       led_count = 25;
@@ -2288,6 +2297,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       auto busled = std::make_shared<m5::LedBus_RMT>();
       auto buscfg = busled->getConfig();
       buscfg.pin_data = pin_rgb_led;
+      buscfg.pin_power = pin_power;
       busled->setConfig(buscfg);
       auto led_strip = std::make_shared<m5::LED_Strip_Class>();
       auto ledcfg = led_strip->getConfig();
