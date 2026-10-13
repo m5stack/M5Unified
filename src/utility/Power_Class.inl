@@ -425,6 +425,14 @@ namespace m5
       , 0x30, 0x0F // ADC enabled (for voltage measurement)
       };
       Axp2101.writeRegister8Array(reg_data_array, sizeof(reg_data_array));
+      // TS senses the 5V bus (no battery thermistor). Its power-on default comes from the
+      // EFUSE and differs between chips; when it is left as the temperature input, the
+      // charger treats the bus voltage as a cold battery and never charges.
+      // The charge voltage (0x64) is not always at the datasheet default either: a unit read 0x00,
+      // which is reserved (4.6V in an early datasheet revision). The cell is a 4.2V type.
+      // Set it before the TS change below lets the charger start.
+      Axp2101.setChargeVoltage(4200);
+      Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
       // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
       // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
       // AXP2101 IRQ pin is shared with the RTC INT, so neither reaches the ESP32.
@@ -863,6 +871,10 @@ namespace m5
       // setExtOutput) makes the AXP2101 power itself off, and it stays off until the power
       // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
       Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
+      // Charge voltage: the power-on value may be reserved; see the CoreS3 setup.
+      Axp2101.setChargeVoltage(4200);
+      // No battery thermistor on TS (reads about 2.9V); see the CoreS3 setup.
+      Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
 
       // for Core2 v1.1 (AXP2101+INA3221)
       if (Ina3221[0].begin())
@@ -907,6 +919,50 @@ namespace m5
     _core_s3_lock_t(void) : mutex { _core_s3_mutex() }, locked { mutex != nullptr && xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE } {}
     ~_core_s3_lock_t(void) { if (locked) { xSemaphoreGive(mutex); } }
   };
+
+  // Before BUS_OUT_EN goes 0 -> 1, precharge BUS_OUT with short pulses of growing on-time.
+  // Connecting the empty BUS_OUT at once on a weak USB supply pulls the AXP2101 DCDC under
+  // its threshold through the inrush, and the PMIC powers the board off.
+  // BUS_OUT has a constant discharge path, so short fixed pulses do not accumulate. Once it
+  // passes about 1.7 V it is pulled up from VBUS even with BUS_OUT_EN = 0, and the final
+  // enable is a small step. Each on-time is one register write (about 0.3 ms at 100 kHz)
+  // plus i * 16 us; M5GFX's board detection runs the same sequence at 100 kHz.
+  // After a failed on- or off-pulse write, OFF is rewritten and read back up to three times:
+  // confirmed off aborts a failed on-pulse or continues the ramp after a failed off-pulse,
+  // still on goes to the final enable, and an unknown state returns false.
+  static bool _core_s3_bus_precharge(uint8_t port0_off)
+  {
+    static constexpr const uint8_t port0_reg = 0x02;
+    enum class off_state_t { unknown, off, on };
+    auto confirm_off = [&]() {
+      uint8_t cur = 0;
+      bool read_ok = false;
+      for (int retry = 0; retry < 3; ++retry)
+      {
+        M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq);
+        read_ok = M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq);
+        if (read_ok && !(cur & _core_s3_bus_en)) { return off_state_t::off; }
+      }
+      return read_ok ? off_state_t::on : off_state_t::unknown;
+    };
+    for (int i = 0; i < 8; ++i)
+    {
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off | _core_s3_bus_en, i2c_freq))
+      {
+        if (confirm_off() == off_state_t::on) { break; }
+        return false;
+      }
+      m5gfx::delayMicroseconds(i * 16);
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, port0_off, i2c_freq))
+      {
+        const auto state = confirm_off();
+        if (state == off_state_t::unknown) { return false; }
+        if (state == off_state_t::on) { break; }
+      }
+      m5gfx::delayMicroseconds(1000);
+    }
+    return true;
+  }
 
   static void _core_s3_output_locked(uint8_t mask, bool enable)
   {
@@ -974,6 +1030,20 @@ namespace m5
     if (enable)
     {
       if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return; }
+      if ((mask & _core_s3_bus_en) && !(orig[0] & _core_s3_bus_en))
+      {
+        if (!_core_s3_bus_precharge(orig[0])) { return; }
+        // A precharged BUS_OUT left with BUS_OUT_EN = 0 is pulled up from VBUS, and every later
+        // enable is then cancelled by the TS check; read the final write back, bounded retries.
+        for (int retry = 0; retry < 3; ++retry)
+        {
+          uint8_t cur;
+          if (M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)
+           && M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq)
+           && cur == buf[0]) { return; }
+        }
+        return;
+      }
       M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
     }
     else
@@ -2646,11 +2716,11 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       if (M5.getBoard() == board_t::board_M5ToughC5)
       {
-        // ToughC5 CHG_PROG is IOE1 G1: low selects 830 mA, high selects 180 mA.
+        // ToughC5 CHG_PROG is IOE1 G1: low selects 650 mA, high selects 180 mA.
         // Set the latch before enabling push-pull output to avoid a transient
         // selection of the opposite current during the mode transition.
         auto& ioe1 = M5.getIOExpander(0);
-        const bool select_180mA = max_mA < 830;
+        const bool select_180mA = max_mA < 650;
         ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
         ioe1.digitalWrite(M5IOE1_Class::gpio1, select_180mA);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);

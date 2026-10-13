@@ -574,8 +574,22 @@ namespace m5
         if (buf_cnt)
         { // (no data... wait for new data)
           --buf_cnt;
-          uint32_t wait_msec = 1 + (self->_cfg.dma_buf_len / (spk_sample_rate_x256 >> 17));
-          flg_nodata = (0 == ulTaskNotifyTake( pdFALSE, wait_msec ));
+          if (self->_cfg.buzzer)
+          {
+            uint32_t wait_msec = 1 + (self->_cfg.dma_buf_len / (spk_sample_rate_x256 >> 17));
+            flg_nodata = (0 == ulTaskNotifyTake( pdFALSE, wait_msec ));
+          }
+          else
+          { // Keep the DMA fed at the hold level instead of sleeping. A timed wait can let the
+            // DMA reach the auto-cleared buffers, which output 0 (on the DAC, a drop to the zero
+            // level and a jump back to the bias). The blocking write paces this loop.
+            uint32_t hold = self->_cfg.use_dac ? (uint32_t)(dac_offset | dac_offset << 16) : 0u;
+            size_t words = dma_buf_len >> 1;
+            for (size_t i = 0; i < words; ++i) { sound_buf32[i] = hold; }
+            size_t write_bytes;
+            _spk_i2s_write(i2s_port, sound_buf32, words * sizeof(int32_t), &write_bytes, portMAX_DELAY);
+            flg_nodata = (0 == ulTaskNotifyTake( pdFALSE, 0 ));
+          }
         }
 
         if (flg_nodata && 0 == buf_cnt)

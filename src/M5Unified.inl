@@ -1902,6 +1902,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
             board = board_t::board_M5Capsule;
             // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
             // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
+            // Release the Grove pins afterwards: left as push-pull outputs they keep driving High,
+            // and drivers that only enable the input (e.g. RMT RX on ESP-IDF 5.4+) cannot see the line.
+            m5gfx::gpio::pin_backup_t grove_backup[] = { GPIO_NUM_15, GPIO_NUM_13 };
             m5gfx::gpio::command(
               (const uint8_t[]) {
               m5gfx::gpio::command_mode_output, GPIO_NUM_15,
@@ -1913,6 +1916,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               m5gfx::gpio::command_end
               }
             );
+            for (auto &backup : grove_backup) {
+              backup.restore();
+            }
           }
         }
         for (auto &backup : pin_backup) {
@@ -2250,6 +2256,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if !defined (M5UNIFIED_PC_BUILD)
     int led_count = 1;
     int byte_per_led = 3;
+    int pin_power = -1;
     switch (board)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -2273,6 +2280,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PaperColor:
       led_count = 2;
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_M5NanoC6:
+      pin_power = GPIO_NUM_19;  // RGB LED power switch
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32H2)
+    case board_t::board_M5NanoH2:
+      pin_power = GPIO_NUM_10;  // RGB LED power switch
+      break;
 #else
     case board_t::board_M5AtomMatrix:
       led_count = 25;
@@ -2288,6 +2303,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       auto busled = std::make_shared<m5::LedBus_RMT>();
       auto buscfg = busled->getConfig();
       buscfg.pin_data = pin_rgb_led;
+      buscfg.pin_power = pin_power;
       busled->setConfig(buscfg);
       auto led_strip = std::make_shared<m5::LED_Strip_Class>();
       auto ledcfg = led_strip->getConfig();

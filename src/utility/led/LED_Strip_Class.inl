@@ -141,6 +141,14 @@ namespace m5
     // The RMT driver does not clear a stale open-drain pad flag. (ESP-IDF v6 removed io_od_mode)
     m5gfx::gpio_lo(_config.pin_data);
     m5gfx::pinMode(_config.pin_data, m5gfx::pin_mode_t::output);
+    if (_config.pin_power >= 0)
+    {
+      m5gfx::gpio_hi(_config.pin_power);
+      m5gfx::pinMode(_config.pin_power, m5gfx::pin_mode_t::output);
+      // A frame sent right after switching the supply on is lost (measured on NanoC6 / NanoH2:
+      // 0 ms fails, 1 ms works); give the LEDs a few ms to come up.
+      m5gfx::delay(5);
+    }
 
     rmt_tx_channel_config_t rmt_tx;
     memset(&rmt_tx, 0, sizeof(rmt_tx));
@@ -174,6 +182,10 @@ namespace m5
   }
   void LedBus_RMT::release(void)
   {
+    if (_config.pin_power >= 0)
+    {
+      m5gfx::gpio_lo(_config.pin_power);
+    }
 #if M5UNIFIED_RMT_VERSION == 2
     auto rmt_ch_handle = _rmt_ch_handle;
     auto led_encoder = _led_encoder;
