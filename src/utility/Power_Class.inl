@@ -2652,11 +2652,11 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       if (M5.getBoard() == board_t::board_M5ToughC5)
       {
-        // ToughC5 CHG_PROG is IOE1 G1: low selects 830 mA, high selects 180 mA.
+        // ToughC5 CHG_PROG is IOE1 G1: low selects 650 mA, high selects 180 mA.
         // Set the latch before enabling push-pull output to avoid a transient
         // selection of the opposite current during the mode transition.
         auto& ioe1 = M5.getIOExpander(0);
-        const bool select_180mA = max_mA < 830;
+        const bool select_180mA = max_mA < 650;
         ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
         ioe1.digitalWrite(M5IOE1_Class::gpio1, select_180mA);
         ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
