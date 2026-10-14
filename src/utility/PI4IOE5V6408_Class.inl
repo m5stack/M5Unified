@@ -17,9 +17,10 @@ namespace m5
 {
 bool PI4IOE5V6408_Class::begin()
 {
-    auto id = readRegister8(0x01);
-    if (id == 0) return false;
-    return true;
+    uint8_t id;
+    // Recheck the current address and port on every begin, including after reconnect.
+    _init = readRegister(0x01, &id, 1) && id != 0;
+    return _init;
 }
 
 // false input, true output
@@ -81,6 +82,16 @@ bool PI4IOE5V6408_Class::digitalRead(uint8_t pin)
 {
     auto data = readRegister8(0x0F);
     return (data & (1 << pin)) != 0;
+}
+
+bool PI4IOE5V6408_Class::getInputLevel(uint8_t pin, bool* level)
+{
+    if (pin >= 8 || level == nullptr) { return false; }
+    uint8_t value;
+    // Preserve the caller's value when the input register cannot be read.
+    if (!readRegister(0x0F, &value, 1)) { return false; }
+    *level = (value & (1 << pin)) != 0;
+    return true;
 }
 
 bool PI4IOE5V6408_Class::resetIrq()
