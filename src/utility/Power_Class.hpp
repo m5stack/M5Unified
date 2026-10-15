@@ -293,6 +293,7 @@ namespace m5
     void powerOff(void);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param seconds Number of seconds to boot.
     /// @return If this function returns, sleep was not entered and the result is false. Reasons include
     ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure, ESP timer wakeup
@@ -306,6 +307,7 @@ namespace m5
     bool timerSleep(int seconds);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
     /// @return If this function returns, sleep was not entered and the result is false. Reasons include
     ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure,
@@ -323,6 +325,7 @@ namespace m5
     bool timerSleep(const rtc_time_t& time);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param date Date to boot. (only date and weekDay can be specified. Ignore year and month)
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
     /// @return If this function returns, sleep was not entered and the result is false. Reasons include
@@ -390,6 +393,8 @@ namespace m5
     /// @return true if the path exists and the write succeeded.
     /// @note The step selection rule is the same as setChargeCurrent.
     /// @note applied_mV is left untouched when false is returned.
+    /// @note IP5306 steps and applied_mV are nominal values. The chip charges
+    ///       at that value plus 28 mV for 4.2 V, or plus 14 mV for other steps.
     /// @attention Returns false on models without a voltage control path; see
     /// getChargeControlCaps(). The M5Stack with a non-I2C IP5306 also returns false.
     bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
@@ -420,18 +425,16 @@ namespace m5
     charge_state_t getChargeState(void);
 
     /// Get the set of states this model can report.
-    /// @param caps output parameter, receives the set of reportable states.
-    /// @return false before M5.begin() has completed. caps is left untouched then.
-    /// @note An empty set after M5.begin() means getChargeState() always answers
-    /// unsupported. The set is decided once during M5.begin() and does not
-    /// change afterwards: a communication failure is reported as io_error and
-    /// never shrinks the set. The one exception is a board that carries either
-    /// an AXP192 or an AXP2101 whose chip-ID probes all failed during
-    /// M5.begin(): it runs with the board default (AXP192) until an explicit
-    /// M5.Power.begin() gets a positive ID, which can widen the set.
-    bool getChargeStateCaps(charge_state_set_t* caps);
+    /// @return The reportable states, or an empty set before M5.begin() completes,
+    ///         on unsupported models, or while the PMIC identity is unconfirmed.
+    /// @note For these three cases getChargeState() returns not_initialized / unsupported / io_error, respectively.
+    /// @note Once the PMIC is identified, a communication failure is reported
+    /// as io_error and never shrinks the set. If all AXP192 / AXP2101 chip-ID
+    /// probes failed during M5.begin(), an explicit M5.Power.begin() with a
+    /// positive ID makes the reportable set available.
+    charge_state_set_t getChargeStateCaps(void);
 
-    /// @return true if the caps could be obtained and they contain the state.
+    /// @return true if the reportable state set contains the state.
     bool canReport(charge_state_t state);
 
     /// Get whether the battery is currently charging or not.
@@ -596,7 +599,7 @@ namespace m5
     bool _identity_unconfirmed = false;   ///< every chip-ID probe failed: the board default is provisional (see begin())
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
-    bool _poweroff_requested = false;
+    bool _poweroff_requested = false;  ///< latched for this boot once PowerHub accepts a power-off request
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
     uint8_t _batAdcCh;

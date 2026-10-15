@@ -907,10 +907,10 @@ namespace m5
         m5gfx::delay(1);
       }
       /// Without a positive ID the board default stays provisional: the
-      /// capability set is published as the default, but the charge state
-      /// API reports io_error and the charge setters refuse, so a chip that
-      /// was never identified is not read or written with the wrong
-      /// register map. A later begin() probes again.
+      /// charge-state capability set is empty, getChargeState() reports
+      /// io_error, and charge setters refuse the unconfirmed register map.
+      /// A later explicit begin() probes again; a positive ID makes the
+      /// charge-state capability set available.
       _identity_unconfirmed = !_identity_settled;
     }
 
@@ -2056,14 +2056,26 @@ namespace m5
         // limitation of the "returned means still awake" contract.
         static constexpr uint32_t powerhub_poweroff_timeout_ms = 3000;
         if (withTimer) { m5gfx::delay(powerhub_alarm_settle_ms); }
+        uint8_t saved[5];
+        const bool saved_ok = M5.In_I2C.readRegister(powerhub_i2c_addr, 0x01, saved, sizeof(saved), i2c_freq);
+        auto restore_powerhub = [&]() {
+          // Restore outputs and measurement, or at least begin()'s measurement setting.
+          const bool restored = saved_ok
+              ? M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x01, saved, sizeof(saved), i2c_freq)
+              : M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq);
+          if (!restored) { M5_LOGE("_powerOff: PowerHub state could not be restored."); }
+        };
         uint8_t buf[6]={};
         M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
         if (!M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq))
         {
+          restore_powerhub();
           return cancel_sleep("PowerHub did not accept the power-off request.");
         }
         _poweroff_requested = true;
         for (uint32_t waited = 0; waited < powerhub_poweroff_timeout_ms; waited += 100) { m5gfx::delay(100); }
+        // Outputs may briefly return before a delayed accepted power-off takes effect.
+        restore_powerhub();
         return cancel_sleep("PowerHub did not power off.");
       }
 #endif
@@ -2410,6 +2422,11 @@ namespace m5
     M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
     return false;
 #endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
     if (rtc_enabled)
     {
       bool irq_disabled = M5.Rtc.disableIRQ();
@@ -2484,6 +2501,11 @@ namespace m5
     M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
     return false;
 #endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
     if (M5.Rtc.isEnabled())
     {
       bool irq_disabled = M5.Rtc.disableIRQ();
@@ -2532,6 +2554,11 @@ namespace m5
     M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
     return false;
 #endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
     if (M5.Rtc.isEnabled())
     {
       bool irq_disabled = M5.Rtc.disableIRQ();
@@ -3524,17 +3551,15 @@ namespace m5
     return charge_state_set_t();
   }
 
-  bool Power_Class::getChargeStateCaps(charge_state_set_t* caps)
+  charge_state_set_t Power_Class::getChargeStateCaps(void)
   {
-    if (!_initialized || caps == nullptr) { return false; }
-    *caps = _charge_state_caps(_pmic, M5.getBoard());
-    return true;
+    if (!_initialized || _identity_unconfirmed) { return charge_state_set_t(); }
+    return _charge_state_caps(_pmic, M5.getBoard());
   }
 
   bool Power_Class::canReport(charge_state_t state)
   {
-    charge_state_set_t caps;
-    return getChargeStateCaps(&caps) && caps.contains(state);
+    return getChargeStateCaps().contains(state);
   }
 
   std::uint8_t Power_Class::getChargeControlCaps(void)
