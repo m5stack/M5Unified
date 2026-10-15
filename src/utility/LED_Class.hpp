@@ -43,7 +43,7 @@ namespace m5
       _set_colors(index, length, &pc);
     }
 
-    LED_Base::led_type_t getLedType(size_t index) const;
+    LED_Base::led_type_t getLedType(size_t index) const { return _led_instance ? _led_instance->getLedType(index) : LED_Base::led_type_unknown; }
     bool isEnabled(void) const { return _led_instance.get() != nullptr; }
     LED_Base* getLedInstancePtr(void) const { return _led_instance.get(); }
     void setLedInstance(std::shared_ptr<LED_Base> instance) { _led_instance = instance; }
