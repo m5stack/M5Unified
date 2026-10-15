@@ -57,12 +57,13 @@ namespace m5
     bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
 
     /// set battery charge voltage
-    /// @param max_mV milli volt. The steps are the effective values including
-    /// the constant-voltage boost the datasheet recommends: 4228 / 4314 /
-    /// 4364 / 4414 mV. The highest step not above max_mV is selected, and a
-    /// request under the lowest step selects that step.
-    /// @param applied_mV optional. receives the effective step that was applied.
+    /// @param max_mV milli volt. Nominal steps: 4200 / 4300 / 4350 / 4400 mV.
+    /// The highest step not above max_mV is selected; a request below the
+    /// lowest step selects that step.
+    /// @param applied_mV optional. receives the nominal step that was applied.
     /// @return false on I2C failure. applied_mV is left untouched then.
+    /// @note The IP5306 charges at the nominal step plus 28 mV for 4.2 V,
+    ///       or plus 14 mV for the other steps.
     bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
 
     /// Get whether the battery is currently charging or not.

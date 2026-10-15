@@ -108,12 +108,8 @@ namespace m5
   }
 
   bool IP5306_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
-  { /// reg CHG_CTL2 selects the constant-voltage target plus the boost the
-    /// datasheet recommends for each step (28mV at 4.2V, 14mV above). The
-    /// cell sees the sum, so the steps are compared and reported as the
-    /// effective values: the highest one not above the request, clamped up to
-    /// the lowest when the request is under all of them.
-    static constexpr std::uint16_t table[4] = { 4228, 4314, 4364, 4414 };
+  { // Select and report the nominal target; boost remains in the register value.
+    static constexpr std::uint16_t table[4] = { 4200, 4300, 4350, 4400 };
     static constexpr std::uint8_t regdata[4] =
       { 0x02 // 4.2v  + boost 28mV
       , 0x05 // 4.3v  + boost 14mV
