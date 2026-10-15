@@ -72,7 +72,9 @@ namespace m5
 #if defined (SDL_h_)
   esp_err_t Speaker_Class::_setup_i2s(void)
   {
-    return ESP_OK;
+    // Initialize on the caller before the playback thread starts, through
+    // the same serialized entry point used by microphone capture.
+    return detail::init_sdl_audio() ? ESP_OK : ESP_FAIL;
   }
 #else
 
@@ -381,7 +383,6 @@ namespace m5
 
 #if defined (SDL_h_)
 
-    SDL_Init(SDL_INIT_AUDIO);
     SDL_AudioSpec fmt;
     fmt.freq = self->_cfg.sample_rate;
     fmt.format = AUDIO_S16LSB;

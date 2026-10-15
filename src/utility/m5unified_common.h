@@ -15,6 +15,21 @@
 
 #if defined ( M5UNIFIED_PC_BUILD )
 
+namespace m5 { namespace detail {
+  inline bool init_sdl_audio(void)
+  {
+    // A function-local static in an external inline function is shared
+    // across translation units. Serialize the check and initialization:
+    // another SDL audio initialization can close an already-open device.
+    static SDL_SpinLock lock = 0;
+    SDL_AtomicLock(&lock);
+    const bool ready = SDL_WasInit(SDL_INIT_AUDIO)
+                    || SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
+    SDL_AtomicUnlock(&lock);
+    return ready;
+  }
+}}
+
 typedef int esp_err_t;
 typedef int i2c_port_t;
 
