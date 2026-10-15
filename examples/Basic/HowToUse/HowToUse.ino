@@ -287,7 +287,7 @@ void setup(void)
   case m5::board_t::board_M5StampS3:        name = "StampS3";        break;
   case m5::board_t::board_M5StampS3Bat:     name = "StampS3Bat";     break;
   case m5::board_t::board_M5StampS3Mini:    name = "StampS3Mini";    break;
-  case m5::board_t::board_M5StampPLC:       name = "StampPLC";       break;
+  case m5::board_t::board_M5StamPLC:        name = "StamPLC";        break;
   case m5::board_t::board_M5AtomS3U:        name = "ATOMS3U";        break;
   case m5::board_t::board_M5AtomS3Lite:     name = "ATOMS3Lite";     break;
   case m5::board_t::board_M5AtomS3:         name = "ATOMS3";         break;

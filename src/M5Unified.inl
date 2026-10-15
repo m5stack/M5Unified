@@ -118,7 +118,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperDIY   , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_42,GPIO_NUM_41 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5StamPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
 { board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
 { board_t::board_M5PaperColor , GPIO_NUM_2 ,GPIO_NUM_3  , GPIO_NUM_5 ,GPIO_NUM_4  },
@@ -225,7 +225,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 { board_t::board_M5CardputerADV,GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, 255        , 255       , GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5PaperDIY   , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  255        , 255       , GPIO_NUM_10 },
+{ board_t::board_M5StamPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  255        , 255       , GPIO_NUM_10 },
 { board_t::board_M5PaperColor , GPIO_NUM_15, GPIO_NUM_13, GPIO_NUM_14, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5PaperMono  , GPIO_NUM_13, GPIO_NUM_12, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -254,7 +254,7 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5AtomS3Lite , GPIO_NUM_35 },
 { board_t::board_M5StampS3    , GPIO_NUM_21 },
 { board_t::board_M5DualKey    , GPIO_NUM_21 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_21 },
+{ board_t::board_M5StamPLC   , GPIO_NUM_21 },
 { board_t::board_M5AirQ       , GPIO_NUM_21 },
 { board_t::board_M5Dial       , GPIO_NUM_21 },
 { board_t::board_M5DinMeter   , GPIO_NUM_21 },
@@ -1766,7 +1766,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       {
         auto ioexp = new PI4IOE5V6408_Class;
         ioexp->begin();
@@ -2052,7 +2052,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
       break;
 
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       {
         auto& ioexp = getIOExpander(0);
         // lcd backlight
@@ -2695,7 +2695,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         }
         break;
 
-      case board_t::board_M5StampPLC:
+      case board_t::board_M5StamPLC:
         if (cfg.internal_spk)
         {
           spk_cfg.pin_data_out = GPIO_NUM_44;
@@ -3171,7 +3171,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                         | ((!m5gfx::gpio_in(GPIO_NUM_0)) & 1) << 1;
       break;
 
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
     {
       use_rawstate_bits = 0b00111;
       uint8_t value = 0xFF;
