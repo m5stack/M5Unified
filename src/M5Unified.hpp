@@ -125,8 +125,7 @@ namespace m5
           uint16_t unit_rca : 1;
           uint16_t module_rca : 1;
           uint16_t unit_poep4_display_out : 1;
-          uint16_t unit_poep4_hdmi : 1 __attribute__((deprecated("Use unit_poep4_display_out; after clearing external_display_value, the legacy bit alone cannot enable Display Out")));
-          uint16_t reserve : 5;
+          uint16_t reserve : 6;
         } external_display;
         uint16_t external_display_value = 0xFFFF;
       };
@@ -459,13 +458,7 @@ namespace m5
 
       // Unit PoEP4 has no built-in LCD; attach its LT8912B Display Out as a board display.
 #if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
-      // Either spelling can disable the addon; bit 9 keeps its raw-mask meaning.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-      const bool use_poep4_display_out = cfg.external_display.unit_poep4_hdmi
-                                     && cfg.external_display.unit_poep4_display_out;
-#pragma GCC diagnostic pop
-      if (use_poep4_display_out && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
+      if (cfg.external_display.unit_poep4_display_out && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
       {
         auto& display_out_cfg = _select_poep4_display_out_config(cfg);
         // The bridge sits on the internal bus: unless the sketch chose a bus itself, share
