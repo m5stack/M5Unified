@@ -49,6 +49,8 @@ namespace m5
     }
 
     writeRegister8(CMD_REG_ADDR, SOFT_RESET_CMD); // software reset.
+    // Bosch requires 2 ms after soft reset. Add one tick to cover tick phase.
+    vTaskDelay(pdMS_TO_TICKS(2) + 1);
     {
       int retry = 16;
       do { vTaskDelay(1); }
