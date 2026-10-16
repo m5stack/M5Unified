@@ -1187,7 +1187,7 @@ namespace m5
         m5gfx::delay(200);
         uint8_t cur[2];
         if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
-        if (cur[1] & port1_bitmask_boost) { return false; } // BOOST_EN が立て直されている: 放電を保証できないので出力を有効のまま残す (要求は未達)
+        if (cur[1] & port1_bitmask_boost) { return false; } // BOOST_EN was set again: discharge cannot be guaranteed, so leave the output enabled (request not met)
         cur[0] &= ~mask;
         if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
         return true;
@@ -1244,8 +1244,8 @@ namespace m5
     return raw > 4000;                                        // 2.0V
   }
 
-  // @return true = 要求状態へ遷移できた。false = cancel した / 排他を取れない / 後発の要求に破棄された / 書込失敗。
-  //   cancel だけは呼び出し側で警告を出すため、cancelled で区別して返す。
+  // @return true = reached the requested state. false = cancelled / could not take the lock / superseded by a
+  //   later request / write failed. Only a cancel is reported through cancelled, because the caller warns about it.
   static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable, bool* cancelled)
   {
     // 判定と切替を同じ排他区間で行う (判定後に別タスクの off が割り込むと、古い判定で有効化してしまう)。
