@@ -742,7 +742,7 @@ namespace m5
       M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq); // Enabel VAMeter
       break;
     
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       _rtcIntPin = GPIO_NUM_14;
       Ina226.begin();
       INA226_Class::config_t cfg;
@@ -2125,7 +2125,7 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       M5.getIOExpander(0).resetIrq();
       break;
 
@@ -4004,7 +4004,7 @@ namespace m5
         return 0;
       }
 
-      case board_t::board_M5StampPLC:
+      case board_t::board_M5StamPLC:
         if (port_mask & (ext_port_mask_t::ext_PWR485 | ext_port_mask_t::ext_PWRCAN)) {
           if (is_voltage)
             return Ina226.getBusVoltage() * 1000;

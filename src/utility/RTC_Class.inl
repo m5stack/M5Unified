@@ -78,7 +78,7 @@ namespace m5
         break;
 
       case board_t::board_M5StopWatch:
-      case board_t::board_M5StampPLC:
+      case board_t::board_M5StamPLC:
       case board_t::board_M5PaperColor:
       case board_t::board_M5PaperMono:
       case board_t::board_M5ChainCaptain:
