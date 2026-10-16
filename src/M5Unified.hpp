@@ -392,7 +392,7 @@ namespace m5
       else if (!board_detected)
       {
         board = cfg.fallback_board;
-        if (board == board_t::board_unknown) { board = Display.getBoardCandidate(); }
+        if (board == board_t::board_unknown) { board = Display.getCandidateBoard(); }
         if (board == board_t::board_unknown) { board = _default_fallback_board(); }
       }
       _board = board;
