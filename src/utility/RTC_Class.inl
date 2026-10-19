@@ -77,6 +77,7 @@ namespace m5
         instance.reset(new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000));
         break;
 
+      case board_t::board_M5StickS3:
       case board_t::board_M5StopWatch:
       case board_t::board_M5StamPLC:
       case board_t::board_M5PaperColor:
