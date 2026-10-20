@@ -87,7 +87,7 @@ namespace m5
   {
     max_mV = (max_mV / 10);
     max_mV = (max_mV > 410) ? max_mV - 410 : 0;
-    if (max_mV > 436 - 410) { max_mV = 436 - 410; }
+    if (max_mV > 440 - 410) { max_mV = 440 - 410; }
     static constexpr std::uint8_t table[] = 
       { 430 - 410  /// 4300mV
       , 435 - 410  /// 4350mV
