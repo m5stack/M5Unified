@@ -43,6 +43,8 @@ namespace m5
 
     bool digitalRead(uint8_t pin) override;
 
+    bool getInputLevel(uint8_t pin, bool* level) override;
+
     bool resetIrq() override;
 
     bool disableIrq() override;
