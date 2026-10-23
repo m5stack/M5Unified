@@ -501,7 +501,7 @@ namespace m5
 #endif
         {
           M5ModuleDisplay dsp(cfg.module_display);
-          if (dsp.init()) {
+          if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
             addDisplay(dsp);
           }
         }
@@ -544,7 +544,7 @@ namespace m5
 #endif
           {
             M5UnitOLED dsp(cfg.unit_oled);
-            if (dsp.init()) {
+            if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
               addDisplay(dsp);
               port_a_used = true;
             }
@@ -568,7 +568,7 @@ namespace m5
 #endif
           {
             M5UnitMiniOLED dsp(cfg.unit_mini_oled);
-            if (dsp.init()) {
+            if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
               addDisplay(dsp);
               port_a_used = true;
             }
@@ -592,7 +592,7 @@ namespace m5
 #endif
           {
             M5UnitGLASS dsp(cfg.unit_glass);
-            if (dsp.init()) {
+            if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
               addDisplay(dsp);
               port_a_used = true;
             }
@@ -616,7 +616,7 @@ namespace m5
 #endif
           {
             M5UnitGLASS2 dsp(cfg.unit_glass2);
-            if (dsp.init()) {
+            if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
               addDisplay(dsp);
               port_a_used = true;
             }
@@ -643,7 +643,7 @@ namespace m5
             int retry = 8;
             do {
               m5gfx::delay(32);
-              if (dsp.init()) {
+              if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
                 addDisplay(dsp);
                 port_a_used = true;
                 break;
@@ -669,7 +669,7 @@ namespace m5
               // When ModuleRCA is used, UnitRCA is not used.
               unit_rca = false;
               M5ModuleRCA dsp(cfg.module_rca);
-              if (dsp.init()) {
+              if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
                 addDisplay(dsp);
               }
             }
@@ -692,7 +692,7 @@ namespace m5
               )))
             {
               M5UnitRCA dsp(cfg.unit_rca);
-              if (dsp.init()) {
+              if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
                 addDisplay(dsp);
               }
             }
