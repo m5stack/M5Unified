@@ -40,7 +40,12 @@ namespace m5
       i2c->begin();
     }
 
-    bool res = bitOn(0x1F, 0x30);
+    // Control Register 1: INIEN (bit4) always, CHGEN (bit5) only with a rechargeable backup.
+    // CHGEN is cleared explicitly: it survives on VBAT, so an earlier firmware may have set it.
+    std::uint8_t ctrl1 = 0;
+    bool res = readRegister(0x1F, &ctrl1, 1);
+    ctrl1 = (ctrl1 & ~0x20) | 0x10 | (_backup_charge ? 0x20 : 0x00);
+    res = res && writeRegister8(0x1F, ctrl1);
     res &= writeRegister8(0x30, 0x00);
     res &= writeRegister8(0x1E, 0x00);
 
