@@ -96,9 +96,9 @@ namespace m5
         }
 #elif defined(CONFIG_IDF_TARGET_ESP32P4)
         if (board == m5::board_t::board_M5CoreP4X)
-        {
-          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_invert_z);
-          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_invert_z);
+        { // CoreP4X BMI270: X=-X, Y=+Y, Z=-Z.
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_invert_x | axis_invert_z);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_invert_x | axis_invert_z);
         }
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
         if ((board == m5::board_t::board_M5StackCoreS3 || board == m5::board_t::board_M5StackChan)
