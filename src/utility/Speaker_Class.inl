@@ -563,6 +563,36 @@ namespace m5
 
     int32_t* sound_buf32 = (int32_t*)alloca(dma_buf_len * sizeof(int32_t));
 
+#if !defined (SDL_h_)
+    // Fill one write of sound_buf32 with a DAC level: the hold level (dac_offset), or a smoothstep ramp
+    // (x^2 (3 - 2x): flat at both ends like a half-cosine, in integer math) between dac_offset and 0.
+    // The fraction below one DAC step is carried per sample like the playback path does; without the
+    // carry a small bias is written as whole steps, an audible staircase of clicks on the 8-bit DAC.
+    enum dac_fill_t { dac_hold, dac_fall, dac_rise };
+    uint8_t* const carry = surplus;  // a lambda cannot capture a member of the anonymous union
+    auto fill_dac = [&](size_t words, dac_fill_t mode)
+    {
+      const uint32_t steps = out_stereo ? dma_buf_len : dma_buf_len << 1;
+      auto level = [&](size_t t) -> int32_t
+      {
+        if (mode == dac_hold) { return dac_offset; }
+        uint32_t x = (uint32_t)((t << 15) / steps);           // 0 .. <1 in Q15
+        uint32_t y = ((x * x >> 15) * (98304 - 2 * x)) >> 15; // x^2 (3 - 2x) in Q15
+        if (mode == dac_fall) { y = 32768 - y; }
+        return (int32_t)(((uint32_t)dac_offset * y) >> 15);
+      };
+      for (size_t idx = 0; idx < words; ++idx)
+      { // mono packs two time steps per word; stereo packs L/R of the same step
+        size_t t = out_stereo ? idx : idx << 1;
+        int32_t v1 = level(t) + carry[0];
+        carry[0] = v1;
+        int32_t v2 = level(out_stereo ? t : t + 1) + carry[out_stereo];
+        carry[out_stereo] = v2;
+        sound_buf32[idx] = v1 << 16 | v2;
+      }
+    };
+#endif
+
 
     while (self->_task_running.load(std::memory_order_acquire))
     {
@@ -584,9 +614,15 @@ namespace m5
           { // Keep the DMA fed at the hold level instead of sleeping. A timed wait can let the
             // DMA reach the auto-cleared buffers, which output 0 (on the DAC, a drop to the zero
             // level and a jump back to the bias). The blocking write paces this loop.
-            uint32_t hold = self->_cfg.use_dac ? (uint32_t)(dac_offset | dac_offset << 16) : 0u;
             size_t words = dma_buf_len >> 1;
-            for (size_t i = 0; i < words; ++i) { sound_buf32[i] = hold; }
+            if (self->_cfg.use_dac)
+            {
+              fill_dac(words, dac_hold);
+            }
+            else
+            {
+              memset(sound_buf32, 0, words * sizeof(int32_t));
+            }
             size_t write_bytes;
             _spk_i2s_write(i2s_port, sound_buf32, words * sizeof(int32_t), &write_bytes, portMAX_DELAY);
             flg_nodata = (0 == ulTaskNotifyTake( pdFALSE, 0 ));
@@ -598,12 +634,7 @@ namespace m5
           if (self->_cfg.use_dac && dac_offset)
           { // Gradual transition of DAC output to 0;
             flg_i2s_started = spk_i2s_mute;
-            size_t idx = 0;
-            do
-            {
-              auto tmp = (uint32_t)((1.0f + cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
-              sound_buf32[idx] = tmp | tmp << 16;
-            } while (++idx < dma_buf_len);
+            fill_dac(dma_buf_len, dac_fall);
             size_t write_bytes;
             _spk_i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
             if (self->_cfg.dac_zero_level == 0)
@@ -616,6 +647,13 @@ namespace m5
           memset(sound_buf32, 0, dma_buf_len * sizeof(uint32_t));
           // DAC使用時は長めに設定する
           size_t retry = (self->_cfg.dma_buf_count << self->_cfg.use_dac) + 1;
+          if (self->_cfg.use_dac && dma_buf_len)
+          { // Keep I2S running at the zero level for about a second before stopping it. Stopping and
+            // restarting I2S steps the DAC output (a pop at both ends of a sound), so short pauses
+            // between sounds (melodies, key clicks) stay free of it.
+            size_t per_sec = (spk_sample_rate_x256 / SAMPLERATE_MUL) / (out_stereo ? dma_buf_len : dma_buf_len << 1);
+            if (retry < per_sec) { retry = per_sec; }
+          }
           while (!ulTaskNotifyTake( pdTRUE, 0 ) && --retry)
           {
             size_t write_bytes;
@@ -665,14 +703,11 @@ namespace m5
           _spk_i2s_start(i2s_port);
         }
 
-        if (self->_cfg.use_dac && self->_cfg.dac_zero_level != 0)
+        // not when end() woke the task from the zero level: raising the bias just before the pin
+        // is pulled low would add a pop
+        if (self->_cfg.use_dac && self->_cfg.dac_zero_level != 0 && self->_task_running.load(std::memory_order_acquire))
         {
-          size_t idx = 0;
-          do
-          {
-            auto tmp = (uint32_t)((1.0f - cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
-            sound_buf32[idx] = tmp | tmp << 16;
-          } while (++idx < dma_buf_len);
+          fill_dac(dma_buf_len, dac_rise);
           size_t write_bytes;
           _spk_i2s_write(i2s_port, sound_buf32, dma_buf_len * sizeof(int32_t), &write_bytes, portMAX_DELAY);
         }
