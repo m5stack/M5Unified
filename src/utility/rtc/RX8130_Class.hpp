@@ -15,9 +15,11 @@ namespace m5
 
     /// backup_charge: let the RX8130 charge VBAT from VDD (CHGEN). Only for a rechargeable
     /// backup (supercapacitor, rechargeable cell); a primary cell such as a CR2032 must not be charged.
-    RX8130_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C, bool backup_charge = false)
+    /// timer_irq: allow periodic timer IRQs; false still permits stop requests.
+    RX8130_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C, bool backup_charge = false, bool timer_irq = true)
     : RTC_Base ( i2c_addr, freq, i2c )
     , _backup_charge ( backup_charge )
+    , _timer_irq ( timer_irq )
     {}
 
     bool begin(I2C_Class* i2c = nullptr) override;
@@ -39,6 +41,7 @@ namespace m5
 
   private:
     bool _backup_charge;
+    bool _timer_irq;
   };
 }
 

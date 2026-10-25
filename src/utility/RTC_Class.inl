@@ -58,7 +58,8 @@ namespace m5
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:  // VBAT: supercapacitor through 1 kOhm
-        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c, true));
+        // Periodic timer IRQs are not supported for the built-in RTC on Tab5.
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c, true, false));
         break;
 
       case board_t::board_M5CoreP4X:

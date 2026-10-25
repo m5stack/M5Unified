@@ -2084,6 +2084,13 @@ namespace m5
 
   void Power_Class::timerSleep( int seconds )
   {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (M5.getBoard() == board_t::board_M5Tab5)
+    {
+      M5_LOGE("timerSleep(seconds) is not supported on Tab5, use timerSleep(time). not sleeping.");
+      return;
+    }
+#endif
     M5.Rtc.disableIRQ();
     M5.Rtc.clearIRQ();
     M5.Rtc.setAlarmIRQ(seconds);
@@ -2097,7 +2104,14 @@ namespace m5
   {
     M5.Rtc.disableIRQ();
     M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(time);
+    // An alarm setup failure must not enter sleep without an RTC wake source.
+    if (M5.Rtc.setAlarmIRQ(time) <= 0)
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();
+      M5.Rtc.clearIRQ();
+      return;
+    }
     _timerSleep();
   }
 
@@ -2105,7 +2119,14 @@ namespace m5
   {
     M5.Rtc.disableIRQ();
     M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(date, time);
+    // An alarm setup failure must not enter sleep without an RTC wake source.
+    if (M5.Rtc.setAlarmIRQ(date, time) <= 0)
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();
+      M5.Rtc.clearIRQ();
+      return;
+    }
     _timerSleep();
   }
 
