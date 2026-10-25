@@ -48,6 +48,8 @@ namespace m5
     res = res && writeRegister8(0x1F, ctrl1);
     res &= writeRegister8(0x30, 0x00);
     res &= writeRegister8(0x1E, 0x00);
+    // Stop the periodic timer; flags are kept for getIRQstatus().
+    res &= bitOff(0x1C, 0x10);
 
     _init = res;
     return _init;
@@ -141,6 +143,9 @@ namespace m5
   bool RX8130_Class::setTimerIRQ(std::uint32_t msec, std::uint32_t* applied_msec)
   {
     if (!isEnabled()) { return false; }
+    // A disallowed positive period follows the same cleanup path as a stop request.
+    bool timer_refused = msec != 0 && !_timer_irq;
+    if (timer_refused) { msec = 0; }
     // Source clocks in the order they are tried. period = mul_ms / div [ms].
     // max_ms  = 65535 * period, so msec <= max_ms keeps msec * div within uint32.
     // max_cnt = min(65535, 0xFFFFFFFF / mul_ms), so cnt * mul_ms (the period) stays within uint32.
@@ -199,7 +204,12 @@ namespace m5
     static constexpr std::uint8_t FLAG_CLEAR_TF = 0xAF;
     std::uint8_t reg0x1C = 0;
     if (cycle == 0) {
-      if (!stop_rx8130_timer(this, FLAG_CLEAR_TF)) { return false; }
+      bool stopped = stop_rx8130_timer(this, FLAG_CLEAR_TF);
+      if (timer_refused) {
+        M5_LOGW("setTimerIRQ: periodic timer IRQ is not supported on this board.");
+        return false;
+      }
+      if (!stopped) { return false; }
       if (applied_msec) { *applied_msec = 0; }
       return true;
     }

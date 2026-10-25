@@ -2407,6 +2407,13 @@ namespace m5
 
   bool Power_Class::timerSleep( int seconds )
   {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (M5.getBoard() == board_t::board_M5Tab5)
+    {
+      M5_LOGE("timerSleep(seconds) is not supported on Tab5, use timerSleep(time). not sleeping.");
+      return false;
+    }
+#endif
     if (seconds <= 0 || (std::uint32_t)seconds > UINT32_MAX / 1000)
     {
       M5_LOGE("timerSleep: invalid duration. not sleeping.");
@@ -2415,7 +2422,7 @@ namespace m5
     bool rtc_enabled = M5.Rtc.isEnabled();
     if (rtc_enabled && !M5.Rtc.hasTimerIRQ())
     { // Refused before the existing IRQ is touched.
-      M5_LOGE("timerSleep: this RTC has no timer, use timerSleep(time). not sleeping.");
+      M5_LOGE("timerSleep: periodic RTC timer IRQ is not available, use timerSleep(time). not sleeping.");
       return false;
     }
 #if defined (M5UNIFIED_PC_BUILD)
