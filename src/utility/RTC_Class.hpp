@@ -44,6 +44,7 @@ namespace m5
     /// Set timer IRQ
     /// @param timer_msec
     /// @return the set number of msec. 0 == disabled, or the timer could not be set (communication failure).
+    /// @note The built-in RTC driver on Tab5 rejects positive periods with 0; 0 still requests a stop.
     std::uint32_t setTimerIRQ(std::uint32_t timer_msec);
 
     // deprecated

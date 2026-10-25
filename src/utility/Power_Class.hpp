@@ -141,12 +141,14 @@ namespace m5
     /// @note PowerHub paces alarm writes by 50 ms, settles for 500 ms before requesting
     ///       power-off, then enters light sleep and restarts if it wakes.
     /// @param seconds Number of seconds to boot.
+    /// @note On Tab5, returns without sleeping; use timerSleep(time).
     void timerSleep(int seconds);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
+    /// @note Returns without sleeping if no RTC is available or the RTC driver reports that the alarm could not be set.
     void timerSleep(const rtc_time_t& time);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
@@ -154,6 +156,7 @@ namespace m5
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
+    /// @note Returns without sleeping if no RTC is available or the RTC driver reports that the alarm could not be set.
     void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
     /// Value for micro_seconds of deepSleep / lightSleep, meaning "sleep without a timer wakeup".

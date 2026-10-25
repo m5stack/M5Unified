@@ -13,8 +13,13 @@ namespace m5
   public:
     static constexpr std::uint8_t DEFAULT_ADDRESS = 0x32;
 
-    RX8130_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+    /// backup_charge: let the RX8130 charge VBAT from VDD (CHGEN). Only for a rechargeable
+    /// backup (supercapacitor, rechargeable cell); a primary cell such as a CR2032 must not be charged.
+    /// timer_irq: allow periodic timer IRQs; false still permits stop requests.
+    RX8130_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C, bool backup_charge = false, bool timer_irq = true)
     : RTC_Base ( i2c_addr, freq, i2c )
+    , _backup_charge ( backup_charge )
+    , _timer_irq ( timer_irq )
     {}
 
     bool begin(I2C_Class* i2c = nullptr) override;
@@ -33,6 +38,10 @@ namespace m5
     void disableIRQ(void) override;
 
     bool getVoltLow(void) override;
+
+  private:
+    bool _backup_charge;
+    bool _timer_irq;
   };
 }
 

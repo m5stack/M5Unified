@@ -57,15 +57,19 @@ namespace m5
     switch (board)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
+      case board_t::board_M5Tab5:  // VBAT: supercapacitor through 1 kOhm
+        // Periodic timer IRQs are not supported for the built-in RTC on Tab5.
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c, true, false));
+        break;
+
       case board_t::board_M5CoreP4X:
-      case board_t::board_M5Tab5:
       case board_t::board_M5Tab5X:
         instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
         break;
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32C5)
-      case board_t::board_M5ToughC5:
+      case board_t::board_M5ToughC5:  // VBAT: CR2032 primary cell, never charged
         instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
         break;
 #endif
@@ -75,11 +79,14 @@ namespace m5
         instance.reset(new RTC_PowerHub_Class(RTC_PowerHub_Class::DEFAULT_ADDRESS, 400000));
         break;
 
+      case board_t::board_M5StampPLC:   // VBAT: rechargeable backup cell through 1 kOhm
+      case board_t::board_M5StopWatch:  // VBAT: 10 uF capacitor
+      case board_t::board_M5PaperMono:  // VBAT: 1 uF capacitor
+        instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c, true));
+        break;
+
       case board_t::board_M5StickS3:
-      case board_t::board_M5StopWatch:
-      case board_t::board_M5StampPLC:
       case board_t::board_M5PaperColor:
-      case board_t::board_M5PaperMono:
       case board_t::board_M5ChainCaptain:
         instance.reset(new RX8130_Class(RX8130_Class::DEFAULT_ADDRESS, 400000, i2c));
         break;

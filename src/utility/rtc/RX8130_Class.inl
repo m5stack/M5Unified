@@ -10,6 +10,28 @@
 
 namespace m5
 {
+  // flag_clear: W0C mask written to 0x1D once the timer is confirmed stopped
+  // (0xAF clears TF only, 0xA7 clears TF and AF).
+  // ctl_bits: the 0x1E bits to clear together with TE (0x10 = TIE, 0x18 = TIE and AIE).
+  static bool stop_rx8130_timer(RX8130_Class* rtc, std::uint8_t flag_clear, std::uint8_t ctl_bits = 0x10)
+  {
+    for (int retry = 0; retry < 3; ++retry)
+    {
+      std::uint8_t ext = 0, ctl = 0;
+      bool te_off = rtc->bitOff(0x1C, 0x10);
+      bool tie_off = rtc->bitOff(0x1E, ctl_bits);
+      bool ext_read = rtc->readRegister(0x1C, &ext, 1);
+      bool ctl_read = rtc->readRegister(0x1E, &ctl, 1);
+      if (te_off && tie_off && ext_read && ctl_read
+       && !(ext & 0x10) && !(ctl & ctl_bits)
+       && rtc->writeRegister8(0x1D, flag_clear))  // W0C: only the selected flags are cleared
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool RX8130_Class::begin(I2C_Class* i2c)
   {
     if (i2c)
@@ -18,9 +40,16 @@ namespace m5
       i2c->begin();
     }
 
-    bool res = bitOn(0x1F, 0x30);
+    // Control Register 1: INIEN (bit4) always, CHGEN (bit5) only with a rechargeable backup.
+    // CHGEN is cleared explicitly: it survives on VBAT, so an earlier firmware may have set it.
+    std::uint8_t ctrl1 = 0;
+    bool res = readRegister(0x1F, &ctrl1, 1);
+    ctrl1 = (ctrl1 & ~0x20) | 0x10 | (_backup_charge ? 0x20 : 0x00);
+    res = res && writeRegister8(0x1F, ctrl1);
     res &= writeRegister8(0x30, 0x00);
     res &= writeRegister8(0x1E, 0x00);
+    // Stop the periodic timer; flags are kept for getIRQstatus().
+    res &= bitOff(0x1C, 0x10);
 
     _init = res;
     return _init;
@@ -110,6 +139,9 @@ namespace m5
 
   std::uint32_t RX8130_Class::setTimerIRQ(std::uint32_t msec)
   {
+    // A disallowed positive period follows the same cleanup path as a stop request.
+    bool timer_refused = msec != 0 && !_timer_irq;
+    if (timer_refused) { msec = 0; }
     // Source clocks in the order they are tried. period = mul_ms / div [ms].
     // max_ms  = 65535 * period, so msec <= max_ms keeps msec * div within uint32.
     // max_cnt = min(65535, 0xFFFFFFFF / mul_ms), so cnt * mul_ms (the period) stays within uint32.
@@ -170,6 +202,9 @@ namespace m5
     if (cycle == 0) {
       stop_timer();
       writeRegister8(0x1D, FLAG_CLEAR_TF);
+      if (timer_refused) {
+        M5_LOGW("setTimerIRQ: periodic timer IRQ is not supported on this board.");
+      }
       return 0;
     }
     bool ok = readRegister(0x1C, &reg0x1C, 1);
@@ -207,6 +242,7 @@ namespace m5
     std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x00 };
 
     bool irq_enable = false;
+    int flg_wada = -1;
     if (time) {
       if (time->minutes >= 0)
       {
@@ -223,7 +259,6 @@ namespace m5
     if (date) {
       // 0 Sets WEEK as target of alarm function
       // 1 Sets DAY as target of alarm function
-      int flg_wada = -1;
       if (date->date >= 0)
       {
         flg_wada = 1;
@@ -237,27 +272,39 @@ namespace m5
       if (flg_wada >= 0)
       {
         irq_enable = true;
-        if (flg_wada)
-        { // week alarm / day alarm selector
-          bitOn(0x1C, 0x08);
-        } else {
-          bitOff(0x1C, 0x08);
-        }
       }
     }
 
-    // MIN_ALARM_REG 0x17
-    writeRegister(0x17, buf, 3);
-
-    if (irq_enable)
-    {
-      bitOn(0x1E, 0x08);
-    }
-    else
+    // Keep AIE off until WADA and all alarm registers are committed.
+    // The initial disable is retried: if it never succeeds the old alarm stays armed.
+    bool disabled = false;
+    for (int retry = 0; retry < 3 && !disabled; ++retry) { disabled = bitOff(0x1E, 0x08); }
+    if (!disabled) { return 0; }
+    if (flg_wada >= 0
+     && !(flg_wada ? bitOn(0x1C, 0x08) : bitOff(0x1C, 0x08)))
     {
       bitOff(0x1E, 0x08);
+      return 0;
     }
-
+    if (!writeRegister(0x17, buf, 3))
+    {
+      bitOff(0x1E, 0x08);
+      return 0;
+    }
+    // 0x1D is W0C: clear AF for both arming and clearing while retaining TF.
+    if (!writeRegister8(0x1D, 0xB7))
+    {
+      bitOff(0x1E, 0x08);
+      return 0;
+    }
+    if (irq_enable)
+    {
+      if (!bitOn(0x1E, 0x08))
+      {
+        bitOff(0x1E, 0x08);
+        return 0;
+      }
+    }
     return irq_enable;
   }
 
@@ -279,8 +326,7 @@ namespace m5
   void RX8130_Class::disableIRQ(void)
   {
     if (isEnabled()) {
-      bitOff(0x1E, 0x18);
-      writeRegister8(0x1D, 0xA7);  // W0C: clear TF and AF only
+      stop_rx8130_timer(this, 0xA7, 0x18);
     }
   }
 
