@@ -58,9 +58,11 @@ namespace m5
     ///         false when no RTC is enabled, the chip has no timer (PowerHub), or on a communication failure.
     /// @note On boards whose RTC IRQ is relayed by the M5PM1 (PaperMono, ToughC5) the stale PM1 wake
     ///       source and IRQ status are cleared as well; a failure there also returns false.
+    /// @note The built-in RTC driver on Tab5 rejects positive periods with false; 0 still requests a stop.
     bool setTimerIRQ(std::uint32_t timer_msec, std::uint32_t* applied_msec = nullptr);
 
     /// Whether the RTC provides the periodic timer (PowerHub does not).
+    /// @note False for the built-in RTC on Tab5; setTimerIRQ(0) still requests a stop.
     bool hasTimerIRQ(void) const { return _rtc_instance ? _rtc_instance->hasTimerIRQ() : false; }
 
     /// Whether the RTC can represent this alarm request; nothing is written.

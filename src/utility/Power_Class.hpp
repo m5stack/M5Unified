@@ -298,12 +298,13 @@ namespace m5
     /// @return If this function returns, sleep was not entered and the result is false. Reasons include
     ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure, ESP timer wakeup
     ///         registration failure without an RTC, wake source registration failure, and PC builds.
-    ///         Does not return once sleep is entered. Without an RTC the ESP32 timer wakeup is used.
+    ///         Does not return once sleep is entered. Without an RTC the ESP32 timer wakeup is used, except on Tab5.
     /// @note This function owns the ESP timer wake source: it is set for this sleep and disabled
     ///       again when the sleep is cancelled, a previous setting is not restored.
     /// @note PowerHub has no periodic RTC timer; use a date/time overload on those boards.
     /// @note When the ESP timer wakeup cannot be registered the RTC timer is used alone; that
     ///       wakes only boards where the RTC IRQ is wired to a wake route (not an external RTC unit).
+    /// @note On Tab5, returns false without sleeping; use timerSleep(time).
     bool timerSleep(int seconds);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
