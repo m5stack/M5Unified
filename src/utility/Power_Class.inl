@@ -74,6 +74,256 @@
 
 namespace m5
 {
+  // Adding a model requires its begin() case, these three capability tables,
+  // and the hardware procedure in each applicable setter.
+  /// These tables describe reportable states and control/output paths for each
+  /// (pmic, board) pair; begin() may probe the PMIC for boards with multiple variants.
+  /// The caps getters read them directly. getChargeState() reads the hardware via
+  /// _getChargeState() and checks its result against the state table in debug builds.
+  static charge_state_set_t _charge_state_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    switch (pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case Power_Class::pmic_t::pmic_aw32001:
+      return charge_state_t::charging | charge_state_t::not_charging
+           | charge_state_t::full     | charge_state_t::disabled;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5CoreMatrix)
+      {
+        return charge_state_t::charging | charge_state_t::not_charging;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      /// CoreP4X
+      return charge_state_t::charging | charge_state_t::not_charging;
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case Power_Class::pmic_t::pmic_ip5306:
+      return charge_state_t::charging | charge_state_t::not_charging
+           | charge_state_t::full     | charge_state_t::disabled;
+
+    case Power_Class::pmic_t::pmic_axp192:
+      /// no full: REG01H bit6 means "not charging or charge complete", which
+      /// does not report completion on its own.
+      return charge_state_t::charging | charge_state_t::not_charging | charge_state_t::disabled;
+
+#endif
+
+    case Power_Class::pmic_t::pmic_axp2101:
+      return charge_state_t::charging    | charge_state_t::not_charging
+           | charge_state_t::full        | charge_state_t::disabled
+           | charge_state_t::discharging | charge_state_t::idle;
+
+#endif
+
+    default:
+      break;
+    }
+
+    /// Models whose state is not decided by _pmic. (see getChargeState: a
+    /// pmic_m5pm1 case placed above these would make them unreachable without
+    /// any diagnostic)
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StickS3:      // PM1 G0
+    case board_t::board_M5PaperDIY:     // PM1 G3
+    case board_t::board_M5StopWatch:    // PM1 G2
+    case board_t::board_M5StampS3Bat:   // PM1 G2
+    case board_t::board_M5ChainCaptain: // IOE1 G3
+    case board_t::board_M5PaperS3:      // MCU GPIO
+    case board_t::board_M5PaperMono:    // IP2315 0xC7 bit7
+    case board_t::board_M5PowerHub:     // battery current
+      /// no disabled: whether the CHG_EN these boards write is actually wired
+      /// to the charger is unconfirmed, and the PaperColor shows it can be
+      /// writable and read back while not being connected at all.
+      return charge_state_t::charging | charge_state_t::not_charging;
+
+    case board_t::board_M5PaperColor:
+      /// only the negative side is answerable: the charger status reaches
+      /// neither the PM1 nor the MCU.
+      return charge_state_set_t() | charge_state_t::not_charging;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      /// current based: "no charging" is observed as idle, never as not_charging.
+      return charge_state_t::charging | charge_state_t::discharging | charge_state_t::idle;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return charge_state_t::charging | charge_state_t::not_charging;
+#endif
+
+    default:
+      break;
+    }
+    return charge_state_set_t();
+  }
+
+  static std::uint8_t _charge_control_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    switch (pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case Power_Class::pmic_t::pmic_aw32001:
+      /// No voltage path: AW32001 step selection below the lowest step corrupts
+      /// neighbouring fields, so its voltage setter is not wired up here.
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5CoreMatrix)
+      {
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      /// CoreP4X: PM1 CHG_EN only.
+      return Power_Class::cap_set_charge_enable;
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case Power_Class::pmic_t::pmic_ip5306:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+    case Power_Class::pmic_t::pmic_axp192:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+#endif
+
+    case Power_Class::pmic_t::pmic_axp2101:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      switch (board)
+      {
+      case board_t::board_M5StampS3Bat:
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+
+      case board_t::board_M5PaperColor:
+        /// CHG_EN_PP is not connected to the charger.
+        return 0;
+
+      case board_t::board_M5StickS3:
+      case board_t::board_M5PaperDIY:
+      case board_t::board_M5StopWatch:
+      case board_t::board_M5ChainCaptain:
+      case board_t::board_M5PaperMono:
+        return Power_Class::cap_set_charge_enable;
+
+      default:
+        break;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5ToughC5)
+      {
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+      }
+      break;
+#endif
+
+#endif
+
+    default:
+      break;
+    }
+
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5PowerHub:
+      return Power_Class::cap_set_charge_enable;
+#endif
+    default:
+      break;
+    }
+    return 0;
+  }
+
+  static std::uint8_t _power_output_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    (void)pmic; (void)board;   // some chip builds have no output path
+#if defined (M5UNIFIED_PC_BUILD)
+    return 0;   // the setters are stubs on the PC build
+#else
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
+
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return (pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackChan:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
+
+    case board_t::board_M5StopWatch:
+      return ((pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0) | Power_Class::cap_set_vibration;
+
+    case board_t::board_M5StickS3:
+    case board_t::board_M5PaperColor:
+      return (pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0;
+
+    case board_t::board_M5ChainCaptain:
+    case board_t::board_M5StampS3Bat:
+      return Power_Class::cap_set_ext_output;
+
+    case board_t::board_M5PowerHub:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_ext_port_bus;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case board_t::board_M5StackCore2:
+      // The motor rail is AXP192 LDO3 or AXP2101 DLDO1; other PMICs have no route.
+      return Power_Class::cap_set_ext_output
+           | ((pmic == Power_Class::pmic_t::pmic_axp192 || pmic == Power_Class::pmic_t::pmic_axp2101)
+              ? Power_Class::cap_set_vibration : 0);
+
+    case board_t::board_M5Paper:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+    case board_t::board_M5Station:
+      return Power_Class::cap_set_ext_output;
+#endif
+
+    default:
+      return 0;
+    }
+#endif
+  }
+
 #if !defined (M5UNIFIED_PC_BUILD)
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t ip2315_i2c_addr = 0x75; // M5PaperMono USB fast-charger
@@ -97,7 +347,7 @@ namespace m5
     return false;
   }
 
-  /// The IP2316 latches its mode when VIN is applied: I2C mode only if SCL and SDA
+  /// The IP2315 latches its mode when VIN is applied: I2C mode only if SCL and SDA
   /// are both High at that moment, otherwise LED mode until VIN is removed. On this
   /// board the lines are only pulled High while the gate (IOE1 GPIO11, the level
   /// shifter OE) is open, so plugging USB in with the gate closed (always the case
@@ -242,7 +492,7 @@ namespace m5
     /// treated as settled: a later begin() probes again instead of freezing
     /// an identity that was never confirmed. Boards whose PMIC follows from
     /// the board id alone do not go through the probe.
-    const bool identity_settled = _identity_settled;
+    const bool identity_settled = _identity_state == identity_state_t::settled;
     const pmic_t settled_pmic = _pmic;
     (void)identity_settled; (void)settled_pmic;   // unused on chips without the AXP192/AXP2101 probe
     _pmic = pmic_t::pmic_unknown;
@@ -708,7 +958,7 @@ namespace m5
         ioe1.digitalWrite(M5IOE1_Class::gpio14, true);
       }
 
-      // Keep IP2316 off the I2C bus until charge control/status is requested.
+      // Keep IP2315 off the I2C bus until charge control/status is requested.
       init_papermono_ip2315_access();
       break;
 
@@ -902,8 +1152,8 @@ namespace m5
       /// until one of them answers.
       for (int retry = 0; retry < 3; ++retry)
       {
-        if (Axp192.begin()) { _identity_settled = true; break; }
-        if (Axp2101.begin()) { _pmic = Power_Class::pmic_t::pmic_axp2101; _identity_settled = true; break; }
+        if (Axp192.begin()) { _identity_state = identity_state_t::settled; break; }
+        if (Axp2101.begin()) { _pmic = Power_Class::pmic_t::pmic_axp2101; _identity_state = identity_state_t::settled; break; }
         m5gfx::delay(1);
       }
       /// Without a positive ID the board default stays provisional: the
@@ -913,7 +1163,10 @@ namespace m5
       /// charge-state capability set available.
       /// Control and output capabilities also stay empty while their setters
       /// refuse the unconfirmed register map, so callers do not see unusable paths.
-      _identity_unconfirmed = !_identity_settled;
+      if (_identity_state != identity_state_t::settled)
+      {
+        _identity_state = identity_state_t::unconfirmed;
+      }
     }
 
     if (_pmic == Power_Class::pmic_t::pmic_axp192)
@@ -1307,7 +1560,8 @@ namespace m5
     (void)enable;
     (void)port_mask;
 #else
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_ext_output)) { return false; }
     if (port_mask == ext_port_mask_t::ext_none) { return false; }   // nothing selected
     switch (M5.getBoard())
     {
@@ -1367,10 +1621,7 @@ namespace m5
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
-      if (_pmic == pmic_t::pmic_m5pm1)
-      {
-        result = M5pm1.setExtOutput(enable);
-      }
+      result = M5pm1.setExtOutput(enable);
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
@@ -1402,10 +1653,7 @@ namespace m5
     case board_t::board_M5StickS3:
     case board_t::board_M5StopWatch:
     case board_t::board_M5PaperColor:
-      if (_pmic == pmic_t::pmic_m5pm1)
-      {
-        result = M5pm1.setExtOutput(enable);
-      }
+      result = M5pm1.setExtOutput(enable);
       break;
 
     case board_t::board_M5ChainCaptain:
@@ -1664,7 +1912,8 @@ namespace m5
   bool Power_Class::setUsbOutput(bool enable)
   {
     (void)enable;
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_usb_output)) { return false; }
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
@@ -3110,7 +3359,8 @@ namespace m5
   bool Power_Class::setBatteryCharge(bool enable)
   {
     (void)enable;   // some chip builds have no control path at all
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_enable)) { return false; }
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -3144,12 +3394,7 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-        // M5PaperColor does not support charge control
-        // (the PM1 CHG_EN_PP pin is not wired to the charger)
-        if (M5.getBoard() == board_t::board_M5PaperColor) {
-          return false;
-        }
-        // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
+        // M5PaperMono: charging is controlled by the IP2315 charger, not PM1.
         if (M5.getBoard() == board_t::board_M5PaperMono) {
           /// every write of the sequence counts: a gate left in the wrong
           /// state after a failed close is not a success. A charger in LED mode
@@ -3202,7 +3447,7 @@ namespace m5
 
   bool Power_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
   { (void)max_mA; (void)applied_mA;   // some chip builds have no control path at all
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
     if (max_mA == 0)
     { /// 0 is not a step (where a current path exists it selects the lowest
       /// one). Warn once: code written for the old Tab5 / Tab5X behaviour
@@ -3214,6 +3459,8 @@ namespace m5
         M5_LOGW("setChargeCurrent(0): 0 is not a charge current step. Use setBatteryCharge(false) to stop charging.");
       }
     }
+    // Keep the zero-current warning above even on models without a current path.
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_current)) { return false; }
     /// The step contract: the highest step not above max_mA, clamped up to the
     /// lowest step when the request is under all of them. 0 is not a step
     /// (setBatteryCharge(false) stops charging), and applied_mA is only written
@@ -3226,7 +3473,6 @@ namespace m5
       return Aw32001.setChargeCurrent(max_mA, applied_mA);
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5CoreMatrix)
       { /// IOE1 G3 selects between two steps: driven low = 650mA, released to
         /// an input = 180mA.
         auto& ioe1 = M5.getIOExpander(0);
@@ -3246,12 +3492,7 @@ namespace m5
         if (applied_mA) { *applied_mA = select_650mA ? 650 : 180; }
         return true;
       }
-      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    case pmic_t::pmic_m5pm1:
-      /// CoreP4X has no charge current control path.
-      (void)max_mA;
-      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
@@ -3267,7 +3508,6 @@ namespace m5
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5StampS3Bat)
       { /// PM1 G3 = CHG_PROG: driven low selects 650mA, left floating (input,
         /// no pull) selects 200mA. The pin is never driven high.
         const bool select_650mA = (max_mA >= 650);
@@ -3295,10 +3535,8 @@ namespace m5
         if (applied_mA) { *applied_mA = select_650mA ? 650 : 200; }
         return true;
       }
-      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5ToughC5)
       {
         // ToughC5 CHG_PROG is IOE1 G1: low selects 650 mA, high selects 180 mA.
         // Set the latch before enabling push-pull output to avoid a transient
@@ -3313,7 +3551,6 @@ namespace m5
         if (applied_mA) { *applied_mA = select_180mA ? 180 : 650; }
         return true;
       }
-      break;
 #endif
 
 #endif
@@ -3435,15 +3672,12 @@ namespace m5
   bool Power_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
   {
     (void)max_mV; (void)applied_mV;   // some chip builds have no control path at all
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_voltage)) { return false; }
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
-    /// AW32001_Class::setChargeVoltage exists but is deliberately not wired up:
-    /// its step selection is defective below the lowest step and corrupts the
-    /// neighbouring fields. It is fixed separately, and until then the voltage
-    /// capability bit stays clear.
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 #else
@@ -3468,101 +3702,9 @@ namespace m5
     return false;
   }
 
-  /// The one place where the reportable state set of each model lives.
-  /// getChargeState() and getChargeStateCaps() both read it, so the advertised
-  /// set and the answered value cannot drift apart.
-  /// The identity of a model is the pair (pmic, board): several board ids ship
-  /// with different PMICs, and the PMIC is only settled during begin().
-  static charge_state_set_t _charge_state_caps(Power_Class::pmic_t pmic, board_t board)
-  {
-    switch (pmic)
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
-#elif defined (CONFIG_IDF_TARGET_ESP32C6)
-    case Power_Class::pmic_t::pmic_aw32001:
-      return charge_state_t::charging | charge_state_t::not_charging
-           | charge_state_t::full     | charge_state_t::disabled;
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
-    case Power_Class::pmic_t::pmic_m5pm1:
-      if (board == board_t::board_M5CoreMatrix)
-      {
-        return charge_state_t::charging | charge_state_t::not_charging;
-      }
-      break;
-#elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    case Power_Class::pmic_t::pmic_m5pm1:
-      /// CoreP4X
-      return charge_state_t::charging | charge_state_t::not_charging;
-#else
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case Power_Class::pmic_t::pmic_ip5306:
-      return charge_state_t::charging | charge_state_t::not_charging
-           | charge_state_t::full     | charge_state_t::disabled;
-
-    case Power_Class::pmic_t::pmic_axp192:
-      /// no full: REG01H bit6 means "not charging or charge complete", which
-      /// does not report completion on its own.
-      return charge_state_t::charging | charge_state_t::not_charging | charge_state_t::disabled;
-
-#endif
-
-    case Power_Class::pmic_t::pmic_axp2101:
-      return charge_state_t::charging    | charge_state_t::not_charging
-           | charge_state_t::full        | charge_state_t::disabled
-           | charge_state_t::discharging | charge_state_t::idle;
-
-#endif
-
-    default:
-      break;
-    }
-
-    /// Models whose state is not decided by _pmic. (see getChargeState: a
-    /// pmic_m5pm1 case placed above these would make them unreachable without
-    /// any diagnostic)
-    switch (board)
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StickS3:      // PM1 G0
-    case board_t::board_M5PaperDIY:     // PM1 G3
-    case board_t::board_M5StopWatch:    // PM1 G2
-    case board_t::board_M5StampS3Bat:   // PM1 G2
-    case board_t::board_M5ChainCaptain: // IOE1 G3
-    case board_t::board_M5PaperS3:      // MCU GPIO
-    case board_t::board_M5PaperMono:    // IP2315 0xC7 bit7
-    case board_t::board_M5PowerHub:     // battery current
-      /// no disabled: whether the CHG_EN these boards write is actually wired
-      /// to the charger is unconfirmed, and the PaperColor shows it can be
-      /// writable and read back while not being connected at all.
-      return charge_state_t::charging | charge_state_t::not_charging;
-
-    case board_t::board_M5PaperColor:
-      /// only the negative side is answerable: the charger status reaches
-      /// neither the PM1 nor the MCU.
-      return charge_state_set_t() | charge_state_t::not_charging;
-#endif
-
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    case board_t::board_M5Tab5:
-    case board_t::board_M5Tab5X:
-      /// current based: "no charging" is observed as idle, never as not_charging.
-      return charge_state_t::charging | charge_state_t::discharging | charge_state_t::idle;
-#endif
-
-#if defined (CONFIG_IDF_TARGET_ESP32C5)
-    case board_t::board_M5ToughC5:
-      return charge_state_t::charging | charge_state_t::not_charging;
-#endif
-
-    default:
-      break;
-    }
-    return charge_state_set_t();
-  }
-
   charge_state_set_t Power_Class::getChargeStateCaps(void)
   {
-    if (!_initialized || _identity_unconfirmed) { return charge_state_set_t(); }
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return charge_state_set_t(); }
     return _charge_state_caps(_pmic, M5.getBoard());
   }
 
@@ -3573,97 +3715,14 @@ namespace m5
 
   std::uint8_t Power_Class::getChargeControlCaps(void)
   {
-    // Every advertised setter refuses an unconfirmed PMIC register map.
-    if (!_initialized || _identity_unconfirmed) { return 0; }
-    switch (_pmic)
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32C3)
-#elif defined (CONFIG_IDF_TARGET_ESP32C6)
-    case pmic_t::pmic_aw32001:
-      /// no voltage: the driver has it, but it is not wired up. (setChargeVoltage)
-      return cap_set_charge_enable | cap_set_charge_current;
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
-    case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5CoreMatrix)
-      {
-        return cap_set_charge_enable | cap_set_charge_current;
-      }
-      break;
-#elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    case pmic_t::pmic_m5pm1:
-      /// CoreP4X: PM1 CHG_EN only.
-      return cap_set_charge_enable;
-#else
-#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case pmic_t::pmic_ip5306:
-      return cap_set_charge_enable | cap_set_charge_current | cap_set_charge_voltage;
-
-    case pmic_t::pmic_axp192:
-      return cap_set_charge_enable | cap_set_charge_current | cap_set_charge_voltage;
-
-#endif
-
-    case pmic_t::pmic_axp2101:
-      return cap_set_charge_enable | cap_set_charge_current | cap_set_charge_voltage;
-
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case pmic_t::pmic_m5pm1:
-      switch (M5.getBoard())
-      {
-      case board_t::board_M5StampS3Bat:
-        return cap_set_charge_enable | cap_set_charge_current;
-
-      case board_t::board_M5PaperColor:
-        /// CHG_EN_PP is not connected to the charger.
-        return 0;
-
-      case board_t::board_M5StickS3:
-      case board_t::board_M5PaperDIY:
-      case board_t::board_M5StopWatch:
-      case board_t::board_M5ChainCaptain:
-      case board_t::board_M5PaperMono:
-        return cap_set_charge_enable;
-
-      default:
-        break;
-      }
-      break;
-#elif defined (CONFIG_IDF_TARGET_ESP32C5)
-    case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5ToughC5)
-      {
-        return cap_set_charge_enable | cap_set_charge_current;
-      }
-      break;
-#endif
-
-#endif
-
-    default:
-      break;
-    }
-
-    switch (M5.getBoard())
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    case board_t::board_M5Tab5:
-    case board_t::board_M5Tab5X:
-      return cap_set_charge_enable | cap_set_charge_current;
-#endif
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5PowerHub:
-      return cap_set_charge_enable;
-#endif
-    default:
-      break;
-    }
-    return 0;
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return 0; }
+    return _charge_control_caps(_pmic, M5.getBoard());
   }
 
   charge_state_t Power_Class::_getChargeState(void)
   {
     if (!_initialized) { return charge_state_t::not_initialized; }
-    if (_identity_unconfirmed) { return charge_state_t::io_error; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return charge_state_t::io_error; }   // see begin(): the PMIC never answered its ID probe
 
     switch (_pmic)
     {
@@ -3779,7 +3838,7 @@ namespace m5
           papermono_ip2315_led_mode = false;
           return charge_state_t::not_charging;
         }
-        // External power present. The IP2316 charger reports
+        // External power present. The IP2315 charger reports
         // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
         // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
         // The other bits carry meaning too, but their definition is unconfirmed,
@@ -3919,7 +3978,7 @@ namespace m5
   battery_presence_t Power_Class::getBatteryPresence(void)
   {
     if (!_initialized) { return battery_presence_t::not_initialized; }
-    if (_identity_unconfirmed) { return battery_presence_t::io_error; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return battery_presence_t::io_error; }   // see begin(): the PMIC never answered its ID probe
 
     switch (_pmic)
     {
@@ -4087,7 +4146,8 @@ namespace m5
   bool Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
   {
     (void)config;
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_ext_port_bus)) { return false; }
     switch (M5.getBoard()) {
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub: {
@@ -4108,9 +4168,9 @@ namespace m5
 
   bool Power_Class::setVibration(uint8_t level)
   {
-    if (_identity_unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_vibration)) { return false; }
 #if !defined (M5UNIFIED_PC_BUILD) && defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (M5.getBoard() == board_t::board_M5StopWatch)
     {
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
       auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
@@ -4125,7 +4185,6 @@ namespace m5
     }
 #endif
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    if (M5.getBoard() == board_t::board_M5StackCore2)
     {
       // A non-zero level is clamped up to the lowest voltage the rail can
       // produce, so that every non-zero request drives the motor rather than
@@ -4153,69 +4212,8 @@ namespace m5
 
   std::uint8_t Power_Class::getPowerOutputCaps(void)
   {
-#if defined (M5UNIFIED_PC_BUILD)
-    return 0;   // the setters are stubs on the PC build
-#else
-    // Every advertised setter refuses an unconfirmed PMIC register map.
-    if (!_initialized || _identity_unconfirmed) { return 0; }
-    switch (M5.getBoard())
-    {
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-    case board_t::board_M5CoreP4X:
-      return cap_set_ext_output | cap_set_usb_output;
-
-    case board_t::board_M5Tab5:
-    case board_t::board_M5Tab5X:
-      return cap_set_ext_output;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C6)
-    case board_t::board_ArduinoNessoN1:
-      return cap_set_ext_output;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C5)
-    case board_t::board_M5ToughC5:
-      return (_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C61)
-    case board_t::board_M5CoreMatrix:
-      return cap_set_ext_output;
-
-#elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StackCoreS3:
-    case board_t::board_M5StackCoreS3SE:
-    case board_t::board_M5StackChan:
-      return cap_set_ext_output | cap_set_usb_output;
-
-    case board_t::board_M5StopWatch:
-      return ((_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0) | cap_set_vibration;
-
-    case board_t::board_M5StickS3:
-    case board_t::board_M5PaperColor:
-      return (_pmic == pmic_t::pmic_m5pm1) ? cap_set_ext_output : 0;
-
-    case board_t::board_M5ChainCaptain:
-    case board_t::board_M5StampS3Bat:
-      return cap_set_ext_output;
-
-    case board_t::board_M5PowerHub:
-      return cap_set_ext_output | cap_set_ext_port_bus;
-
-#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    case board_t::board_M5StackCore2:
-      return cap_set_ext_output | cap_set_vibration;
-
-    case board_t::board_M5Paper:
-    case board_t::board_M5Tough:
-    case board_t::board_M5StickC:
-    case board_t::board_M5StickCPlus:
-    case board_t::board_M5Station:
-      return cap_set_ext_output;
-#endif
-
-    default:
-      return 0;
-    }
-#endif
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return 0; }
+    return _power_output_caps(_pmic, M5.getBoard());
   }
 
 }

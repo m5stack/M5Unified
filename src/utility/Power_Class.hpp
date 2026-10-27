@@ -598,8 +598,12 @@ namespace m5
     /// Power_Class::begin()). _pmic alone cannot tell a pmic_unknown model
     /// from a not yet initialized one.
     bool _initialized = false;
-    bool _identity_settled = false;   ///< a probe answered with a positive chip ID (AXP192 / AXP2101 boards)
-    bool _identity_unconfirmed = false;   ///< every chip-ID probe failed: the board default is provisional (see begin())
+    enum class identity_state_t : std::uint8_t
+    { not_probed   ///< no chip-ID probe has run; some models determine the PMIC by board ID
+    , settled      ///< a probe answered with a positive chip ID (AXP192 / AXP2101 boards)
+    , unconfirmed  ///< every chip-ID probe failed: the board default is provisional (see begin())
+    };
+    identity_state_t _identity_state = identity_state_t::not_probed;
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
     bool _poweroff_requested = false;  ///< latched for this boot once PowerHub accepts a power-off request
