@@ -9,7 +9,7 @@
 #include "m5unified_i2c_addr.hpp"
 #include "M5IOE1_Class.hpp"
 
-#if defined (M5UNIFIED_PC_BUILD) || defined (M5UNIFIED_CHECK_CHARGE_STATE_CAPS)
+#if defined (M5UNIFIED_PC_BUILD)
 #include <cassert>
 #endif
 
@@ -911,6 +911,8 @@ namespace m5
       /// io_error, and charge setters refuse the unconfirmed register map.
       /// A later explicit begin() probes again; a positive ID makes the
       /// charge-state capability set available.
+      /// Control and output capabilities also stay empty while their setters
+      /// refuse the unconfirmed register map, so callers do not see unusable paths.
       _identity_unconfirmed = !_identity_settled;
     }
 
@@ -3571,7 +3573,8 @@ namespace m5
 
   std::uint8_t Power_Class::getChargeControlCaps(void)
   {
-    if (!_initialized) { return 0; }
+    // Every advertised setter refuses an unconfirmed PMIC register map.
+    if (!_initialized || _identity_unconfirmed) { return 0; }
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -3885,13 +3888,25 @@ namespace m5
   charge_state_t Power_Class::getChargeState(void)
   {
     charge_state_t res = _getChargeState();
-#if defined (M5UNIFIED_PC_BUILD) || defined (M5UNIFIED_CHECK_CHARGE_STATE_CAPS)
+#if defined (M5UNIFIED_PC_BUILD) || defined (M5UNIFIED_CHECK_CHARGE_STATE_CAPS) \
+ || (defined (CORE_DEBUG_LEVEL) && CORE_DEBUG_LEVEL >= 4) \
+ || (defined (CONFIG_LOG_DEFAULT_LEVEL) && CONFIG_LOG_DEFAULT_LEVEL >= 4)
     /// The procedure and the capability table are written separately, so the
     /// two are cross checked where a failing check can actually be seen: a
     /// state that is not advertised would silently break every caller that
     /// asked getChargeStateCaps() what to expect.
-    assert(!charge_states_known.contains(res)
-        || _charge_state_caps(_pmic, M5.getBoard()).contains(res));
+    const bool valid = !charge_states_known.contains(res)
+        || _charge_state_caps(_pmic, M5.getBoard()).contains(res);
+#if defined (M5UNIFIED_PC_BUILD)
+    assert(valid);
+#else
+    // Diagnostics must not change the returned state or stop a running device.
+    if (!valid)
+    {
+      ESP_LOGE("Power", "Charge state %u is absent from caps (pmic=%u board=%u)",
+          static_cast<unsigned>(res), static_cast<unsigned>(_pmic), static_cast<unsigned>(M5.getBoard()));
+    }
+#endif
 #endif
     return res;
   }
@@ -4141,7 +4156,8 @@ namespace m5
 #if defined (M5UNIFIED_PC_BUILD)
     return 0;   // the setters are stubs on the PC build
 #else
-    if (!_initialized) { return 0; }
+    // Every advertised setter refuses an unconfirmed PMIC register map.
+    if (!_initialized || _identity_unconfirmed) { return 0; }
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)

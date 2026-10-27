@@ -403,6 +403,7 @@ namespace m5
     /// Get which charge control paths this model provides.
     /// @return bitmask of charge_control_capability_t. 0 = no control path,
     /// which is also what is returned before M5.begin() has completed.
+    /// Paths refused because PMIC identification failed are not advertised.
     /// @note Only the set side is declared here; there is no readback getter
     /// yet, so no readback capability is advertised.
     std::uint8_t getChargeControlCaps(void);
@@ -503,6 +504,7 @@ namespace m5
 
     /// Get which power output paths this model provides.
     /// @return bitmask of power_output_capability_t. 0 = no output path, or M5.begin() has not completed yet.
+    /// Paths refused because PMIC identification failed are not advertised.
     /// @note A set bit says the path exists, not that a call on it will succeed:
     ///       the setters still return false on an I2C failure or a cancelled request.
     std::uint8_t getPowerOutputCaps(void);
