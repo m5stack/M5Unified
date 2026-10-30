@@ -115,7 +115,8 @@ namespace m5
   }
   static esp_err_t _mic_i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms) {
     if (_mic_i2s_handle[port] == nullptr) { return ESP_FAIL; }
-    /// i2s_channel_read のタイムアウトはミリ秒 (旧 i2s_read の tick 数とは契約が異なる)
+    /// i2s_channel_read takes the timeout in milliseconds (unlike the tick count of the legacy
+    /// i2s_read)
     return i2s_channel_read(_mic_i2s_handle[port], buf, len, result, timeout_ms);
   }
   static esp_err_t _mic_i2s_driver_uninstall(i2s_port_t port)
@@ -355,15 +356,16 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    { // クロックをドライバ管理で最終値に確定させる (mic_task での raw 分周上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
-      // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+    { // Let the driver set the final clock (mic_task does not override the raw divider). The
+      // default clock source (on ESP32-P4: XTAL 40 MHz when the minimum supported revision is < 3,
+      // PLL_F160M for rev >= 3) is also left to the driver.
       int os = _cfg.over_sampling;
       if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
       i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate * os;
       i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
 #if defined (I2S_LL_DEFAULT_CLK_FREQ)
-      // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
-      // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+      // The driver requires source clock >= 2x MCLK, so with a 40 MHz source 256fs tops out near
+      // 78 kHz. Above that, fall back to 128fs so the channel can still be initialized.
       if ((uint64_t)i2s_config.clk_cfg.sample_rate_hz * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
         i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
       }
@@ -570,8 +572,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    // std 経路はクロックを _setup_i2s でドライバ管理により最終値に設定済みのため、
-    // raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    // The std path already has its final driver-managed clock from _setup_i2s, so do not override
+    // the raw divider (the PDM path still does).
     const bool skip_raw_clk = !use_pdm;
 #else
     const bool skip_raw_clk = false;
@@ -696,12 +698,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     bool carry_valid = false;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
-    /// dma_frame_num)。読み出しは descriptor 境界に整列する処理チャンク
-    /// (stereo 16bit なら 1 枚分、mono/PDM なら 2 枚分) を単位に行う。
-    /// これより小さい単位で読むと、IDF の i2s_channel_read はキュー逼迫時に
-    /// descriptor の未読部分を破棄するため、サンプル欠落による位相誤差
-    /// (可聴ノイズ) が生じる。
+    /// dma_buf_len is the number of frames per DMA descriptor (dma_frame_num in _setup_i2s). Reads
+    /// are done in chunks aligned to descriptor boundaries (one descriptor for stereo 16-bit, two
+    /// for mono/PDM). Reading in smaller units makes the IDF i2s_channel_read discard the unread
+    /// rest of a descriptor when the queue is congested, and the missing samples turn into phase
+    /// errors (audible noise).
     const size_t read_bytes = dma_buf_len * 2 * sizeof(int16_t);
     int16_t* src_buf = (int16_t*)alloca(read_bytes);
     memset(src_buf, 0, read_bytes);
@@ -810,10 +811,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         if (src_idx >= src_len)
         {
-          /// 有効なデータが得られるまで再試行する。ここで空のまま下の do-while に
-          /// 落ちると、直前バッファの先頭フレームを 1 枚余分に消費してしまい
-          /// (do は条件確認前に必ず 1 回実行される)、時間軸が入力 1 フレーム分
-          /// ずれて可聴の位相ノイズになる。
+          /// Retry until valid data arrives. Falling through to the do-while below with an empty
+          /// buffer would consume one extra frame at the head of the previous buffer (do runs once
+          /// before the check), shifting the time axis by one input frame and causing audible phase
+          /// noise.
           for (;;)
           {
             src_len = 0;
@@ -830,7 +831,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
             vTaskDelay(1);
 #endif
           }
-          if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
+          /// only when the task is asked to stop (leave the consumer loop)
+          if (src_len == 0) { break; }
           src_len >>= 1;
           src_idx = 0;
         }

@@ -209,15 +209,15 @@ namespace m5
     // default is chosen at run time, which is why its clock stays driver managed.)
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    // クロックをドライバ管理で最終値に確定させる (spk_task での raw 分周上書きを行わない)。ここで実レートを渡すことで、begin 中のクロック遷移が
-    // 一度きりになり、外付け codec (Tab5=ES8388) のロック失敗を防ぐ。
-    // クロック源既定 (minimum supported revision < 3 のビルドは XTAL 40MHz /
-    // rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+    // Let the driver set the final clock (spk_task does not override the raw divider). Passing the
+    // real rate here makes the clock transition during begin happen once, which keeps the external
+    // codec (ES8388) locked. The default clock source (on ESP32-P4: XTAL 40 MHz when the minimum
+    // supported revision is < 3, PLL_F160M for rev >= 3) is also left to the driver.
     i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate;
     i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
 #if defined (I2S_LL_DEFAULT_CLK_FREQ)
-    // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
-    // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+    // The driver requires source clock >= 2x MCLK, so with a 40 MHz source 256fs tops out near
+    // 78 kHz. Above that, fall back to 128fs so the channel can still be initialized.
     if ((uint64_t)_cfg.sample_rate * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
       i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
     }
@@ -400,9 +400,9 @@ namespace m5
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
 
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    // クロックは _setup_i2s でドライバ管理により最終値に設定済み (実レート +
-    // 256fs、40MHz source ビルドの高レートのみ 128fs)。
-    // ドライバの分数分周 (a/b ≤ 511) は十分高精度のため、レート換算は公称値でよい。
+    // The clock was already set to its final driver-managed value in _setup_i2s (real rate, 256fs;
+    // 128fs only for high rates with a 40 MHz source). The driver's fractional divider (a/b <= 511)
+    // is accurate enough, so the nominal rate is used for conversion.
     const int32_t spk_sample_rate_x256 = self->_cfg.sample_rate * SAMPLERATE_MUL;
 #else
     static constexpr uint32_t PLL_D2_CLK = M5UNIFIED_I2S_PLL_D2_HZ;
@@ -414,15 +414,16 @@ namespace m5
       div_m = 8;
     }
 
-    { /// 低サンプリングレートで分周値が n の上限 255 を超える場合、BCK 分周 (div_m) を
-      /// 引き上げてレンジ内に収める。これを行わないと n が飽和して実レートが大きく
-      /// ずれ (例: S3 の 12000Hz 指定で実 14649Hz)、リサンプラの補間歪みが生じる。
+    { /// At low sample rates the divider exceeds the limit of n (255); raise the BCK divider
+      /// (div_m) to stay in range. Otherwise n saturates and the real rate drifts a lot (e.g.
+      /// 14649 Hz for a 12000 Hz request on ESP32-S3), and the resampler produces interpolation
+      /// distortion.
       const uint64_t limit = 255ULL * bits * self->_cfg.sample_rate;
       if (limit) {
         uint32_t min_m = (uint32_t)((PLL_D2_CLK + limit - 1) / limit);
         if (div_m < min_m) {
-          /// 63 は HW v1 (6bit フィールドに生値格納、最大 63) と HW v2 (divisor-1 を
-          /// 格納、単独なら 64 まで表現可) の両 raw レジスタ経路で安全な共通上限。
+          /// 63 is the common safe limit for both raw register paths: HW v1 stores the raw value in
+          /// a 6-bit field (max 63), HW v2 stores divisor-1 (64 alone would fit).
           div_m = (min_m < 63) ? min_m : 63;
         }
       }
