@@ -126,10 +126,7 @@ namespace m5
   bool IP5306_Class::isCharging(void)
   { /// This needs both of the flags the datasheet describes, not one of them:
     /// REG_READ0 bit3 tells charging from discharging, and REG_READ1 bit3
-    /// tells whether the cell has already been filled. Only the first was
-    /// read. It stays set once charging is enabled and a supply is present -
-    /// the completed charge included - so a finished charge was reported as an
-    /// ongoing one, as was a board running with no cell installed at all.
+    /// tells whether the cell has already been filled.
     ///
     /// The two sit at adjacent addresses but are read separately on purpose.
     /// The register document only ever shows a single-byte read and nowhere

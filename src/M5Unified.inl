@@ -838,11 +838,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       M5.In_I2C.bitOn(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
     }
     else
-    { // 正規の power-down シーケンス。end() は cb(false) を I2S 停止より先に呼ぶため、
-      // ここは MCLK/BCLK が生きているうちに実行される。旧実装 (reg8 のみ書き込み) では
-      // DAC 稼働状態のままクロックが絶たれ、次回 enable の reset が毎回異なる残留状態
-      // から行われて受信位相が begin ごとに不定になっていた。毎回同一の power-down
-      // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
+    { // Power down in a fixed order while MCLK/BCLK are still running
+      // (end() calls cb(false) before stopping I2S), so the next enable
+      // always starts from the same defined state.
       M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
       M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
       m5gfx::delay(1);                                             // soft-ramp 遷移待ち
