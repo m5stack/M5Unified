@@ -1347,8 +1347,7 @@ label_continue_sample:
   bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
     // Only a queued request produces a release callback, so the answer is
-    // false whenever nothing was queued (this used to say true for a speaker
-    // that could not start and for an empty request).
+    // false whenever nothing was queued.
     const bool in_task = _in_task();
     if (in_task)
     { // from the release callback: an end() may be tearing the task down,

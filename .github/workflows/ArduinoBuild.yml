@@ -89,7 +89,7 @@ jobs:
           OWNER="${{ github.repository_owner }}"
           BRANCH="${{ github.base_ref || github.ref_name }}"
           [ "$BRANCH" = "master" ] || BRANCH="develop"
-          # Prefer same owner's fork (e.g. ainyan03/M5GFX); fall back to upstream m5stack/M5GFX
+          # Prefer same owner's fork (e.g. <owner>/M5GFX); fall back to upstream m5stack/M5GFX
           if git ls-remote --heads "https://github.com/$OWNER/M5GFX.git" "$BRANCH" 2>/dev/null | grep -q .; then
             REPO="$OWNER/M5GFX"
           else
@@ -107,12 +107,12 @@ jobs:
       - name: Configure arduino-cli
         run: |
           arduino-cli config init
-          # The M5Stack index is intermittently unavailable (404 as of
-          # 2026-07). Try the primary URL first and fall back to the CN
-          # mirror. Either index is then passed through a patch script that
-          # fixes stale toolsDependencies entries (the CN index renames all
-          # tools with a "-cn" suffix but older platforms still reference the
-          # pre-rename versions); the script is a no-op on a consistent index.
+          # The M5Stack index is intermittently unavailable. Try the primary URL
+          # first and fall back to the CN mirror. Either index is then passed
+          # through a patch script that fixes stale toolsDependencies entries
+          # (the CN index renames all tools with a "-cn" suffix but older
+          # platforms still reference the pre-rename versions); the script is a
+          # no-op on a consistent index.
           if [[ "${{ matrix.board_manager_url }}" == *package_m5stack_index*.json ]]; then
             PRIMARY="${{ matrix.board_manager_url }}"
             INDEX=/tmp/package_m5stack_index.json

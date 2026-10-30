@@ -412,7 +412,7 @@ namespace m5
         m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
       }
       // Restore GPIO46 on boards exposing it to the application, including
-      // candidates and package defaults, as the legacy detector did. Power hold
+      // candidates and package defaults. Power hold
       // and display bus pins configured by Display.init() retain their state.
       switch (gpio46_hold ? board : board_t::board_unknown)
       {

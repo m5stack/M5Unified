@@ -1724,8 +1724,8 @@ namespace m5
         bool ok = true;
         if (_pmic == pmic_axp2101) {
           if (enable) {
-            // Without an INA3221 the previous behaviour is kept: omit the
-            // current-direction check. A detected device must remain readable.
+            // Without an INA3221 the current-direction check is omitted.
+            // A detected device must remain readable.
             // The battery level is read only once a negative current is seen.
             if (Ina3221[0].isEnabled()) {
               int32_t sh0 = 0, sh1 = 0;
@@ -2468,8 +2468,6 @@ namespace m5
           else
 #endif
           { /// TODO: reconsider these pull settings.
-            // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
-            // and every board that reaches here now shares them.
             // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
             // without an external pull-up would wake up immediately. On CoreS3 this works
             // only because I2C_INT has an external 10k pull-up, and it costs about 60uA

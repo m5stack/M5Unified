@@ -79,7 +79,7 @@ jobs:
           OWNER="${{ github.repository_owner }}"
           BRANCH="${{ github.base_ref || github.ref_name }}"
           [ "$BRANCH" = "master" ] || BRANCH="develop"
-          # Prefer same owner's fork (e.g. ainyan03/M5GFX); fall back to upstream m5stack/M5GFX
+          # Prefer same owner's fork (e.g. <owner>/M5GFX); fall back to upstream m5stack/M5GFX
           if git ls-remote --heads "https://github.com/$OWNER/M5GFX.git" "$BRANCH" 2>/dev/null | grep -q .; then
             REPO="$OWNER/M5GFX"
           else

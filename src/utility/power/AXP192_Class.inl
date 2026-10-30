@@ -164,10 +164,7 @@ namespace m5
   }
 
   bool AXP192_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
-  { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts:
-    /// the earlier form subtracted a bias first, which underflowed the
-    /// unsigned argument for anything below the lowest step and then clamped
-    /// to the highest one - a request for less charge voltage produced more.
+  { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts.
     static constexpr std::uint16_t table[] = { 4100, 4150, 4200, 4360 };
     size_t i = (sizeof(table) / sizeof(table[0])) - 1;
     /// pick the highest step that does not exceed the request, and the lowest

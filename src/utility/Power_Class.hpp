@@ -188,8 +188,8 @@ namespace m5
     , pmic_m5pm1
     };
 
-    /// @deprecated No function returns this any more; it will be removed in the
-    /// next release. Use charge_state_t. (no attribute is attached on purpose)
+    /// @deprecated No function returns this any more; it will be removed in a
+    /// future release. Use charge_state_t. (no attribute is attached on purpose)
     enum is_charging_t
     { is_discharging = 0
     , is_charging

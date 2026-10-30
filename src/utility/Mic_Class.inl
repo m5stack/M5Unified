@@ -1248,8 +1248,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // has no priority inheritance and a middle-priority task can keep the
     // holder off the CPU forever. A stop (end() / rate rebuild) holds the
     // lock while waiting for this task, and clears _task_running first.
-    // Nothing to record into is a caller error, not a request: it used to
-    // return true without ever invoking the release callback.
+    // Nothing to record into is a caller error, not a request.
     if (recdata == nullptr || array_len == 0) { return false; }
 #if defined (SDL_h_)
     const bool in_task = (_task_thread_id.load(std::memory_order_acquire) != 0 && SDL_ThreadID() == _task_thread_id.load(std::memory_order_acquire));
