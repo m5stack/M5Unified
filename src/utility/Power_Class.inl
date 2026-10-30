@@ -729,12 +729,12 @@ namespace m5
           M5_LOGE("PM1 PWM ch1 could not be turned off, and GPIO4 could not be switched to GPIO mode; silence cannot be guaranteed.");
         }
       }
-      /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
-      /// いたファームの設定に依存しないよう IRQ 関連を初期化する
+      /// The PM1 is always powered and keeps its state across ESP resets, so initialize the IRQ
+      /// settings instead of relying on whatever the previous firmware left
       M5pm1.clearWakeSource();
       M5pm1.clearIRQStatus();
       M5pm1.setGPIOIRQMaskBits(0x16);  // enable GPIO0(TP INT)/GPIO3(RTC nIRQ), disable other GPIO IRQ
-      /// PM1 GPIO0 は TP INT 入力。
+      /// PM1 GPIO0 is the TP INT input.
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
       /// settle battery presence early (the charger may still be idle).
@@ -761,24 +761,23 @@ namespace m5
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
       M5pm1.setLedEnLevel(true);
-      /// PM1 GPIO1 は ESP32 の G4 へ配線された IRQ 出力。IRQ ピンを設定して
-      /// おかないと PM1 が IRQ ステータス (0x40-0x42) を自動クリアしてしまい、
-      /// 電源ボタンや RTC アラームの IRQ 検出が機能しない。
-      /// IRQ 機能へ切り替える前に push-pull 出力の High として設定しておき、
-      /// 解放時に能動的に High が駆動されるようにする。
+      /// PM1 GPIO1 is the IRQ output wired to ESP32 G4. Without an IRQ pin configured, the PM1
+      /// clears the IRQ status registers (0x40-0x42) by itself, and power button / RTC alarm IRQs
+      /// cannot be detected. Configure it as a push-pull output driving High before switching to
+      /// the IRQ function, so that releasing the IRQ actively drives the line High.
       M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
       M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
       M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
-      /// PM1 GPIO3 は RX8130 の nIRQ 入力 (外部プルアップ・アクティブ Low)。
-      /// 入力にしておくと IRQ ピン設定時のレベル変化スキャン対象になり、
-      /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
+      /// PM1 GPIO3 is the RX8130 nIRQ input (external pull-up, active Low). As an input it is part
+      /// of the level-change scan of the IRQ pin, so an RTC alarm propagates to the IRQ output (=
+      /// ESP32 G4 Low).
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
-      /// make the PM1 IRQ output readable as the wakeup pin。
-      /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
-      /// 期待できないため、内部プルアップを有効にする。
+      /// make the PM1 IRQ output readable as the wakeup pin.
+      /// This line has no external pull-up and nothing drives it back High when the IRQ is
+      /// released, so enable the internal pull-up.
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       break;
     }
@@ -1323,8 +1322,9 @@ namespace m5
   static constexpr const uint8_t _core_s3_bus_en = 0b00000010; // BUS EN
   static constexpr const uint8_t _core_s3_usb_en = 0b00100000; // USB OTG EN
 
-  // AW9523 の出力ポートを操作する主体 (setExtOutput / setUsbOutput / スピーカー制御) を直列化する。
-  // BUS_OUT_EN を落とす手順は 200ms の待ちを挟むので、read-modify-write 同士の交差を排除する必要がある。
+  // Serialize everyone who touches the AW9523 output ports (setExtOutput / setUsbOutput / speaker
+  // control). Dropping BUS_OUT_EN includes a 200 ms wait, so interleaved read-modify-write
+  // sequences must be ruled out.
   static SemaphoreHandle_t _core_s3_mutex(void)
   {
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
@@ -1402,24 +1402,25 @@ namespace m5
     if (!enable)
     {
       buf[0] = orig[0] & ~mask;
-      // if (0 == (p0 & (_core_s3_bus_en | _core_s3_usb_en))) // 両方が無効の場合のみ BOOST_EN を無効化する
       if (0 == (buf[0] & _core_s3_bus_en))
       {
         buf[1] &= ~port1_bitmask_boost;
       }
       if (orig[0] & mask & _core_s3_bus_en)
       {
-        // BUS_OUT_EN を 1→0 にするときは BOOST_EN を先に落とし、BUS_OUT が放電してから切り替える。
-        // BUS_OUT_EN=0 は BUS 入力側スイッチを ON にする操作なので、BUS_OUT が 5V のまま切り替えると
-        // USB VBUS が BUS_OUT へ流れ込み続け、以後 BUS_OUT_EN=0 でも 5V が残る (TS 検出も張り付き、
-        // setExtOutput(true) が cancel され続ける)。放電は無負荷で約 80ms、余裕をみて 200ms 待つ。
-        // BOOST_EN が読み取り時点で既に 0 でも、いつ 0 になったかは分からないので待ちは省略しない。
+        // When clearing BUS_OUT_EN (1 -> 0), drop BOOST_EN first and let BUS_OUT discharge before
+        // switching. BUS_OUT_EN=0 turns on the BUS input-side switch, so switching while BUS_OUT is
+        // still at 5 V lets USB VBUS keep flowing into BUS_OUT, and 5 V remains even with
+        // BUS_OUT_EN=0 afterwards (the TS detection sticks and setExtOutput(true) keeps being
+        // cancelled). Discharge takes about 80 ms with no load; wait 200 ms for margin. Even if
+        // BOOST_EN already reads 0, when it became 0 is unknown, so never skip the wait.
         auto restore = [&](void)
         {
-          // I2C の失敗後はデバイス側の反映が不確定なので、latch を読み直して実状態から戻す。
-          // BUS_OUT_EN が残っていれば BOOST_EN を開始時の値へ、落ちていれば BOOST_EN=0 を確定する。
-          // 読めなければ開始時の値を書き戻す (有効化方向なので順序の問題は生じない)。
-          // 復旧の書込自体も失敗し得るので、読み戻して一致するまで有界で繰り返す。
+          // After an I2C failure the device state is uncertain, so re-read the latch and recover
+          // from the actual state. If BUS_OUT_EN is still set, restore BOOST_EN to its initial
+          // value; if it is clear, settle on BOOST_EN=0. If it cannot be read, write back the
+          // initial values (enabling direction, so ordering is not an issue). The recovery write
+          // may fail too, so repeat with a bound until the read-back matches.
           for (int retry = 0; ; ++retry)
           {
             uint8_t cur[2];
@@ -1448,9 +1449,10 @@ namespace m5
         return true;
       }
     }
-    // 2 バイト一括書きは途中失敗で片方だけ反映され得るので 1 バイトずつ書き、先頭が失敗したら止める。
-    // 有効化は BOOST_EN → 出力 EN、無効化は出力 EN → BOOST_EN の順にすると、途中で止まっても
-    // 「出力 EN=1 で boost 停止」(出力が死んでいるのに有効と報告される) にはならない。
+    // A 2-byte write can fail halfway and apply only one byte, so write one byte at a time and stop
+    // if the first fails. Enable in the order BOOST_EN -> output EN and disable in the order output
+    // EN -> BOOST_EN, so a partial write never ends up as "output EN=1 with the boost stopped"
+    // (output dead but reported as enabled).
     if (enable)
     {
       if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return false; }
@@ -1481,21 +1483,24 @@ namespace m5
     return lock.locked && _core_s3_output_locked(mask, enable);
   }
 
-  // 無バッテリーで BUS_OUT (TS で検出) に外部 5V が来ている間は、有効化すると自身の給電を断つので取り消す。
-  // 既に BUS_OUT_EN=1 なら TS の 5V は自身の出力なので判定しない。
-  // 判定に使う読み出しが失敗したときは「危険」側に倒す (読めない状態で有効化しない)。
+  // With no battery, while external 5 V is present on BUS_OUT (seen on TS), enabling would cut our
+  // own supply, so cancel. If BUS_OUT_EN is already 1, the 5 V on TS is our own output; skip the
+  // check. If a read used for the decision fails, fail safe (do not enable while the state is
+  // unknown).
   static bool _core_s3_ext_output_unsafe(AXP2101_Class& axp)
   {
     uint8_t r00;
     if (!axp.readRegister(0x00, &r00, 1)) { return true; }
-    if ((r00 & 0x08) || !(r00 & 0x20)) { return false; } // バッテリーあり、または VBUS なし
+    if ((r00 & 0x08) || !(r00 & 0x20)) { return false; } // battery present, or no VBUS
     uint8_t p0;
     if (!M5.In_I2C.readRegister(aw9523_i2c_addr, 0x02, &p0, 1, i2c_freq)) { return true; }
     if (p0 & _core_s3_bus_en) { return false; }
     uint8_t ts[2];
     if (!axp.readRegister(0x36, ts, 2)) { return true; }
     std::size_t raw = ((ts[0] & 0x3F) << 8) | ts[1];         // 14bit, 0.5mV/LSB
-    if (raw >= (0x3FFF - 32)) { return true; }                // ADC 無効値: 測れていないので危険側 (getTSVoltage の 0V 丸めは表示用)
+    // invalid ADC value: nothing measured, fail safe (the 0 V rounding in getTSVoltage is for
+    // display only)
+    if (raw >= (0x3FFF - 32)) { return true; }
     return raw > 4000;                                        // 2.0V
   }
 
@@ -1503,11 +1508,13 @@ namespace m5
   //   later request / write failed. Only a cancel is reported through cancelled, because the caller warns about it.
   static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable, bool* cancelled)
   {
-    // 判定と切替を同じ排他区間で行う (判定後に別タスクの off が割り込むと、古い判定で有効化してしまう)。
-    // TS の ADC 値は実電圧に最大 0.7s ほど遅れる。自身 (または並行する別タスク) の off 直後は古い 5V を
-    // 読み得るので、危険と判定したときは排他を解いて 20ms 待ち、再取得して判定し直す (最大 1s)。
-    // 外部給電なら高いままなので cancel になる。待ちの間は他の AW9523 操作を塞がない。
-    // 待機中に後発の要求が処理されたら古い要求は破棄する (最後の要求が勝つ)。
+    // Decide and switch inside the same critical section (an off from another task in between would
+    // enable on a stale decision). The TS ADC value lags the real voltage by up to about 0.7 s.
+    // Right after an off (ours or a concurrent task's) a stale 5 V may be read, so when judged
+    // unsafe, release the lock, wait 20 ms, re-read and decide again (up to 1 s). An external
+    // supply stays high and ends in a cancel. Other AW9523 operations are not blocked during the
+    // wait. If a later request is handled while waiting, the older one is dropped (last request
+    // wins).
     static uint32_t generation = 0;
     uint32_t my_generation = 0;
     uint32_t t0 = 0;
@@ -1517,7 +1524,8 @@ namespace m5
       {
         _core_s3_lock_t lock;
         if (!lock.locked) { return false; }
-        if (first) { my_generation = ++generation; t0 = m5gfx::millis(); } // 待ち時間の起点は排他取得後 (mutex 待ちを含めない)
+        // the wait starts after the lock is taken (mutex wait excluded)
+        if (first) { my_generation = ++generation; t0 = m5gfx::millis(); }
         else if (my_generation != generation) { return false; }
         if (!enable || !_core_s3_ext_output_unsafe(axp))
         {
@@ -2172,31 +2180,30 @@ namespace m5
           int retry = 3;
           while (!M5pm1.powerOff() && --retry) { m5gfx::delay(10); }
           if (!retry)
-          { /// 電源を落とせないまま wake source 無しで眠ると、電源ボタンの単押しや
-            /// IRQ では復帰できなくなる (PM1 の二重クリックや USB 再接続による
-            /// 電源サイクルは可能)。単押しで復帰できるよう IRQ ピンを残して眠る
+          { /// Sleeping without a wake source while the power could not be cut would make a single
+            /// press of the power button or an IRQ unable to wake up (a PM1 double click or a USB
+            /// re-plug still power-cycles). Keep the IRQ pin armed so a single press can wake up
             M5_LOGE("_powerOff: M5PM1 powerOff failed.");
             arm_wakeup = true;
           }
         }
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
         if (arm_wakeup && _wakeupPin < GPIO_NUM_MAX)
-        { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
-          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) のを確認して
-          /// から ANY_LOW を武装して眠り、その Low 遷移で deep sleep から復帰
-          /// できるようにする。
+        { /// Boards where the RTC nIRQ is not wired to the ESP32 but routed through the PM1 IRQ
+          /// output (ToughC5 etc.). Confirm the IRQ output is released (back to High), then arm
+          /// ANY_LOW and sleep so the Low transition wakes up from deep sleep.
           int retry = 40;
           while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
           if (!retry)
           {
             if (withTimer)
-            { /// 解放されない線を ANY_LOW で武装したまま眠ると即時復帰の
-              /// 再起動ループになるため、wake 経路を確保できなければ眠らない
+            { /// Sleeping with ANY_LOW armed on a line that never releases would reboot immediately
+              /// in a loop, so do not sleep unless a wake path is secured
               M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
               M5.Display.wakeup();
               return false;
             }
-            /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
+            /// In the fallback after a failed powerOff, sleep without arming (log only)
             M5_LOGE("_powerOff: cannot release the wakeup pin.");
           }
           else
@@ -2213,8 +2220,8 @@ namespace m5
             }
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
             if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
-            { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
-              /// RTC ドメインのプルアップで High を維持する
+            { /// The IRQ line has no external pull-up, so hold it High with the RTC-domain pull-up,
+              /// which stays active during deep sleep
               rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
               rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
             }
@@ -2390,9 +2397,9 @@ namespace m5
 
   bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
   {
-    // clear_comm_ok は「この呼び出し内でクリア通信が一度でも成功したか」を返す。
-    // ピンが解放されない理由が「要因がまだ生きている (指が触れている等)」なのか
-    // 「デバイスと通信できない (回復見込みなし)」なのかを呼び出し元が区別できる。
+    // clear_comm_ok reports whether at least one clear transaction succeeded within this call, so
+    // the caller can tell "the source is still active (finger still touching, etc.)" from "the
+    // device cannot be reached (no recovery expected)" when the pin does not release.
     bool comm_ok = false;
     for (int retry = 8; retry > 0; --retry)
     {
@@ -2459,9 +2466,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
           if (M5.getBoard() == board_t::board_M5ToughC5
            || M5.getBoard() == board_t::board_M5CoreMatrix)
-          { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
-            // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
-            // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
+          { // The PM1 IRQ output has no external pull-up; a pull-down would hold it Low and the
+            // wakeup pin would never release. Hold it High with the internal pull-up and wake only
+            // on IRQ assert (Low).
             rtc_gpio_pullup_en((gpio_num_t)wpin);
             rtc_gpio_pulldown_dis((gpio_num_t)wpin);
           }
@@ -2487,11 +2494,11 @@ namespace m5
         while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
           if (!clear_comm_ok)
-          { // 割り込み要因のクリア通信自体が失敗している。解放されない線を
-            // ANY_LOW で待つ構成のまま眠ると即時復帰の再起動ループになるため、
-            // 失敗が連続する場合は眠らずに戻る。一時的な失敗 (デバイスの
-            // ビジー等) は許容し、成功が挟まれば数え直す。
-            // ( 要因が生きているだけなら従来通り解放を待つ )
+          { // The clear transaction itself is failing. Sleeping with ANY_LOW armed on a line that
+            // never releases would reboot immediately in a loop, so return without sleeping when
+            // failures persist. Transient failures (device busy etc.) are tolerated; a success in
+            // between resets the count. (If only the source is still active, keep waiting for the
+            // release.)
             if (++comm_fail >= 3)
             {
               M5_LOGE("deepSleep: cannot release the wakeup pin. not sleeping.");
@@ -2590,8 +2597,8 @@ namespace m5
         while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
           if (!clear_comm_ok)
-          { // クリア通信の失敗が連続する場合は解放を待たない。light sleep は
-            // 即時復帰しても実行が戻るだけなので deep sleep と違い眠って構わない
+          { // Do not wait for the release when clear transactions keep failing. Unlike deep sleep,
+            // an immediate wakeup from light sleep just returns execution, so sleeping is fine
             if (++comm_fail >= 3)
             {
               M5_LOGE("lightSleep: cannot release the wakeup pin.");

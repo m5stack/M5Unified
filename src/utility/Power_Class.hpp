@@ -545,7 +545,8 @@ namespace m5
 #endif
 
   private:
-    /// CoreS3 family: AW9523 のビット操作を setExtOutput / setUsbOutput と同じ排他区間で行う (スピーカー制御用)
+    /// CoreS3 family: AW9523 bit operations in the same critical section as setExtOutput /
+    /// setUsbOutput (for speaker control)
     static void _core_s3_aw9523_bit(uint8_t reg, uint8_t mask, bool on);
     /// Battery current with I2C error reporting, for the boards whose charge
     /// state is decided by the current. @return false = not readable / no path.

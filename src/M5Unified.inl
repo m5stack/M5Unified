@@ -52,8 +52,8 @@
 #include "utility/led/LED_PaperMono_Class.hpp"
 
 #if defined (ARDUINO) && defined (CONFIG_IDF_TARGET_ESP32P4)
-// ESP-Hosted (Arduino core HAL) の SDIO ピン設定。弱参照にして、WiFi/BLE を使わないビルドには
-// ESP-Hosted のコードを引き込まない (リンカが解決しなければ nullptr になる)。
+// SDIO pin setup of ESP-Hosted (Arduino core HAL). Weak references, so builds that do not use
+// WiFi/BLE do not pull in the ESP-Hosted code (nullptr when the linker does not resolve them).
 extern "C" bool hostedSetPins(int8_t clk, int8_t cmd, int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t rst) __attribute__((weak));
 extern "C" bool hostedIsInitialized(void) __attribute__((weak));
 #endif
@@ -95,7 +95,6 @@ int8_t M5Unified::_get_pin_table[pin_name_max];
 #else
 // Pin number table. Place unknown at the end of the table. 
 // If there is no corresponding value, the value of unknown is used.
-// ピン番号テーブル。 unknownをテーブルの最後に配置する。該当が無い場合はunknownの値が使用される。
 static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
                             // In SCL,SDA, EX SCL,SDA
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -146,7 +145,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
-{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  }, // PortA は内部バスと同一 (レベルシフタ経由の物理分配)
+// PortA shares the internal bus (physical fan-out through a level shifter)
+{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -619,7 +619,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (spk_cfg.pin_bck == GPIO_NUM_34 && enabled)
     {
       Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, true);
-      /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
+      /// AW88298 register values depend on the sample rate
       static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
       size_t reg0x06_value = 0;
       size_t rate = (spk_cfg.sample_rate + 1102) / 2205;
@@ -632,7 +632,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       aw88298_write_reg( 0x06, reg0x06_value );
       aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
     }
-    else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+    /// Stop the internal speaker when disabling, or when the target is not the internal speaker.
+    else
     {
       aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
       Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, false);
@@ -667,7 +668,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         ESP_LOGD("M5Unified", "enabling es8311\n");
         in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
       }
-      else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+      else /// Stop the internal speaker when disabling.
       {
         ESP_LOGD("M5Unified", "disabling es8311\n");
         self->In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 0b00001000, 100000);
@@ -841,11 +842,15 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     { // Power down in a fixed order while MCLK/BCLK are still running
       // (end() calls cb(false) before stopping I2S), so the next enable
       // always starts from the same defined state.
-      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
-      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
-      m5gfx::delay(1);                                             // soft-ramp 遷移待ち
-      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
-      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
+      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (no transient click)
+      // DACCONTROL3: mute (keep SoftRamp)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000);
+      // wait for the soft-ramp transition
+      m5gfx::delay(1);
+      // DACPOWER: DAC L/R down, all outputs off
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000);
+      // CHIPPOWER: everything off (same end state as the ESP-ADF es8388 deinit)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000);
     }
 #endif
     return true;
@@ -1568,14 +1573,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     i2c_port_t ex_port = I2C_NUM_0;
 #if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
-// M5GFX が LP_I2C 対応をコンパイルする条件と同一に保つこと
-// (条件を満たさない SDK では LP ポートを開けないため HP のまま運用する)
+// Keep identical to the condition under which M5GFX compiles its LP_I2C support (an SDK that does
+// not meet it cannot open the LP port, so the HP port stays in use)
 #if defined (CONFIG_IDF_TARGET_ESP32C5) && defined ( SOC_LP_I2C_NUM ) && ( SOC_LP_I2C_NUM > 0 ) \
  && __has_include ( <driver/i2c_master.h> ) && defined ( ESP_IDF_VERSION_VAL ) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
     if (board == board_t::board_M5ToughC5)
-    { /// 内部バス (G2/G3) は LP_I2C の固定パッドと一致するため LP ポートへ割り当てる。
-      /// PortA も同じバスの物理分配なので Ex_I2C は同ポートを共有し (初代 BASIC と
-      /// 同じ形)、HP の I2C0 は丸ごと空く。
+    { /// The internal bus (G2/G3) matches the fixed LP_I2C pads, so it goes to the LP port. PortA
+      /// is a physical fan-out of the same bus, so Ex_I2C shares the port (as on the original Core
+      /// BASIC), and the HP I2C0 stays completely free.
       in_port = LP_I2C_NUM_0;
       ex_port = LP_I2C_NUM_0;
     }
@@ -1655,8 +1660,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
-      { /// LCD 電源/リセット/バックライトのほか TF 電源 (PYG6) と
-        /// TF カード検出 (PYG14) がこの IOE にぶら下がる
+      { /// Besides LCD power/reset/backlight, TF power (PYG6) and TF card detect (PYG14) hang off
+        /// this IO expander
         auto ioexp = new M5IOE1_Class;
         ioexp->begin();
         _io_expander[0].reset(ioexp);
@@ -2034,8 +2039,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
 #if defined (ARDUINO)
-      // 汎用 esp32p4 ボード選択時、core 既定の SDIO ピンでは C6 (WiFi/BLE) に届かない。
-      // WiFi.begin より前 (ESP-Hosted 初期化前) に Tab5 の配線へ差し替える。
+      // With the generic esp32p4 board selected, the core's default SDIO pins do not reach the C6
+      // (WiFi/BLE). Switch to the Tab5 wiring before WiFi.begin (before ESP-Hosted initializes).
       if (hostedSetPins && !(hostedIsInitialized && hostedIsInitialized()))
       {
         hostedSetPins(GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8, GPIO_NUM_15);
@@ -2388,7 +2393,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               {
                 flg_atomic_spk = true;
                 ESP_LOGD("M5Unified", "ATOMIC SPK");
-                // atomic_spkのSDカード用ピンを割当
+                // Assign the SD card pins of Atomic SPK
                 _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
                 _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
                 _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
@@ -2674,7 +2679,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               {
                 flg_atomic_spk = true;
                 ESP_LOGD("M5Unified", "ATOMIC SPK");
-                // atomic_spkのSDカード用ピンを割当
+                // Assign the SD card pins of Atomic SPK
                 _get_pin_table[sd_spi_sclk] = pin;
                 _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
                 _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
@@ -2806,11 +2811,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     switch (getBoard())
     {
     case board_t::board_M5ToughC5:
-      { // TOUCH_INT や RTC_INT は PM1 に集約され、PM1 の IRQ 出力 -> GPIO4 が
-        // 唯一の wakeup ピンになる。IRQ 出力は IRQ ステータス (0x40-0x42) が
-        // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
-        // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
-        // され続けるので、先に WAKE_SRC を消す。
+      { // TOUCH_INT and RTC_INT are routed into the PM1, so the PM1 IRQ output -> GPIO4 is the only
+        // wakeup pin. The IRQ output stays Low until the IRQ status registers (0x40-0x42) are all
+        // 0, so clear them here to release it. While WAKE_SRC is set, the WAKEUP bit of IRQ Status
+        // 3 keeps getting set again, so clear WAKE_SRC first.
         res  = Power.M5pm1.clearWakeSource();
         res &= Power.M5pm1.clearIRQStatus();
       }
