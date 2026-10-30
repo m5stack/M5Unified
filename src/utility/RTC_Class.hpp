@@ -68,6 +68,13 @@ namespace m5
     /// Whether the RTC can represent this alarm request; nothing is written.
     bool canSetAlarm(const rtc_date_t* date, const rtc_time_t* time) const { return _rtc_instance ? _rtc_instance->canSetAlarm(date, time) : false; }
 
+    /// Removed. setAlarmIRQ(seconds) programmed the periodic timer, not the alarm;
+    /// use setTimerIRQ(seconds * 1000). Deleted (instead of just removed) so that
+    /// setAlarmIRQ(0) fails to compile rather than silently binding to the tm* overload.
+    bool setAlarmIRQ(int afterSeconds) = delete;
+
+    /// Same as setAlarmIRQ(const rtc_date_t*, const rtc_time_t*).
+    bool setAlarmIRQ(const tm* datetime);
     /// Set (or clear) the alarm.
     /// The alarm uses minutes, hours, date and weekDay; a field set to -1 is a wildcard.
     /// seconds, month and year are ignored (one-minute resolution). A request with no
@@ -85,14 +92,10 @@ namespace m5
     /// @note See setTimerIRQ() for the M5PM1 relay note.
     /// @note PowerHub: each alarm register write is followed by a 50 ms pause so the STM32
     ///       front-end can apply it; a set or clear takes about 100-200 ms.
-    /// Removed. setAlarmIRQ(seconds) programmed the periodic timer, not the alarm;
-    /// use setTimerIRQ(seconds * 1000). Deleted (instead of just removed) so that
-    /// setAlarmIRQ(0) fails to compile rather than silently binding to the tm* overload.
-    bool setAlarmIRQ(int afterSeconds) = delete;
-
-    bool setAlarmIRQ(const tm* datetime);
     bool setAlarmIRQ(const rtc_date_t* date, const rtc_time_t* time);
+    /// Same as setAlarmIRQ(const rtc_date_t*, const rtc_time_t*).
     bool setAlarmIRQ(const rtc_date_t &date, const rtc_time_t &time) { return setAlarmIRQ(&date, &time); }
+    /// Same as setAlarmIRQ(const rtc_date_t*, const rtc_time_t*).
     bool setAlarmIRQ(const rtc_time_t &time) { return setAlarmIRQ(nullptr, &time); }
 
     void setSystemTimeFromRtc(struct timezone* tz = nullptr);
