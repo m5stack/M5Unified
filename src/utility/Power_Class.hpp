@@ -364,15 +364,18 @@ namespace m5
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable
-    /// @return true if the path exists and the write succeeded.
-    /// @note false only means that the requested setting did not take effect;
-    /// it says nothing about what the hardware currently holds.
+    /// @return true if the path exists and every required write and cleanup step succeeded.
+    /// @note false means the request could not be confirmed: the path is missing,
+    /// a communication failed, or a step after the write failed. The setting may
+    /// or may not have been applied.
     bool setBatteryCharge(bool enable);
 
     /// set battery charge current
     /// @param max_mA milli ampere.
     /// @param applied_mA optional. receives the step that was applied.
-    /// @return true if the path exists and the write succeeded.
+    /// @return true if the path exists and every required configuration step succeeded.
+    /// @note false means the request could not be confirmed. The path may be missing
+    /// or a communication may have failed; the setting may or may not have been applied.
     /// @note The highest step not exceeding max_mA is selected; a request below
     /// the lowest step is clamped up to it instead of being rejected. 0 is not a
     /// step: use setBatteryCharge(false) to stop charging.
@@ -392,6 +395,8 @@ namespace m5
     /// @param max_mV milli volt.
     /// @param applied_mV optional. receives the step that was applied.
     /// @return true if the path exists and the write succeeded.
+    /// @note false means the request could not be confirmed. The path may be missing
+    /// or a communication may have failed; the setting may or may not have been applied.
     /// @note The step selection rule is the same as setChargeCurrent.
     /// @note applied_mV is left untouched when false is returned.
     /// @note IP5306 steps and applied_mV are nominal values. The chip charges
