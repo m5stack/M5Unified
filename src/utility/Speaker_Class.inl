@@ -1123,7 +1123,8 @@ label_continue_sample:
       _task_handle.store(handle, std::memory_order_release);
       res = (handle != nullptr);
 #else
-      size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
+      // 1280 overflowed when built without optimization (-O0)
+      size_t stack_size = 1536 + (_cfg.dma_buf_len * sizeof(uint32_t));
 
 #if portNUM_PROCESSORS > 1
       if (_cfg.task_pinned_core < portNUM_PROCESSORS)
