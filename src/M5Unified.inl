@@ -140,6 +140,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
 { board_t::board_M5CoreP4X    , GPIO_NUM_9 ,GPIO_NUM_11 , GPIO_NUM_16,GPIO_NUM_18 }, // CoreP4X
+{ board_t::board_M5StamP4XHub , GPIO_NUM_1 ,GPIO_NUM_0  , 255        ,255        }, // StamP4X Hub (Grove13 is the same bus)
 { board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
@@ -1627,6 +1628,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     switch (board) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
+    case board_t::board_M5StamP4XHub:
       {
         auto ioexp = new M5IOE1_Class(0x4F);
         ioexp->begin();
@@ -1728,6 +1730,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PaperColor:
       led_count = 2;
       break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5StamP4XHub:
+      Led.setLedInstance(std::make_shared<m5::LED_M5StamP4XHub_Class>());
+      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_M5NanoC6:
       pin_power = GPIO_NUM_19;  // RGB LED power switch
@@ -2927,6 +2933,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         tb_y = 960;
         tb_k = 364; // (65536*3/540)
         break;
+      case board_t::board_M5StamP4XHub:
       case board_t::board_M5Tab5:
       case board_t::board_M5Tab5X:
         tb_y = 1280;
@@ -3283,6 +3290,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5PaperS3:
       height = 960;
       break;
+    case board_t::board_M5StamP4XHub:
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
       height = 1280;

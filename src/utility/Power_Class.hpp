@@ -219,7 +219,7 @@ namespace m5
 
     /// Set power output of the external ports.
     /// @param enable true=output / false=input
-    /// @param port_mask for M5Station / M5PowerHub / Tab5 family / CoreP4X / ChainCaptain. ext_port (bitmask).
+    /// @param port_mask for M5Station / M5PowerHub / Tab5 family / CoreP4X / ChainCaptain / M5StamP4XHub. ext_port (bitmask).
     /// @return true if the requested state was reached on every selected port.
     /// @note A successful return means the writes were accepted; state is not read back
     ///       (except when disabling the CoreS3 family output).
@@ -233,10 +233,15 @@ namespace m5
     ///       Every selected port is still attempted; false says at least one
     ///       did not take effect, not which one.
     /// @note port_mask is honoured only on models with individually switched ports
-    ///       (M5Station, PowerHub, Tab5 family, CoreP4X, ChainCaptain); there a mask
-    ///       that selects none of the model's ports returns false without touching
-    ///       anything. Models with a single output ignore the mask, except that
+    ///       (M5Station, PowerHub, Tab5 family, CoreP4X, ChainCaptain, M5StamP4XHub);
+    ///       there a mask that selects none of the model's ports returns false without
+    ///       touching anything. Models with a single output ignore the mask, except that
     ///       ext_none returns false on every model.
+    /// @note On M5StamP4XHub the mask selects Grove channels: ext_PA is channel 13
+    ///       (the I2C port), ext_USB is channel 14 (the USB port) and ext_MAIN is all
+    ///       16. The default mask counts as ext_MAIN, so a plain setExtOutput(enable)
+    ///       still switches the whole array. The USB-A socket rail is separate; see
+    ///       setUsbOutput().
     /// @note On the CoreS3 family (CoreS3 / CoreS3 SE / StackChan), disabling an enabled output blocks for
     ///       about 200 ms (the boost converter is stopped first and the bus is left to discharge before the
     ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
@@ -266,6 +271,25 @@ namespace m5
     /// Get power output of the external ports.
     /// @return true=output enabled / false=output disabled
     bool getExtOutput(void);
+
+    /// Set the 5V output of one StampP4X Hub Grove channel.
+    /// @param channel Grove channel number 0..15, as printed on the case.
+    /// @param enable true=5V on / false=5V off.
+    /// @return true if the requested state was reached; false on another board,
+    ///         for a channel outside 0..15, or on an I2C failure.
+    /// @note Channels 0..11, 13 and 14 are switched by M5IOE1 (active-high EN).
+    ///       Channel 12 shares the PM1 charge-enable pin (CHG_EN_PP) and channel
+    ///       15 is switched by PM1 GPIO2.
+    /// @note setExtOutput() maps its mask onto channels: the default mask and
+    ///       ext_MAIN switch all 16 together, ext_PA switches channel 13 (the
+    ///       I2C port) only, and ext_USB switches channel 14 (the USB port) only.
+    bool setGroveOutput(std::uint8_t channel, bool enable);
+
+    /// Get the requested 5V state of one StampP4X Hub Grove channel.
+    /// @return true if the channel is switched on; false otherwise, on another
+    ///         board, or for a channel outside 0..15.
+    /// @note Reads the output latch, not the measured rail voltage.
+    bool getGroveOutput(std::uint8_t channel);
 
     /// Set power output of the main USB port.
     /// @param enable true=output / false=input
