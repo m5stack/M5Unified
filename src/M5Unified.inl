@@ -421,6 +421,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5,
+  255        , GPIO_NUM_0 ,
+  255        , GPIO_NUM_1 ,
+  255        , 255        ,
+  GPIO_NUM_7 , GPIO_NUM_4 ,
+  GPIO_NUM_8 , GPIO_NUM_6 ,
+  GPIO_NUM_9 , 255        ,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_2 , GPIO_NUM_3 ,
+  GPIO_NUM_2 , GPIO_NUM_3 ,
+  GPIO_NUM_23, GPIO_NUM_24,
+  GPIO_NUM_27, GPIO_NUM_28,
+  255        , GPIO_NUM_5 ,
+  255        , 255        ,
+  255        , 255        ,
+},
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 { board_t::board_M5Stack  ,
   255        , GPIO_NUM_35,

@@ -70,9 +70,22 @@ namespace m5
   {
     if (!_init) {
       std::uint32_t val = 0;
-      auto res = readRegister(M5PM1_REG_DEVICE_ID, (uint8_t*)&val, 4);
+      // The first transfer after an idle period can be NACKed; the next one answers.
+      bool res = false;
+      for (int retry = 3; !(res = readRegister(M5PM1_REG_DEVICE_ID, (uint8_t*)&val, 4)) && --retry; )
+      {
+        m5gfx::delay(1);
+      }
       if (res)
       {
+        // Power.begin() clears WAKE_SRC on some boards, so keep it for getWakeSource().
+        std::uint8_t wake_source = 0;
+        for (int retry = 3; !readRegister(M5PM1_REG_WAKE_SRC, &wake_source, 1) && --retry; )
+        {
+          wake_source = 0;
+          m5gfx::delay(1);
+        }
+        _wake_source = wake_source & 0x7F;
         writeRegister8(M5PM1_REG_I2C_CFG, 0x00); // disable I2C idle sleep
         writeRegister8(M5PM1_REG_WDT_CNT, 0x00); // disable watchdog
       }
