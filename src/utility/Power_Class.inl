@@ -938,6 +938,8 @@ namespace m5
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_1; // PY IQR
 
+      /// bring up the PM1 early so getWakeSource() sees WAKE_SRC before it is cleared below.
+      M5pm1.begin();
       M5pm1.clearWakeSource();
       M5pm1.clearIRQStatus();
       M5pm1.setGPIOIRQMaskBits(0x1E);  // enable GPIO0 interrupt, disable other GPIO IRQ

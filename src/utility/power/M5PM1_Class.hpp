@@ -158,6 +158,15 @@ namespace m5
     bool setPwmDuty12bit(pwm_channel_t channel, std::uint32_t duty12,
                          pwm_polarity_t polarity = pwm_polarity_t::normal, bool enable = true);
 
+    /// get the reason for this power-on, read once by the first begin().
+    /// The bits match m5pm1_wake_src_t of the M5PM1 library: 0x01 timer, 0x02 VIN, 0x04 power
+    /// button, 0x08 reset button, 0x10 reset command, 0x20 external GPIO, 0x40 5VINOUT.
+    /// @return the bits, or 0 when no reason was recorded or the read failed.
+    /// @note On ToughC5 and PaperMono, M5.begin() clears the PM1 register, so a read through another
+    /// driver afterwards returns 0. Other boards leave the register as it is, and it can still
+    /// hold the previous reason after a reset of the ESP32 alone.
+    std::uint8_t getWakeSource(void) const { return _wake_source; }
+
     /// clear PM1 wake source bits selected by mask.
     /// Single-write selective clear assuming the write-zero-to-clear behavior
     /// adopted by the official driver; the datasheet does not specify the write polarity.
@@ -252,6 +261,7 @@ namespace m5
     bool powerOff(void);
 
   private:
+    std::uint8_t _wake_source = 0;
     bool _pek_double_pending = false;
   };
 }
