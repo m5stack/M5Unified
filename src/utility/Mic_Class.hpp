@@ -120,7 +120,12 @@ namespace m5
 
     bool isRunning(void) const { return _task_running; }
 
+#if defined (SDL_h_)
+    // PC capture uses the default audio device rather than a GPIO.
+    bool isEnabled(void) const { return true; }
+#else
     bool isEnabled(void) const { return _cfg.pin_data_in >= 0; }
+#endif
 
     /// now in recording or not.
     /// @return 0=not recording / 1=recording (There's room in the queue) / 2=recording (There's no room in the queue.)
@@ -269,6 +274,8 @@ namespace m5
     std::atomic<bool> _begun { false };
 #if defined (SDL_h_)
     SDL_Thread* _task_handle = nullptr;
+    std::atomic<SDL_threadID> _task_thread_id { 0 };
+    SDL_AudioDeviceID _capture_device = 0;
 #else
     /// The task never touches this: it parks itself with vTaskSuspend and
     /// _end_locked() deletes it and clears the handle. Atomic for the same

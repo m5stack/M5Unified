@@ -43,6 +43,12 @@
 #endif
 #endif
 
+#endif
+
+#if defined (SDL_h_)
+#include <math.h>
+#endif
+
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <atomic>
@@ -79,6 +85,9 @@ namespace m5
 #endif
 
 
+#endif // ESP_PLATFORM clock definitions
+
+#if defined (ESP_PLATFORM) || defined (SDL_h_)
   uint32_t Mic_Class::_calc_rec_rate(void) const
   {
     // The capture task averages over_sampling samples per output but clamps
@@ -87,6 +96,9 @@ namespace m5
     if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
     return _cfg.sample_rate * os;
   }
+#endif
+
+#if defined (ESP_PLATFORM)
 
 #if __has_include(<driver/i2s_std.h>)
 
@@ -103,7 +115,8 @@ namespace m5
   }
   static esp_err_t _mic_i2s_read(i2s_port_t port, void* buf, size_t len, size_t* result, uint32_t timeout_ms) {
     if (_mic_i2s_handle[port] == nullptr) { return ESP_FAIL; }
-    /// i2s_channel_read のタイムアウトはミリ秒 (旧 i2s_read の tick 数とは契約が異なる)
+    /// i2s_channel_read takes the timeout in milliseconds (unlike the tick count of the legacy
+    /// i2s_read)
     return i2s_channel_read(_mic_i2s_handle[port], buf, len, result, timeout_ms);
   }
   static esp_err_t _mic_i2s_driver_uninstall(i2s_port_t port)
@@ -343,15 +356,16 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     memset(&i2s_config, 0, sizeof(i2s_std_config_t));
     i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    { // クロックをドライバ管理で最終値に確定させる (mic_task での raw 分周上書きを行わない)。クロック源既定 (minimum supported revision < 3 のビルドは
-      // XTAL 40MHz / rev >= 3 ビルドは PLL_F160M) もドライバに委ねる。
+    { // Let the driver set the final clock (mic_task does not override the raw divider). The
+      // default clock source (on ESP32-P4: XTAL 40 MHz when the minimum supported revision is < 3,
+      // PLL_F160M for rev >= 3) is also left to the driver.
       int os = _cfg.over_sampling;
       if (os < 1) { os = 1; } else if (os > 8) { os = 8; }
       i2s_config.clk_cfg.sample_rate_hz = _cfg.sample_rate * os;
       i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
 #if defined (I2S_LL_DEFAULT_CLK_FREQ)
-      // ドライバは source >= 2x MCLK を要求するため、40MHz source ビルドでは 256fs は
-      // 約 78kHz が上限。それを超えるレートは 128fs に落として初期化可能にする。
+      // The driver requires source clock >= 2x MCLK, so with a 40 MHz source 256fs tops out near
+      // 78 kHz. Above that, fall back to 128fs so the channel can still be initialized.
       if ((uint64_t)i2s_config.clk_cfg.sample_rate_hz * 512 > I2S_LL_DEFAULT_CLK_FREQ) {
         i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_128;
       }
@@ -449,6 +463,28 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
   // クロックディバイダー計算用関数 (実装は Speaker_Class.cpp内)
   void calcClockDiv(uint32_t* div_a, uint32_t* div_b, uint32_t* div_n, uint32_t baseClock, uint32_t targetFreq);
 
+#endif // ESP_PLATFORM hardware backend
+
+#if defined (SDL_h_)
+  esp_err_t Mic_Class::_setup_i2s(void)
+  {
+    // SDL rounds samples up to a power of two in Uint16; values above
+    // 32768 would round to 65536 and overflow to zero.
+    if (!detail::init_sdl_audio()
+     || _cfg.dma_buf_len == 0 || _cfg.dma_buf_len > 32768) { return ESP_FAIL; }
+    SDL_AudioSpec want{}, have{};
+    want.freq = _rec_sample_rate;
+    want.format = AUDIO_S16SYS;
+    want.channels = _cfg.stereo ? 2 : 1;
+    want.samples = _cfg.dma_buf_len;
+    // Capture owns its returned device ID; device 1 belongs to the legacy
+    // SDL_OpenAudio playback path used by Speaker_Class.
+    _capture_device = SDL_OpenAudioDevice(nullptr, 1, &want, &have, 0);
+    return _capture_device ? ESP_OK : ESP_FAIL;
+  }
+#endif
+
+#if defined (ESP_PLATFORM) || defined (SDL_h_)
   void Mic_Class::mic_task(void* args)
   {
     auto self = (Mic_Class*)args;
@@ -456,6 +492,36 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     if (     oversampling < 1) { oversampling = 1; }
     else if (oversampling > 8) { oversampling = 8; }
 
+#if defined (SDL_h_)
+    self->_task_thread_id.store(SDL_ThreadID(), std::memory_order_release);
+    SDL_PauseAudioDevice(self->_capture_device, 0);
+    self->_i2s_active.store(true, std::memory_order_release);
+    // Adapt just the raw input: the processing and buffer queue below are
+    // shared with I2S, including oversampling, gain, filtering and stereo.
+    auto _mic_i2s_read = [self](i2s_port_t, void* data, size_t length, size_t* result, uint32_t timeout_ms)
+    {
+      *result = 0;
+      const uint32_t start = SDL_GetTicks();
+      do
+      {
+        // The common capture loop consumes pairs of int16_t values.
+        uint32_t available = SDL_GetQueuedAudioSize(self->_capture_device) & ~uint32_t(3);
+        if (available)
+        {
+          size_t count = available < length ? available : length;
+          *result = SDL_DequeueAudio(self->_capture_device, data, count);
+          return ESP_OK;
+        }
+        SDL_Delay(1);
+      } while (self->_task_running.load(std::memory_order_acquire)
+            && uint32_t(SDL_GetTicks() - start) < timeout_ms);
+      return ESP_FAIL;
+    };
+    auto _mic_i2s_stop = [self](i2s_port_t)
+    {
+      SDL_PauseAudioDevice(self->_capture_device, 1);
+    };
+#else
     bool use_pdm = (self->_cfg.pin_bck < 0 && !self->_cfg.use_adc);
 
 #if defined ( M5UNIFIED_I2S_PLL_D2_HZ )
@@ -506,8 +572,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     dev->rx_conf.rx_pdm_sinc_dsr_16_en = 1;
 #endif
 #if M5UNIFIED_I2S_DRIVER_MANAGED_CLK
-    // std 経路はクロックを _setup_i2s でドライバ管理により最終値に設定済みのため、
-    // raw 分周の上書きを行わない (PDM 経路は従来どおり)。
+    // The std path already has its final driver-managed clock from _setup_i2s, so do not override
+    // the raw divider (the PDM path still does).
     const bool skip_raw_clk = !use_pdm;
 #else
     const bool skip_raw_clk = false;
@@ -616,6 +682,8 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       self->_i2s_active.store(true, std::memory_order_release);
     }
 
+#endif
+
     int32_t gain = self->_cfg.magnification;
     const float f_gain = (float)gain / (oversampling << 1);
     size_t src_idx = ~0u;
@@ -630,12 +698,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     bool carry_valid = false;
     int32_t os_remain = oversampling;
     const size_t dma_buf_len = self->_cfg.dma_buf_len;
-    /// dma_buf_len は DMA descriptor のフレーム数として使われる (_setup_i2s の
-    /// dma_frame_num)。読み出しは descriptor 境界に整列する処理チャンク
-    /// (stereo 16bit なら 1 枚分、mono/PDM なら 2 枚分) を単位に行う。
-    /// これより小さい単位で読むと、IDF の i2s_channel_read はキュー逼迫時に
-    /// descriptor の未読部分を破棄するため、サンプル欠落による位相誤差
-    /// (可聴ノイズ) が生じる。
+    /// dma_buf_len is the number of frames per DMA descriptor (dma_frame_num in _setup_i2s). Reads
+    /// are done in chunks aligned to descriptor boundaries (one descriptor for stereo 16-bit, two
+    /// for mono/PDM). Reading in smaller units makes the IDF i2s_channel_read discard the unread
+    /// rest of a descriptor when the queue is congested, and the missing samples turn into phase
+    /// errors (audible noise).
     const size_t read_bytes = dma_buf_len * 2 * sizeof(int16_t);
     int16_t* src_buf = (int16_t*)alloca(read_bytes);
     memset(src_buf, 0, read_bytes);
@@ -670,7 +737,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       }
       if (dst_remain == 0)
       {
+#if defined (SDL_h_)
+        // No pending request: discard stale input just as the I2S idle
+        // path discards its local input when it waits for a notification.
+        SDL_ClearQueuedAudio(self->_capture_device);
+        SDL_Delay(1);
+#else
         ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+#endif
         src_idx = ~0u;
         src_len = 0;
         sum_value[0] = 0;
@@ -718,7 +792,9 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         const size_t total = current_rec->length.load(std::memory_order_relaxed);
         void* released = (uint8_t*)current_rec->data - total * (current_rec->is_16bit ? 2 : 1);
         current_rec->length.store(0, std::memory_order_release);
+#if !defined (SDL_h_)
         xSemaphoreGive(self->_task_semaphore);
+#endif
         if (self->_cb_buffer_release)
         {
           self->_cb_buffer_release(self->_cb_buffer_release_args, released, total);
@@ -735,10 +811,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         if (src_idx >= src_len)
         {
-          /// 有効なデータが得られるまで再試行する。ここで空のまま下の do-while に
-          /// 落ちると、直前バッファの先頭フレームを 1 枚余分に消費してしまい
-          /// (do は条件確認前に必ず 1 回実行される)、時間軸が入力 1 フレーム分
-          /// ずれて可聴の位相ノイズになる。
+          /// Retry until valid data arrives. Falling through to the do-while below with an empty
+          /// buffer would consume one extra frame at the head of the previous buffer (do runs once
+          /// before the check), shifting the time axis by one input frame and causing audible phase
+          /// noise.
           for (;;)
           {
             src_len = 0;
@@ -749,9 +825,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
             // An immediately-failing read must not become a tight loop: a
             // high-priority capture task would then starve the very task
             // trying to publish the stop request.
+#if defined (SDL_h_)
+            SDL_Delay(1);
+#else
             vTaskDelay(1);
+#endif
           }
-          if (src_len == 0) { break; } /// タスク終了要求時のみ (消費ループを抜ける)
+          /// only when the task is asked to stop (leave the consumer loop)
+          if (src_len == 0) { break; }
           src_len >>= 1;
           src_idx = 0;
         }
@@ -836,8 +917,10 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // TCB teardown. Acknowledge that the cleanup is done, then park and
     // let _end_locked() delete the task: the handle stays valid for as
     // long as anyone can use it.
+#if !defined (SDL_h_)
     self->_task_exited.store(true, std::memory_order_release);
     vTaskSuspend(nullptr);
+#endif
   }
 
   bool Mic_Class::begin(void)
@@ -851,12 +934,20 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       while (!_rec_lock.compare_exchange_strong(zero, true))
       {
         zero = false;
+#if defined (SDL_h_)
+        SDL_Delay(1);
+#else
         vTaskDelay(1);
+#endif
       }
       int result = _begin_raw(0);
       _rec_lock.store(false);
       if (result >= 0) { return result; }
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
       vTaskDelay(1);
+#endif
     }
   }
 
@@ -874,7 +965,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     while (!_begin_lock.compare_exchange_strong(zero, true))
     {
       zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
       vTaskDelay(1);
+#endif
     }
     // The requested rate is validated before it is committed, and both
     // happen under the lock so they cannot interleave with another caller's
@@ -895,7 +990,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
         return 0;
       }
       if (rate != _cfg.sample_rate
+#if defined (SDL_h_)
+       && _task_thread_id.load(std::memory_order_acquire) != 0 && SDL_ThreadID() == _task_thread_id.load(std::memory_order_acquire))
+#else
        && xTaskGetCurrentTaskHandle() == _task_handle.load(std::memory_order_acquire))
+#endif
       { // the capture task (release callback) cannot rebuild itself: refuse
         // before the rate is committed, so the live rate stays usable.
         _begin_lock.store(false);
@@ -922,7 +1021,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
           _begin_lock.store(false);
           return -1;
         }
+#if defined (SDL_h_)
+        if (_task_thread_id.load(std::memory_order_acquire) != 0 && SDL_ThreadID() == _task_thread_id.load(std::memory_order_acquire))
+#else
         if (xTaskGetCurrentTaskHandle() == _task_handle.load(std::memory_order_acquire))
+#endif
         { // the capture task (release callback) cannot rebuild itself.
           _begin_lock.store(false);
           return 0;
@@ -945,6 +1048,34 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
 
   bool Mic_Class::_begin_locked(void)
   {
+#if defined (SDL_h_)
+    bool res = !_cb_set_enabled || _cb_set_enabled(_cb_set_enabled_args, true);
+    if (res) { res = (ESP_OK == _setup_i2s()); }
+    if (!res)
+    {
+      if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
+      return false;
+    }
+    _i2s_active.store(false, std::memory_order_release);
+    _task_running.store(true, std::memory_order_release);
+    _task_handle = SDL_CreateThread([](void* args) -> int { mic_task(args); return 0; }, "mic_task", this);
+    if (!_task_handle)
+    {
+      _end_locked();
+      return false;
+    }
+    const uint32_t start = SDL_GetTicks();
+    while (!_i2s_active.load(std::memory_order_acquire)
+        && uint32_t(SDL_GetTicks() - start) < 1000) { SDL_Delay(1); }
+    if (!_i2s_active.load(std::memory_order_acquire)
+     || (_cb_post_start && !_cb_post_start(_cb_post_start_args)))
+    {
+      _end_locked();
+      return false;
+    }
+    _begun.store(true, std::memory_order_release);
+    return true;
+#else
     if (_task_semaphore == nullptr) { _task_semaphore = xSemaphoreCreateBinary(); }
     // The task and the record() retry loop hand this to FreeRTOS without
     // null checks; running without it is not an option.
@@ -1005,6 +1136,7 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     }
 
     return res;
+#endif
   }
 
   void Mic_Class::end(void)
@@ -1017,13 +1149,21 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     while (!_rec_lock.compare_exchange_strong(zero, true))
     {
       zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
       vTaskDelay(1);
+#endif
     }
     zero = false;
     while (!_begin_lock.compare_exchange_strong(zero, true))
     {
       zero = false;
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
       vTaskDelay(1);
+#endif
     }
     _end_locked();
     _begin_lock.store(false);
@@ -1035,6 +1175,14 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     _begun.store(false, std::memory_order_release);
     if (!_task_running) { return; }
     _task_running = false;
+#if defined (SDL_h_)
+    if (_task_handle)
+    {
+      SDL_WaitThread(_task_handle, nullptr);
+      _task_handle = nullptr;
+    }
+    _task_thread_id.store(0, std::memory_order_release);
+#else
     TaskHandle_t handle = _task_handle.load(std::memory_order_acquire);
     if (handle)
     {
@@ -1057,12 +1205,21 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       _task_handle.store(nullptr, std::memory_order_release);
     }
 
+#endif
     // an unfinished request would otherwise keep isRecording() reporting a recording.
     _rec_info[0].clear();
     _rec_info[1].clear();
 
     if (_cb_set_enabled) { _cb_set_enabled(_cb_set_enabled_args, false); }
+#if defined (SDL_h_)
+    if (_capture_device)
+    {
+      SDL_CloseAudioDevice(_capture_device);
+      _capture_device = 0;
+    }
+#else
     _mic_i2s_driver_uninstall(_cfg.i2s_port);
+#endif
   }
 
   void Mic_Class::recording_info_t::clear(void)
@@ -1093,10 +1250,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // has no priority inheritance and a middle-priority task can keep the
     // holder off the CPU forever. A stop (end() / rate rebuild) holds the
     // lock while waiting for this task, and clears _task_running first.
-    // Nothing to record into is a caller error, not a request: it used to
-    // return true without ever invoking the release callback.
+    // Nothing to record into is a caller error, not a request.
     if (recdata == nullptr || array_len == 0) { return false; }
+#if defined (SDL_h_)
+    const bool in_task = (_task_thread_id.load(std::memory_order_acquire) != 0 && SDL_ThreadID() == _task_thread_id.load(std::memory_order_acquire));
+#else
     const bool in_task = (xTaskGetCurrentTaskHandle() == _task_handle.load(std::memory_order_acquire));
+#endif
     if (in_task && _rec_info[0].length.load(std::memory_order_acquire) != 0
                 && _rec_info[1].length.load(std::memory_order_acquire) != 0)
     { // both slots taken; only this task frees one, so waiting is pointless.
@@ -1110,7 +1270,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       {
         if (in_task && (!_task_running.load(std::memory_order_acquire) || ++in_task_ticks > in_task_lock_wait_ticks)) { return false; }
         zero = false;
+#if defined (SDL_h_)
+        SDL_Delay(1);
+#else
         vTaskDelay(1);
+#endif
       }
       if (in_task && !_task_running.load(std::memory_order_acquire))
       { // a stop got the lock first and is now waiting for this task.
@@ -1121,7 +1285,11 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
       _rec_lock.store(false);
       if (result >= 0) { return result; }
       if (in_task) { return false; }
+#if defined (SDL_h_)
+      SDL_Delay(1);
+#else
       xSemaphoreTake(_task_semaphore, 1);
+#endif
     }
   }
 
@@ -1156,12 +1324,13 @@ if (_cfg.pin_bck < 0 || _cfg.pin_ws < 0) {
     // Sent under _rec_lock on purpose: end() takes the same lock before it
     // deletes the task, so the handle cannot go stale between the load and
     // the notify.
+#if !defined (SDL_h_)
     if (this->_task_handle)
     {
       xTaskNotifyGive(this->_task_handle);
     }
+#endif
     return 1;
   }
 #endif
 }
-#endif

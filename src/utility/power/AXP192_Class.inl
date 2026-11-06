@@ -59,40 +59,39 @@ namespace m5
   }
 
   /// @param num 0:LDOio0 ; 2:LDO2 ; 3=LDO3
-  void AXP192_Class::_set_LDO(std::uint8_t num, int voltage)
+  bool AXP192_Class::_set_LDO(std::uint8_t num, int voltage)
   {
-    if (num > 3 || num == 1) return;
+    if (num > 3 || num == 1) return false;
     std::uint8_t reg_volt = (num == 0) ? 0x91 : 0x28;
     voltage -= 1800;
     /// convert voltage to value
     std::uint_fast8_t val = (voltage < 0) ? 0 : std::min(voltage / 100, 0x0F);
-    std::uint_fast8_t now = readRegister8(reg_volt);
-    if (num == 3)
-    { /// LDO3
-      now = (now & 0xF0) + val;
+    // Every step is attempted even after a failure so that a disable request
+    // still reaches the enable bit. Enable reports the AND of both writes;
+    // disable reports only whether the enable bit was cleared.
+    std::uint8_t now;
+    bool ok = readRegister(reg_volt, &now, 1);
+    if (ok)
+    {
+      if (num == 3)
+      { /// LDO3
+        now = (now & 0xF0) + val;
+      }
+      else
+      { /// LDOio0 , LDO2
+        now = (now & 0x0F) | (val << 4);
+      }
+      ok = writeRegister8(reg_volt, now);
     }
-    else
-    { /// LDOio0 , LDO2
-      now = (now & 0x0F) | (val << 4);
-    }
-    writeRegister8(reg_volt, now);
 
     if (num)
     { // LDO2 , LDO3
       std::uint_fast8_t reg12bit = 1 << num;
-      if (voltage < 0)
-      {
-        bitOff(0x12, reg12bit);
-      }
-      else
-      {
-        bitOn(0x12, reg12bit);
-      }
+      return (voltage < 0) ? bitOff(0x12, reg12bit) : (bitOn(0x12, reg12bit) && ok);
     }
-    else
-    { // LDOio0
-      writeRegister8(0x90, (voltage < 0) ? 0x07 : 0x02 ); /// floating or LDO
-    }
+    // LDOio0
+    bool enabled = writeRegister8(0x90, (voltage < 0) ? 0x07 : 0x02 ); /// floating or LDO
+    return (voltage < 0) ? enabled : (enabled && ok);
   }
 
   /// @param num 0=LDO2 / 1=LDO3
@@ -123,40 +122,33 @@ namespace m5
   }
 
   /// @param num 0=GPIO0 / 1=GPIO1 / 2=GPIO2
-  void AXP192_Class::_set_GPIO0_2(std::uint8_t num, bool state)
+  bool AXP192_Class::_set_GPIO0_2(std::uint8_t num, bool state)
   {
     static constexpr uint8_t reg[] = { 0x90, 0x92, 0x93 };
-    writeRegister8(reg[num], state ? 0x06 : 0x05); // floating or LOW
+    return writeRegister8(reg[num], state ? 0x06 : 0x05); // floating or LOW
   }
 
   /// @param num 0=GPIO3 / 1=GPIO4
-  void AXP192_Class::_set_GPIO3_4(std::uint8_t num, bool state)
+  bool AXP192_Class::_set_GPIO3_4(std::uint8_t num, bool state)
   {
     uint32_t bit = num ? 2 : 1;
-    if (state)
-    {
-      bitOn(0x96, bit);
-    }
-    else
-    {
-      bitOff(0x96, bit);
-    }
-    uint_fast8_t mask = num ? ~0x0C : ~0x03;
-    uint_fast8_t reg0x95 = readRegister8(0x95) & mask;
-    writeRegister8(0x95, reg0x95 | (num ? 0x84 : 0x81)); // set GPIO mode
+    bool ok = state ? bitOn(0x96, bit) : bitOff(0x96, bit);
+    uint8_t mask = num ? 0xF3 : 0xFC;   // clear the mode bits of GPIO4 / GPIO3
+    uint8_t reg0x95;
+    if (!readRegister(0x95, &reg0x95, 1)) { return false; }
+    return writeRegister8(0x95, (reg0x95 & mask) | (num ? 0x84 : 0x81)) && ok; // set GPIO mode
   }
 
-  void AXP192_Class::setBatteryCharge(bool enable)
+  bool AXP192_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0x7F) + (enable ? 0x80 : 0x00));
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    return writeRegister8(0x33, (val & 0x7F) + (enable ? 0x80 : 0x00));
   }
 
-  void AXP192_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
+  bool AXP192_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { /// reg 0x33 bit3:0 selects the step. table[] holds the steps above the
+    /// lowest one (100mA) in units of 10mA, so index i selects step i.
     max_mA /= 10;
     if (max_mA > 132) { max_mA = 132; }
     static constexpr std::uint8_t table[] = { 19, 28, 36, 45, 55, 63, 70, 78, 88, 96, 100, 108, 116, 124, 132, 255 };
@@ -165,17 +157,14 @@ namespace m5
     while (table[i] <= max_mA) { ++i; }
 
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0xF0) + i);
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    if (!writeRegister8(0x33, (val & 0xF0) + i)) { return false; }
+    if (applied_mA) { *applied_mA = i ? (std::uint16_t)(table[i - 1] * 10) : 100; }
+    return true;
   }
 
-  void AXP192_Class::setChargeVoltage(std::uint16_t max_mV)
-  { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts:
-    /// the earlier form subtracted a bias first, which underflowed the
-    /// unsigned argument for anything below the lowest step and then clamped
-    /// to the highest one - a request for less charge voltage produced more.
+  bool AXP192_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
+  { /// reg 0x33 bit6:5 selects the target voltage. Compare in millivolts.
     static constexpr std::uint16_t table[] = { 4100, 4150, 4200, 4360 };
     size_t i = (sizeof(table) / sizeof(table[0])) - 1;
     /// pick the highest step that does not exceed the request, and the lowest
@@ -183,16 +172,32 @@ namespace m5
     while (i && table[i] > max_mV) { --i; }
 
     std::uint8_t val = 0;
-    if (readRegister(0x33, &val, 1))
-    {
-      writeRegister8(0x33, (val & 0x9F) + (i << 5));
-    }
+    if (!readRegister(0x33, &val, 1)) { return false; }
+    if (!writeRegister8(0x33, (val & 0x9F) + (i << 5))) { return false; }
+    if (applied_mV) { *applied_mV = table[i]; }
+    return true;
   }
 
-  std::int8_t AXP192_Class::getBatteryLevel(void)
+  bool AXP192_Class::readChargeActive(bool* charging)
+  {
+    std::uint8_t val = 0;
+    if (charging == nullptr || !readRegister(0x00, &val, 1)) { return false; }
+    *charging = (val & 0x04) != 0;
+    return true;
+  }
+
+  bool AXP192_Class::getBatteryCharge(bool* enabled)
+  {
+    std::uint8_t val = 0;
+    if (enabled == nullptr || !readRegister(0x33, &val, 1)) { return false; }
+    *enabled = (val & 0x80) != 0;
+    return true;
+  }
+
+  bool AXP192_Class::getBatteryLevel(std::int8_t* level)
   {
     std::uint8_t buf[4];
-    if (!readRegister(0x78, buf, 4)) { return -1; }
+    if (level == nullptr || !readRegister(0x78, buf, 4)) { return false; }
 
     std::uint_fast16_t voltage = (buf[0] << 4) + buf[1];
     std::uint_fast16_t current = (buf[2] << 5) + buf[3];
@@ -202,7 +207,14 @@ namespace m5
                           : 0;
     if (current > 16) { res -= 16; }
 
-    return (res < 100) ? res : 100;
+    *level = (res < 100) ? res : 100;
+    return true;
+  }
+
+  std::int8_t AXP192_Class::getBatteryLevel(void)
+  {
+    std::int8_t level;
+    return getBatteryLevel(&level) ? level : -1;
   }
 
   bool AXP192_Class::isCharging(void)
@@ -226,18 +238,11 @@ namespace m5
     writeRegister8(0x84, (buf & ~(0xc0)) | (rate & 0xc0));
   }
 
-  void AXP192_Class::setEXTEN(bool enable)
+  bool AXP192_Class::setEXTEN(bool enable)
   {
     static constexpr std::uint8_t add = 0x12;
     static constexpr std::uint8_t bit = 1 << 6;
-    if (enable)
-    {
-      bitOn(add, bit);
-    }
-    else
-    {
-      bitOff(add, bit);
-    }
+    return enable ? bitOn(add, bit) : bitOff(add, bit);
   }
 
   bool AXP192_Class::getEXTEN(void)

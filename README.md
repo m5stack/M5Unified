@@ -452,3 +452,19 @@ has another name, or `M5UNIFIED_ARDUINO_COMPONENT=OFF` to disable this.
 |Current<BR>Voltage<BR>Monitor| ---                               | ---                  | ---                | ---               | ---                 | ---               | ---                 | ---            |`INA3221`<BR>40h/41h<BR>(opt)|Current<BR>Voltage<BR>Monitor|
 
 
+
+
+### Fixed-board firmware
+
+Defining a positive `BOARD_ID` when building an application using M5Unified fixes
+its device identity to that `board_t` value. An undefined, explicitly empty, or zero value
+keeps automatic detection. Fixed startup reads only variants needed by the
+selected board and does not use NVS or probe other board families.
+An accepted fixed identity takes precedence over `config_t::fallback_board`,
+including when display startup fails. Call `M5.begin()` before initializing
+`M5.Display` for this configuration to take effect.
+
+A positive `BOARD_ID` unsupported by the chip also stops automatic detection;
+it does not fall back to probing another board. `BOARD_ID` has no effect if
+`M5.Display.init()` runs before `M5.begin()`. A valueless compiler option
+`-DBOARD_ID` defines the value as 1 (M5Stack), rather than an empty value.

@@ -90,7 +90,7 @@ protected:
       }
       else
       if (ESP_A2D_CONNECTION_STATE_DISCONNECTED == a2d->conn_stat.state)
-      { // 切断: the event itself clears the display (the connection poll in loop can miss a short connection)
+      { // Disconnect: the event itself clears the display (the connection poll in loop can miss a short connection)
         ui.clearMeta();
         clear();
       }

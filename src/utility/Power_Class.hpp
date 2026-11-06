@@ -65,6 +65,114 @@ namespace m5
     bool direction = 0;
   };
 
+  /// Battery charge state.
+  /// The sign carries the meaning: negative = the state could not be obtained,
+  /// 0 = this model can never obtain it, positive = a state was obtained.
+  /// @note The numeric values are fixed. They are burned into the caller's
+  /// translation unit as immediates, so new values may only be appended and a
+  /// removed value stays retired forever.
+  enum class charge_state_t : std::int8_t
+  { not_initialized = -3  ///< M5.begin() has not completed yet.
+  , io_error        = -2  ///< the read procedure failed. (I2C NACK, charger gate timeout, ...)
+  , undetermined    = -1  ///< the read succeeded, but the available signals do not decide a single state.
+  , unsupported     =  0  ///< this model can never assert any positive state.
+  , charging        =  1  ///< charging.
+  , not_charging    =  2  ///< not charging. (nothing more can be said)
+  , full            =  3  ///< the charger reports the charge as complete.
+  , disabled        =  4  ///< charging is disabled.
+  , discharging     =  5  ///< not charging, and the battery is being drained.
+  , idle            =  6  ///< not charging, and nothing flows in or out of the battery.
+  };
+  /// The highest defined state. Bump it when a state is appended, so that the
+  /// set type keeps rejecting values above it.
+  constexpr charge_state_t charge_state_max = charge_state_t::idle;
+
+  class charge_state_set_t;
+  constexpr charge_state_set_t operator|(charge_state_t a, charge_state_t b);
+  constexpr charge_state_set_t operator|(charge_state_set_t s, charge_state_t v);
+
+  /// A set of charge states.
+  /// @note Negative values and 0 are members of no set and match no set, on the
+  /// construction side as well as on the query side. Out of range values are
+  /// ignored the same way. Carrying that guarantee in the type is the reason
+  /// this class exists: written by hand as "(int)state & mask", io_error would
+  /// match almost every mask and a failed read would be reported as
+  /// "not charging".
+  class charge_state_set_t
+  {
+  public:
+    typedef std::uint32_t storage_type;
+
+    constexpr charge_state_set_t(void) : _bits { 0 } {}
+
+    /// @return true if the state is a member of this set. A non positive state is never a member.
+    constexpr bool contains(charge_state_t state) const { return (_bits & _bit_of(state)) != 0; }
+
+    /// @return true if at least one state is a member of both sets.
+    constexpr bool intersects(charge_state_set_t other) const { return (_bits & other._bits) != 0; }
+
+    /// @return true if this set holds no state at all.
+    constexpr bool empty(void) const { return _bits == 0; }
+
+  private:
+    constexpr explicit charge_state_set_t(storage_type bits) : _bits { bits } {}
+
+    /// Range checked bit position. Only the defined positive states map to a
+    /// bit: negative values, 0 and anything above charge_state_max map to no
+    /// bit at all, so they can neither be added to a set nor match one. The
+    /// check comes before the shift (a negative or too wide shift is
+    /// undefined behaviour).
+    static constexpr storage_type _bit_of(charge_state_t state)
+    {
+      return ((std::int8_t)state > 0 && (std::int8_t)state <= (std::int8_t)charge_state_max)
+           ? (storage_type)1 << (std::int8_t)state
+           : (storage_type)0;
+    }
+
+    storage_type _bits;
+
+    friend constexpr charge_state_set_t operator|(charge_state_t a, charge_state_t b);
+    friend constexpr charge_state_set_t operator|(charge_state_set_t s, charge_state_t v);
+  };
+
+  constexpr charge_state_set_t operator|(charge_state_t a, charge_state_t b)
+  { return charge_state_set_t(charge_state_set_t::_bit_of(a) | charge_state_set_t::_bit_of(b)); }
+
+  constexpr charge_state_set_t operator|(charge_state_set_t s, charge_state_t v)
+  { return charge_state_set_t(s._bits | charge_state_set_t::_bit_of(v)); }
+
+  /// The highest state must stay inside the storage of the set type.
+  static_assert((int)charge_state_max < (int)(sizeof(charge_state_set_t::storage_type) * 8)
+              , "charge_state_t no longer fits in charge_state_set_t::storage_type");
+
+  /// Every positive state. Use it to ask whether a state was obtained at all.
+  constexpr charge_state_set_t charge_states_known
+    = charge_state_t::charging    | charge_state_t::not_charging
+    | charge_state_t::full        | charge_state_t::disabled
+    | charge_state_t::discharging | charge_state_t::idle;
+
+  /// The states that mean "charging". (a future trickle state would be added here)
+  constexpr charge_state_set_t charge_states_any_charging
+    = charge_state_set_t() | charge_state_t::charging;
+
+  /// The states that mean "not charging".
+  /// full belongs here: it only claims that the charger reports completion, not
+  /// that nothing is being drawn from the battery.
+  constexpr charge_state_set_t charge_states_any_not_charging
+    = charge_state_t::not_charging | charge_state_t::full     | charge_state_t::disabled
+    | charge_state_t::discharging  | charge_state_t::idle;
+
+  /// Whether a battery is attached.
+  /// The sign rule is the same as charge_state_t.
+  enum class battery_presence_t : std::int8_t
+  { not_initialized = -3  ///< M5.begin() has not completed yet.
+  , io_error        = -2  ///< the read procedure failed.
+  , undetermined    = -1  ///< the read succeeded, but the presence is not decided yet.
+  , unsupported     =  0  ///< this model can never tell.
+  , absent          =  1  ///< no battery is attached.
+  , present         =  2  ///< a battery is attached.
+  };
+
   class Power_Class
   {
   friend M5Unified;
@@ -80,17 +188,55 @@ namespace m5
     , pmic_m5pm1
     };
 
+    /// @deprecated No function returns this any more; it will be removed in a
+    /// future release. Use charge_state_t. (no attribute is attached on purpose)
     enum is_charging_t
     { is_discharging = 0
     , is_charging
     , charge_unknown
     };
 
+    /// The charge control paths a model provides. (see getChargeControlCaps)
+    /// @note This mask is deliberately separate from the state set, so that a
+    /// state value never gets tied to a bit position.
+    enum charge_control_capability_t : std::uint8_t
+    { cap_set_charge_enable  = 1u << 0
+    , cap_set_charge_current = 1u << 1
+    , cap_set_charge_voltage = 1u << 2
+    };
+
+    /// The power output paths a model provides. (see getPowerOutputCaps)
+    /// @note This mask is deliberately separate from ext_port_mask_t, so that a
+    /// port bit never gets tied to a capability bit.
+    enum power_output_capability_t : std::uint8_t
+    { cap_set_ext_output      = 1u << 0
+    , cap_set_usb_output      = 1u << 1
+    , cap_set_ext_port_bus    = 1u << 2
+    , cap_set_vibration       = 1u << 3
+    };
+
     bool begin(void);
 
     /// Set power output of the external ports.
     /// @param enable true=output / false=input
-    /// @param port_mask for M5Station. ext_port (bitmask).
+    /// @param port_mask for M5Station / M5PowerHub / Tab5 family / CoreP4X / ChainCaptain. ext_port (bitmask).
+    /// @return true if the requested state was reached on every selected port.
+    /// @note A successful return means the writes were accepted; state is not read back
+    ///       (except when disabling the CoreS3 family output).
+    /// @note false means a model without the path (see getPowerOutputCaps()),
+    ///       an I2C failure, or a protection check that cancelled the request
+    ///       (Core2 / Tough on a low battery, the CoreS3 family without a battery).
+    ///       Core2 / Tough with AXP2101: when the INA3221 did not respond at begin(),
+    ///       the current-direction part of that check is skipped.
+    ///       On the CoreS3 family it is also false when the request could not take the
+    ///       AW9523 lock or was superseded by a later request while it waited.
+    ///       Every selected port is still attempted; false says at least one
+    ///       did not take effect, not which one.
+    /// @note port_mask is honoured only on models with individually switched ports
+    ///       (M5Station, PowerHub, Tab5 family, CoreP4X, ChainCaptain); there a mask
+    ///       that selects none of the model's ports returns false without touching
+    ///       anything. Models with a single output ignore the mask, except that
+    ///       ext_none returns false on every model.
     /// @note On the CoreS3 family (CoreS3 / CoreS3 SE / StackChan), disabling an enabled output blocks for
     ///       about 200 ms (the boost converter is stopped first and the bus is left to discharge before the
     ///       switch-over), and enabling without a battery may block for up to 1 s while the protection check
@@ -98,16 +244,20 @@ namespace m5
     ///       (about 10 ms), so that the empty bus does not pull the PMIC under its DCDC under-voltage
     ///       threshold on a weak USB supply. The switch-over is serialized with setUsbOutput and the
     ///       internal speaker enable, so those may wait for it as well.
-    /// @note Core2 v1.1 (AXP2101; a Tough with the AXP2101 takes the same path): disabling
-    ///       the output while powered from USB with no battery makes the ESP32 brownout and
-    ///       reset (the board's VBUS-to-bus switch closes before the boost stops and the
-    ///       transient pulls VSYS down). The PMIC stays on and the board reboots with the
-    ///       output enabled again, so a sketch that unconditionally disables it at startup
-    ///       will reboot in a loop on such a unit. With a battery, or with 5 V supplied on
-    ///       the bus, the transition itself does not disturb the board. Disabling an enabled
-    ///       output blocks for about 20 ms while the PMIC's DCDC under-voltage power-off is
-    ///       suspended; the output is left untouched when that protection cannot be suspended.
-    void setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
+    /// @note Core2 v1.1 (AXP2101; a Tough with the AXP2101 takes the same path): while USB
+    ///       powers the board, disabling the output does not remove 5 V from the bus; it only
+    ///       moves the bus from the boost converter to USB VBUS, so disabling it on USB alone
+    ///       gains little. With no battery the switch-over pulls VSYS down for about a
+    ///       millisecond, and on a USB supply without enough headroom (e.g. a hub with other
+    ///       loads) the ESP32 browns out and resets. The PMIC stays on and the board reboots
+    ///       with the output enabled again, so a sketch that unconditionally disables it at
+    ///       startup can reboot in a loop on such a supply; disable it only when a battery is
+    ///       present. With a battery, or with 5 V supplied on the bus, the transition itself
+    ///       does not disturb the board. The PMIC's DCDC under-voltage power-off is disabled
+    ///       in begin(); disabling the output re-applies that disable first, so such a dip
+    ///       resets the ESP32 instead of latching the PMIC off. If that write fails, disabling
+    ///       returns false without touching the output.
+    bool setExtOutput(bool enable, ext_port_mask_t port_mask = (ext_port_mask_t)0xFF);
 
     /// deprecated : Change to "setExtOutput"
     [[deprecated("Change to setExtOutput")]]
@@ -119,9 +269,12 @@ namespace m5
 
     /// Set power output of the main USB port.
     /// @param enable true=output / false=input
+    /// @return true if the requested state was reached.
+    /// @note false means a model without the path (see getPowerOutputCaps()), an I2C failure,
+    ///       or, on the CoreS3 family, failure to acquire the AW9523 lock.
     /// @attention for M5Stack CoreS3 main USB port.
     /// @attention ※ Not for M5Station/M5Tab external USB.
-    void setUsbOutput(bool enable);
+    bool setUsbOutput(bool enable);
 
     /// Get power output of the main USB port.
     /// @return true=output enabled / false=output disabled
@@ -134,30 +287,61 @@ namespace m5
     void setLed(uint8_t brightness = 255);
 
     /// all power off.
-    /// @note PowerHub enters light sleep after requesting power-off and restarts if it wakes.
+    /// @note PowerHub: the STM32 front-end powers the board off asynchronously. If the
+    ///       device is still running about 3 s after the request the call returns, but
+    ///       may power off later because the request cannot be cancelled.
     void powerOff(void);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
-    /// @note PowerHub paces alarm writes by 50 ms, settles for 500 ms before requesting
-    ///       power-off, then enters light sleep and restarts if it wakes.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param seconds Number of seconds to boot.
-    /// @note On Tab5, returns without sleeping; use timerSleep(time).
-    void timerSleep(int seconds);
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure, ESP timer wakeup
+    ///         registration failure without an RTC, wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered. Without an RTC the ESP32 timer wakeup is used, except on Tab5.
+    /// @note This function owns the ESP timer wake source: it is set for this sleep and disabled
+    ///       again when the sleep is cancelled, a previous setting is not restored.
+    /// @note PowerHub has no periodic RTC timer; use a date/time overload on those boards.
+    /// @note When the ESP timer wakeup cannot be registered the RTC timer is used alone; that
+    ///       wakes only boards where the RTC IRQ is wired to a wake route (not an external RTC unit).
+    /// @note On Tab5, returns false without sleeping; use timerSleep(time).
+    bool timerSleep(int seconds);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure,
+    ///         wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered.
+    /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
+    ///       an alarm from an external RTC unit does not wake the board.
+    /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
+    /// @note PowerHub: the STM32 front-end arms the alarm and powers off asynchronously; the call
+    ///       spends about 0.75 s before the power-off request (alarm programming is paced at
+    ///       50 ms per register write, then 0.5 s settle) and up to 3 s waiting for the power to drop.
+    ///       It may power off later because the request cannot be cancelled; the alarm remains armed.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
-    /// @note Returns without sleeping if no RTC is available or the RTC driver reports that the alarm could not be set.
-    void timerSleep(const rtc_time_t& time);
+    bool timerSleep(const rtc_time_t& time);
 
     /// sleep and timer boot. The boot condition can be specified by the argument.
+    /// @note Refused if PowerHub accepted an earlier power-off request during this boot.
     /// @param date Date to boot. (only date and weekDay can be specified. Ignore year and month)
     /// @param time Time to boot. (only minutes and hours can be specified. Ignore seconds)
+    /// @return If this function returns, sleep was not entered and the result is false. Reasons include
+    ///         invalid arguments, existing RTC IRQ cleanup failure, RTC setup failure,
+    ///         wake source registration failure, and PC builds.
+    ///         Does not return once sleep is entered.
+    /// @note The RTC alarm wakes only boards where its IRQ is wired to a wake route;
+    ///       an alarm from an external RTC unit does not wake the board.
+    /// @note An ESP timer wake-up left by an earlier sleep is disabled and not restored.
+    /// @note PowerHub: the call spends about 0.75 s before the asynchronous power-off request
+    ///       (paced alarm writes, then 0.5 s settle) and up to 3 s waiting for the power to drop.
+    ///       It may power off later because the request cannot be cancelled; the alarm remains armed.
     /// @attention CoreInk and M5Paper can't alarm boot because it can't be turned off while connected to USB.
     /// @attention CoreInk と M5Paper は USB接続中はRTCタイマー起動が出来ない。;
-    /// @note Returns without sleeping if no RTC is available or the RTC driver reports that the alarm could not be set.
-    void timerSleep(const rtc_date_t& date, const rtc_time_t& time);
+    bool timerSleep(const rtc_date_t& date, const rtc_time_t& time);
 
     /// Value for micro_seconds of deepSleep / lightSleep, meaning "sleep without a timer wakeup".
     /// The device sleeps until a wakeup pin or another wakeup source is triggered.
@@ -180,23 +364,99 @@ namespace m5
 
     /// set battery charge enable.
     /// @param enable true=enable / false=disable
-    void setBatteryCharge(bool enable);
+    /// @return true if the path exists and every required write and cleanup step succeeded.
+    /// @note false means the request could not be confirmed: the path is missing,
+    /// a communication failed, or a step after the write failed. The setting may
+    /// or may not have been applied.
+    bool setBatteryCharge(bool enable);
 
     /// set battery charge current
     /// @param max_mA milli ampere.
+    /// @param applied_mA optional. receives the step that was applied.
+    /// @return true if the path exists and every required configuration step succeeded.
+    /// @note false means the request could not be confirmed. The path may be missing
+    /// or a communication may have failed; the setting may or may not have been applied.
+    /// @note The highest step not exceeding max_mA is selected; a request below
+    /// the lowest step is clamped up to it instead of being rejected. 0 is not a
+    /// step: use setBatteryCharge(false) to stop charging.
+    /// @note applied_mA is left untouched when false is returned.
     /// @note CoreMatrix selects 180 mA below 650 mA, otherwise 650 mA.
     /// @note ToughC5 selects 180 mA below 650 mA, otherwise 650 mA.
-    /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
-    void setChargeCurrent(std::uint16_t max_mA);
+    /// @note 0 is not a step: where a current path exists it selects the
+    /// lowest one, and a warning is logged once. Use setBatteryCharge(false)
+    /// to stop charging.
+    /// @note Tab5 / Tab5X select 500 mA below 1000 mA, otherwise 1000 mA.
+    /// @note StampS3Bat selects 200 mA below 650 mA, otherwise 650 mA.
+    /// @attention Returns false on models without a current control path; see
+    /// getChargeControlCaps(). The M5Stack with a non-I2C IP5306 also returns false.
+    bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
 
     /// set battery charge voltage
     /// @param max_mV milli volt.
-    /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
-    void setChargeVoltage(std::uint16_t max_mV);
+    /// @param applied_mV optional. receives the step that was applied.
+    /// @return true if the path exists and the write succeeded.
+    /// @note false means the request could not be confirmed. The path may be missing
+    /// or a communication may have failed; the setting may or may not have been applied.
+    /// @note The step selection rule is the same as setChargeCurrent.
+    /// @note applied_mV is left untouched when false is returned.
+    /// @note IP5306 steps and applied_mV are nominal values. The chip charges
+    ///       at that value plus 28 mV for 4.2 V, or plus 14 mV for other steps.
+    /// @attention Returns false on models without a voltage control path; see
+    /// getChargeControlCaps(). The M5Stack with a non-I2C IP5306 also returns false.
+    bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
+
+    /// Get which charge control paths this model provides.
+    /// @return bitmask of charge_control_capability_t. 0 = no control path,
+    /// which is also what is returned before M5.begin() has completed.
+    /// Paths refused because PMIC identification failed are not advertised.
+    /// @note Only the set side is declared here; there is no readback getter
+    /// yet, so no readback capability is advertised.
+    std::uint8_t getChargeControlCaps(void);
+
+    /// Get the battery charge state.
+    /// @return a single charge_state_t value. Never a set.
+    /// @note The idiom is a set test on both sides:
+    /// @code
+    ///   auto s = M5.Power.getChargeState();
+    ///   if      (charge_states_any_charging.contains(s))     { /* charging */ }
+    ///   else if (charge_states_any_not_charging.contains(s)) { /* not charging (how detailed depends on the model) */ }
+    ///   else                                                 { /* could not be obtained */ }
+    /// @endcode
+    /// Comparing against a single value ( s == charge_state_t::not_charging )
+    /// is model dependent and breaks silently when a model learns to report a
+    /// more detailed state, so both branches use a set.
+    /// @attention The last branch merges four different reasons:
+    /// not_initialized (called too early) / io_error (not readable right now) /
+    /// undetermined (not enough evidence) / unsupported (model can never tell).
+    /// Look at the value itself to tell them apart.
+    charge_state_t getChargeState(void);
+
+    /// Get the set of states this model can report.
+    /// @return The reportable states, or an empty set before M5.begin() completes,
+    ///         on unsupported models, or while the PMIC identity is unconfirmed.
+    /// @note For these three cases getChargeState() returns not_initialized / unsupported / io_error, respectively.
+    /// @note Once the PMIC is identified, a communication failure is reported
+    /// as io_error and never shrinks the set. If all AXP192 / AXP2101 chip-ID
+    /// probes failed during M5.begin(), an explicit M5.Power.begin() with a
+    /// positive ID makes the reportable set available.
+    charge_state_set_t getChargeStateCaps(void);
+
+    /// @return true if the reportable state set contains the state.
+    bool canReport(charge_state_t state);
 
     /// Get whether the battery is currently charging or not.
-    /// @attention Non-functioning models : CoreInk , M5Paper , M5Stack(with non I2C IP5306)
-    is_charging_t isCharging(void);
+    /// @return true only while charging. Everything else - full, disabled,
+    /// unknown, and a failed read - returns false.
+    /// @note This is charge_states_any_charging.contains(getChargeState()).
+    /// @attention Always false on models that cannot report charging; see
+    /// canReport(charge_state_t::charging). The M5Stack with a non-I2C IP5306
+    /// also returns false (io_error).
+    bool isCharging(void);
+
+    /// Get whether a battery is attached.
+    /// @note The existing sentinels of getBatteryVoltage() (0 / -1) are kept
+    /// unchanged for compatibility; this is the typed way to ask.
+    battery_presence_t getBatteryPresence(void);
 
     /// Get VBUS voltage
     /// @return VBUS voltage [mV] / -1=not supported model
@@ -234,12 +494,25 @@ namespace m5
 
     /// Set the configuration of the external port bus.
     /// @param config Configuration of the external port bus.
+    /// @return true if the configuration was written.
+    /// @note false means a model without the path (see getPowerOutputCaps()) or an I2C failure.
     /// @attention for M5PowerHub.
-    void setExtPortBusConfig(const ext_port_bus_t& config);
+    bool setExtPortBusConfig(const ext_port_bus_t& config);
 
     /// Operate the vibration motor
     /// @param level Vibration strength of the motor. (0=stop)
-    void setVibration(uint8_t level);
+    /// @return true if the requested level was applied.
+    /// @note false means a model without a motor (see getPowerOutputCaps()) or an I2C failure.
+    /// @note A nonzero level is clamped to the rail minimum: 1800 mV on AXP192
+    ///       LDO3 and 500 mV on AXP2101 DLDO1.
+    bool setVibration(uint8_t level);
+
+    /// Get which power output paths this model provides.
+    /// @return bitmask of power_output_capability_t. 0 = no output path, or M5.begin() has not completed yet.
+    /// Paths refused because PMIC identification failed are not advertised.
+    /// @note A set bit says the path exists, not that a call on it will succeed:
+    ///       the setters still return false on an I2C failure or a cancelled request.
+    std::uint8_t getPowerOutputCaps(void);
 
     pmic_t getType(void) const { return _pmic; }
 
@@ -277,20 +550,36 @@ namespace m5
 #endif
 
   private:
-    /// CoreS3 family: AW9523 のビット操作を setExtOutput / setUsbOutput と同じ排他区間で行う (スピーカー制御用)
+    /// CoreS3 family: AW9523 bit operations in the same critical section as setExtOutput /
+    /// setUsbOutput (for speaker control)
     static void _core_s3_aw9523_bit(uint8_t reg, uint8_t mask, bool on);
+    /// Battery current with I2C error reporting, for the boards whose charge
+    /// state is decided by the current. @return false = not readable / no path.
+    bool _readBatteryCurrent(std::int32_t* mA);
+    /// The state procedure itself. getChargeState() wraps it with the check
+    /// that the answer is one of the advertised capabilities.
+    charge_state_t _getChargeState(void);
     std::int32_t _getBatteryAdcRaw(void);
-    void _powerOff(bool withTimer);
-    void _timerSleep(void);
+    bool _disableEspTimerWakeup(void);
+    /// withTimer: wake by an RTC IRQ is expected (an RTC timer/alarm was armed).
+    bool _powerOff(bool withTimer);
+    /// rtc_armed: false = no RTC wake-up was armed (ESP timer only), so the RTC IRQ pin is not registered.
+    bool _timerSleep(bool rtc_armed = true);
 
 #if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
     /// Check whether a battery is actually attached (non-blocking).
-    /// @return 1=present / 0=absent / -1=not yet determined
-    std::int8_t _batteryPresent(void);
+    /// @param io_ok optional. receives false if any read of this evaluation failed.
+    /// @return 1=present / 0=absent / -1=not yet determined (cached across failed reads)
+    std::int8_t _batteryPresent(bool* io_ok = nullptr);
+    /// Drop the transient presence evidence (streak, sample baseline, counters); the verdict is kept.
+    void _bp_dropEvidence(void);
     /// Read the raw charger CHG_STAT line. @return false=not readable
     bool _readChargeStat(bool* level);
     /// Whether the VBAT node is confirmed collapsed (false when unreadable).
-    bool _vbatNodeDown(void);
+    /// @param io_ok optional. receives false when the node state could not be read.
+    bool _vbatNodeDown(bool* io_ok = nullptr);
+    /// CHG_STAT behind the battery presence gate. (ToughC5 / CoreMatrix)
+    charge_state_t _chargeStateFromChgStat(void);
     /// Battery presence. -1 = not yet determined.
     std::int8_t _batt_present = -1;
     /// Tick when charging last stopped (0 = at reset, which clears PWR_CFG).
@@ -311,8 +600,19 @@ namespace m5
     float _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;
+    /// true once M5Unified::begin() has completed (set there, not in
+    /// Power_Class::begin()). _pmic alone cannot tell a pmic_unknown model
+    /// from a not yet initialized one.
+    bool _initialized = false;
+    enum class identity_state_t : std::uint8_t
+    { not_probed   ///< no chip-ID probe has run; some models determine the PMIC by board ID
+    , settled      ///< a probe answered with a positive chip ID (AXP192 / AXP2101 boards)
+    , unconfirmed  ///< every chip-ID probe failed: the board default is provisional (see begin())
+    };
+    identity_state_t _identity_state = identity_state_t::not_probed;
     std::uint8_t _wakeupPin = 255;
     std::uint8_t _rtcIntPin = 255;
+    bool _poweroff_requested = false;  ///< latched for this boot once PowerHub accepts a power-off request
     pmic_t _pmic = pmic_t::pmic_unknown;
 #if !defined (M5UNIFIED_PC_BUILD)
     uint8_t _batAdcCh;

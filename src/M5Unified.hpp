@@ -82,6 +82,10 @@ namespace m5
   class M5Unified
   {
   public:
+    // Suppress deprecated-member initialization in the implicit constructor;
+    // sketch accesses outside this definition still receive warnings.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     struct config_t
     {
 #if defined ( ARDUINO )
@@ -120,7 +124,7 @@ namespace m5
           uint16_t unit_glass2 : 1;
           uint16_t unit_rca : 1;
           uint16_t module_rca : 1;
-          uint16_t unit_poep4_hdmi : 1;
+          uint16_t unit_poep4_display_out : 1;
           uint16_t reserve : 6;
         } external_display;
         uint16_t external_display_value = 0xFFFF;
@@ -159,27 +163,9 @@ namespace m5
       /// system LED brightness (0=off / 255=max) (※ not RGBcolorLED)
       uint8_t led_brightness = 0;
 
-      /// If auto-detection fails, the board will operate as the board configured here.
-      board_t fallback_board
-#if defined (CONFIG_IDF_TARGET_ESP32S3)
-                             = board_t::board_M5AtomS3Lite;
-#elif defined (CONFIG_IDF_TARGET_ESP32C3)
-                             = board_t::board_M5StampC3;
-#elif defined (CONFIG_IDF_TARGET_ESP32P4)
-#if defined (BOARD_ID) && BOARD_ID == 31
-                             = board_t::board_M5CoreP4X;
-#elif defined (BOARD_ID) && BOARD_ID == 35
-                             = board_t::board_M5Tab5X;
-#else
-                             = board_t::board_M5Tab5;
-#endif
-#elif defined (CONFIG_IDF_TARGET_ESP32C5)
-                             = board_t::board_M5StampC5;
-#elif defined (CONFIG_IDF_TARGET_ESP32) || !defined (CONFIG_IDF_TARGET)
-                             = board_t::board_M5AtomLite;
-#else
-                             = board_t::board_unknown;
-#endif
+      /// Explicit override when detection cannot confirm a board; unknown uses
+      /// the detector's candidate, then the build and chip defaults.
+      board_t fallback_board = board_t::board_unknown;
 
       union
       {
@@ -218,13 +204,15 @@ namespace m5
 #if defined ( __M5GFX_M5UNITLCD__ )
       M5UnitLCD::config_t unit_lcd;
 #endif
-#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
-      M5UnitPoEP4HDMI::config_t unit_poep4_hdmi;
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+      M5UnitPoEP4DisplayOut::config_t unit_poep4_display_out;
+      M5UnitPoEP4DisplayOut::config_t unit_poep4_hdmi __attribute__((deprecated("Use unit_poep4_display_out")));
 #endif
 #if defined ( __M5GFX_M5UNITRCA__ )
       M5UnitRCA::config_t unit_rca;
 #endif
     };
+#pragma GCC diagnostic pop
 
     M5GFX Display;  // setPrimaryされたディスプレイのインスタンス
     M5GFX &Lcd = Display;
@@ -359,7 +347,13 @@ namespace m5
       // Skipped when the application already ran Display.init(): GPIO46 may then carry the display
       // bus (StopWatch QSPI io2), which this output would overwrite. The hold is applied below,
       // once the pin map is known, only on boards that use GPIO46 as their power hold.
+#if defined (BOARD_ID) && ((BOARD_ID + 0) > 0)
+      // A fixed board can use GPIO46 for its display rather than power hold.
+      const bool gpio46_hold = Display.getBoard() == board_t::board_unknown
+                           && _get_power_hold_pin(static_cast<board_t>(BOARD_ID)) == GPIO_NUM_46;
+#else
       const bool gpio46_hold = (Display.getBoard() == m5gfx::board_t::board_unknown);
+#endif
       m5gfx::gpio::pin_backup_t gpio46_backup(GPIO_NUM_46);
       if (gpio46_hold)
       {
@@ -368,6 +362,13 @@ namespace m5
       }
 #endif
 
+      m5gfx::detect_config_t detect_config;
+      detect_config.fallback_board = cfg.fallback_board;
+      // A positive BOARD_ID fixes the device to its board_t value in M5Unified.
+#if defined (BOARD_ID) && ((BOARD_ID + 0) > 0)
+      detect_config.fixed_board = static_cast<board_t>(BOARD_ID);
+#endif
+      Display.setDetectConfig(detect_config);
       auto brightness = Display.getBrightness();
       Display.setBrightness(0);
       bool res = false;
@@ -376,11 +377,33 @@ namespace m5
       } else {
         res = Display.init_without_reset(false);
       }
-      auto board = _check_boardtype(Display.getBoard());
-      // printf("auto detect board:%d\n",board);
+      const auto fixed_board = Display.getFixedBoard();
+      auto board = fixed_board != board_t::board_unknown ? fixed_board : Display.getBoard();
       bool board_detected = (board != board_t::board_unknown);
-      if (!board_detected) { board = cfg.fallback_board; }
+      if (fixed_board != board_t::board_unknown)
+      {
+        // Accepted firmware identity survives display startup failure.
+        if (cfg.fallback_board != board_t::board_unknown && cfg.fallback_board != fixed_board)
+        {
+          Log(ESP_LOG_WARN, "fallback board:%u ignored for fixed board:%u",
+              static_cast<unsigned>(cfg.fallback_board), static_cast<unsigned>(fixed_board));
+        }
+      }
+      else if (!board_detected)
+      {
+        board = cfg.fallback_board;
+        if (board == board_t::board_unknown) { board = Display.getCandidateBoard(); }
+        if (board == board_t::board_unknown) { board = _default_fallback_board(); }
+      }
       _board = board;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+      if (board == board_t::board_M5DualKey)
+      {
+        // Keep DualKey switch pins released regardless of how it was selected.
+        m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input);
+        m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input);
+      }
+#endif
       _setup_pinmap(board);
 #if defined ( CONFIG_IDF_TARGET_ESP32S3 )
       if (!gpio46_hold && getPin(pin_name_t::power_hold) == GPIO_NUM_46)
@@ -388,10 +411,10 @@ namespace m5
         m5gfx::gpio_hi(GPIO_NUM_46);
         m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::output);
       }
-      // Restore only on boards positively identified as exposing GPIO46 to the application
-      // (camera VSYNC / data, header pin); every other case (power hold, display bus pins
-      // configured by Display.init(), a fallback board) keeps the previous behaviour.
-      switch (board_detected && gpio46_hold ? board : board_t::board_unknown)
+      // Restore GPIO46 on boards exposing it to the application, including
+      // candidates and package defaults. Power hold
+      // and display bus pins configured by Display.init() retain their state.
+      switch (gpio46_hold ? board : board_t::board_unknown)
       {
       case board_t::board_M5StackCoreS3:
       case board_t::board_M5StackCoreS3SE:
@@ -433,20 +456,21 @@ namespace m5
       _begin(cfg);
 
 
-      // Unit PoEP4 has no built-in LCD; attach its LT8912B HDMI output as a board display.
-#if defined ( __M5GFX_M5UNITPOEP4HDMI__ )
-      if (cfg.external_display.unit_poep4_hdmi && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
+      // Unit PoEP4 has no built-in LCD; attach its LT8912B Display Out as a board display.
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+      if (cfg.external_display.unit_poep4_display_out && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
       {
+        auto& display_out_cfg = _select_poep4_display_out_config(cfg);
         // The bridge sits on the internal bus: unless the sketch chose a bus itself, share
         // In_I2C's port and pins (lgfx::i2c underneath both). A partly filled config is
         // completed from In_I2C too, with a warning, so nothing is mixed silently.
         {
-          auto& h = cfg.unit_poep4_hdmi;
+          auto& h = display_out_cfg;
           const bool none = (h.i2c_port < 0 && h.pin_sda < 0 && h.pin_scl < 0);
           const bool all  = (h.i2c_port >= 0 && h.pin_sda >= 0 && h.pin_scl >= 0);
 #if defined (ESP_LOGW)
           if (!none && !all) {
-            ESP_LOGW("M5Unified", "unit_poep4_hdmi: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
+            ESP_LOGW("M5Unified", "unit_poep4_display_out: i2c_port/pin_sda/pin_scl partly set (%d/%d/%d); the rest is taken from In_I2C", h.i2c_port, h.pin_sda, h.pin_scl);
           }
 #else
           (void)none; (void)all;
@@ -455,7 +479,7 @@ namespace m5
           if (h.pin_sda < 0) { h.pin_sda = In_I2C.getSDA(); }
           if (h.pin_scl < 0) { h.pin_scl = In_I2C.getSCL(); }
         }
-        M5UnitPoEP4HDMI dsp(cfg.unit_poep4_hdmi);
+        M5UnitPoEP4DisplayOut dsp(display_out_cfg);
         if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
           addDisplay(dsp);
         }
@@ -683,6 +707,10 @@ namespace m5
       {
         Display.setBrightness(brightness);
       }
+      /// The charge state API reports not_initialized until here: the PMIC
+      /// identity is settled in Power.begin(), but the contract is tied to the
+      /// completion of M5.begin() itself.
+      Power._initialized = true;
     }
 
     void setTouchButtonHeightByRatio(uint8_t ratio);
@@ -692,6 +720,45 @@ namespace m5
     IOExpander_Base& getIOExpander(size_t idx) { return *_io_expander[idx & 1]; };
 
   private:
+
+#if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
+    static bool _poep4_display_out_config_changed(const M5UnitPoEP4DisplayOut::config_t& cfg)
+    {
+      const M5UnitPoEP4DisplayOut::config_t defaults{};
+      return cfg.width != defaults.width
+          || cfg.height != defaults.height
+          || cfg.refresh_rate != defaults.refresh_rate
+          || cfg.fb_num != defaults.fb_num
+          || cfg.dsi_bus_id != defaults.dsi_bus_id
+          || cfg.dsi_lane_num != defaults.dsi_lane_num
+          || cfg.dsi_lane_mbps != defaults.dsi_lane_mbps
+          || cfg.dsi_ldo_chan_id != defaults.dsi_ldo_chan_id
+          || cfg.dsi_ldo_voltage_mv != defaults.dsi_ldo_voltage_mv
+          || cfg.i2c_freq != defaults.i2c_freq
+          || cfg.output_depth != defaults.output_depth
+          || cfg.i2c_port != defaults.i2c_port
+          || cfg.pin_sda != defaults.pin_sda
+          || cfg.pin_scl != defaults.pin_scl
+          || cfg.i2c_master_bus != defaults.i2c_master_bus;
+    }
+
+    static M5UnitPoEP4DisplayOut::config_t& _select_poep4_display_out_config(config_t& cfg)
+    {
+      // Separate live objects avoid inactive-union-member access. Changed legacy
+      // settings take precedence, including when both spellings were configured.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      if (_poep4_display_out_config_changed(cfg.unit_poep4_hdmi))
+      {
+#if defined (ESP_LOGW)
+        ESP_LOGW("M5Unified", "Deprecated unit_poep4_hdmi settings override unit_poep4_display_out");
+#endif
+        return cfg.unit_poep4_hdmi;
+      }
+#pragma GCC diagnostic pop
+      return cfg.unit_poep4_display_out;
+    }
+#endif
     /// Power_Class needs to release the interrupt path of the wakeup pin before sleeping,
     /// which requires knowledge of how the board is wired. That knowledge lives here.
     friend class Power_Class;
@@ -723,21 +790,11 @@ namespace m5
     void _begin_audio(config_t& cfg);
     bool _begin_rtc_imu(const config_t& cfg);
 
-    board_t _check_boardtype(board_t);
+    static board_t _default_fallback_board(void);
     void _setup_i2c(board_t);
     void _setup_led(board_t);
-    /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
-    static void _wait_i2c_device_power(void);
-
-    /// 指定ピンのバス上に、指定した 7bit アドレスのデバイスが居るかを調べる。
-    /// (M5GFX にも同名だった _probe_i2c_addr があるが、あちらは複数アドレスを
-    ///  ビット列で返す別物。取り違えを避けるため名前を分けている)
-    /// @return true = ACK が返った (デバイスが存在する)。
-    ///         false は「ACK を確認できなかった」であり、不在のほかバスが
-    ///         成立していない場合・probe 用ポートの初期化に失敗した場合を含む。
-    bool _probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr);
-
     static void _setup_pinmap(board_t);
+    static int8_t _get_power_hold_pin(board_t);
     static bool _speaker_enabled_cb_core2(void* args, bool enabled);
     static bool _speaker_enabled_cb_cores3(void* args, bool enabled);
     static bool _speaker_enabled_cb_sticks3(void* args, bool enabled);

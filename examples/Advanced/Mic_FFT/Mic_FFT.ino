@@ -9,15 +9,24 @@
 
 #include <set>
 #include <map>
+#include <stdlib.h>
 
 static void* memory_alloc(size_t size)
 {
+#if defined ( ESP_PLATFORM )
   return heap_caps_malloc(size, MALLOC_CAP_8BIT);
+#else
+  return malloc(size);
+#endif
 }
 
 static void memory_free(void* ptr)
 {
+#if defined ( ESP_PLATFORM )
   heap_caps_free(ptr);
+#else
+  free(ptr);
+#endif
 }
 
 struct wav_data_t {
@@ -719,10 +728,10 @@ void setup(void)
   fft_data.sample_rate = SAMPLE_RATE;
   fft_data.wav_data = &wav_data;
   fft_data.length = (1 << (fft_data.fft_size_bits - 1)) + 1;
-  fft_data.fdata = (typeof(fft_data.fdata))memory_alloc(fft_data.length * sizeof(fft_data.fdata[0]));
+  fft_data.fdata = (decltype(fft_data.fdata))memory_alloc(fft_data.length * sizeof(fft_data.fdata[0]));
 
   wav_data.length = WAVE_TOTAL_SIZE;
-  wav_data.wav = (typeof(wav_data.wav))memory_alloc(WAVE_TOTAL_SIZE * sizeof(wav_data.wav[0]));
+  wav_data.wav = (decltype(wav_data.wav))memory_alloc(WAVE_TOTAL_SIZE * sizeof(wav_data.wav[0]));
   memset(wav_data.wav, 0 , WAVE_TOTAL_SIZE * sizeof(int16_t));
 }
 
@@ -732,13 +741,26 @@ void loop(void)
 
   if (M5.Mic.isEnabled())
   {
+    static bool has_new_block = false;
     int wav_idx = wav_data.latest_index;
     while (M5.Mic.isRecording() < 2) {
       M5.Mic.record(&(wav_data.wav[wav_idx]), WAVE_BLOCK_SIZE, SAMPLE_RATE, false);
       wav_idx += WAVE_BLOCK_SIZE;
       if (wav_idx >= WAVE_TOTAL_SIZE) { wav_idx = 0; }
       wav_data.latest_index = wav_idx;
+      has_new_block = true;
     };
+
+    // Start a new drawing cycle only after a new block has been captured,
+    // so the history scrolls at the capture rate even on a fast display.
+    if (step < 0 || step >= 4)
+    {
+      if (!has_new_block) {
+        M5.delay(1);
+        return;
+      }
+      has_new_block = false;
+    }
 
     {
       switch (++step) {

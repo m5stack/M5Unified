@@ -34,18 +34,18 @@ namespace m5
 
   bool RTC_Base::validateDateTime(const rtc_date_t* date, const rtc_time_t* time)
   {
-    if (time && (time->seconds > 59 || time->seconds < 0
-              || time->minutes > 59 || time->minutes < 0
-              || time->hours   > 23 || time->hours   < 0))
+    // The range rules live in the structs; a nullptr argument means "not requested".
+    return (date ? date->isValid() : true) && (time ? time->isValid() : true);
+  }
+
+  bool RTC_Base::validateAlarmFields(const rtc_date_t* date, const rtc_time_t* time)
+  {
+    if (time && ((time->minutes < -1 || time->minutes > 59)
+              || (time->hours < -1 || time->hours > 23)))
     {
       return false;
     }
-    if (date && (date->date  < 1 || date->date  > 31
-              || date->month < 1 || date->month > 12
-              || date->weekDay < 0 || date->weekDay > 6))
-    {
-      return false;
-    }
-    return true;
+    return !date || ((date->date == -1 || (date->date >= 1 && date->date <= 31))
+                 && (date->weekDay >= -1 && date->weekDay <= 6));
   }
 }

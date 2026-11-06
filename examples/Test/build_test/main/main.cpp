@@ -70,8 +70,24 @@ static void test_power(void)
   M5.Power.setLed(64);
   M5.Power.setExtOutput(true);
   M5.Power.setExtPower(true);
+  (void)M5.Power.getPowerOutputCaps();
+  (void)M5.Power.setUsbOutput(true);
+  (void)M5.Power.setVibration(1);
+  (void)M5.Power.setExtPortBusConfig({});
   M5.Power.setBatteryCharge(true);
   M5.Power.setChargeCurrent(500);
+#if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C6) \
+ && !defined(CONFIG_IDF_TARGET_ESP32C61) && !defined(CONFIG_IDF_TARGET_ESP32P4)
+  int8_t battery_level;
+  int32_t shunt_mv;
+  (void)M5.Power.Axp192.getBatteryLevel(&battery_level);
+  (void)M5.Power.Ina3221[0].getShuntMilliVoltage(0, &shunt_mv);
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C5) \
+ || defined(CONFIG_IDF_TARGET_ESP32C61) || defined(CONFIG_IDF_TARGET_ESP32P4)
+  bool gpio_high;
+  (void)M5.Power.M5pm1.getGPIOOutputLatch(m5::M5PM1_Class::gpio0, &gpio_high);
+#endif
   (void)M5.Power.getVBUSVoltage();
   (void)M5.Power.getBatteryLevel();
   (void)M5.Power.getBatteryVoltage();

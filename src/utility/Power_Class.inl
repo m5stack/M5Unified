@@ -9,6 +9,10 @@
 #include "m5unified_i2c_addr.hpp"
 #include "M5IOE1_Class.hpp"
 
+#if defined (M5UNIFIED_PC_BUILD)
+#include <cassert>
+#endif
+
 #if !defined (M5UNIFIED_PC_BUILD)
 
 #include <esp_log.h>
@@ -19,6 +23,7 @@
 #include <freertos/semphr.h>
 
 #include <soc/soc_caps.h>
+#include <soc/gpio_reg.h>
 
 // ESP-IDF v4 defines only the generic SOC_PM_SUPPORT_EXT_WAKEUP; the split into
 // SOC_PM_SUPPORT_EXT0_WAKEUP / SOC_PM_SUPPORT_EXT1_WAKEUP came later.
@@ -69,6 +74,256 @@
 
 namespace m5
 {
+  // Adding a model requires its begin() case, these three capability tables,
+  // and the hardware procedure in each applicable setter.
+  /// These tables describe reportable states and control/output paths for each
+  /// (pmic, board) pair; begin() may probe the PMIC for boards with multiple variants.
+  /// The caps getters read them directly. getChargeState() reads the hardware via
+  /// _getChargeState() and checks its result against the state table in debug builds.
+  static charge_state_set_t _charge_state_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    switch (pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case Power_Class::pmic_t::pmic_aw32001:
+      return charge_state_t::charging | charge_state_t::not_charging
+           | charge_state_t::full     | charge_state_t::disabled;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5CoreMatrix)
+      {
+        return charge_state_t::charging | charge_state_t::not_charging;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      /// CoreP4X
+      return charge_state_t::charging | charge_state_t::not_charging;
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case Power_Class::pmic_t::pmic_ip5306:
+      return charge_state_t::charging | charge_state_t::not_charging
+           | charge_state_t::full     | charge_state_t::disabled;
+
+    case Power_Class::pmic_t::pmic_axp192:
+      /// no full: REG01H bit6 means "not charging or charge complete", which
+      /// does not report completion on its own.
+      return charge_state_t::charging | charge_state_t::not_charging | charge_state_t::disabled;
+
+#endif
+
+    case Power_Class::pmic_t::pmic_axp2101:
+      return charge_state_t::charging    | charge_state_t::not_charging
+           | charge_state_t::full        | charge_state_t::disabled
+           | charge_state_t::discharging | charge_state_t::idle;
+
+#endif
+
+    default:
+      break;
+    }
+
+    /// Models whose state is not decided by _pmic. (see getChargeState: a
+    /// pmic_m5pm1 case placed above these would make them unreachable without
+    /// any diagnostic)
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StickS3:      // PM1 G0
+    case board_t::board_M5PaperDIY:     // PM1 G3
+    case board_t::board_M5StopWatch:    // PM1 G2
+    case board_t::board_M5StampS3Bat:   // PM1 G2
+    case board_t::board_M5ChainCaptain: // IOE1 G3
+    case board_t::board_M5PaperS3:      // MCU GPIO
+    case board_t::board_M5PaperMono:    // IP2315 0xC7 bit7
+    case board_t::board_M5PowerHub:     // battery current
+      /// no disabled: whether the CHG_EN these boards write is actually wired
+      /// to the charger is unconfirmed, and the PaperColor shows it can be
+      /// writable and read back while not being connected at all.
+      return charge_state_t::charging | charge_state_t::not_charging;
+
+    case board_t::board_M5PaperColor:
+      /// only the negative side is answerable: the charger status reaches
+      /// neither the PM1 nor the MCU.
+      return charge_state_set_t() | charge_state_t::not_charging;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      /// current based: "no charging" is observed as idle, never as not_charging.
+      return charge_state_t::charging | charge_state_t::discharging | charge_state_t::idle;
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return charge_state_t::charging | charge_state_t::not_charging;
+#endif
+
+    default:
+      break;
+    }
+    return charge_state_set_t();
+  }
+
+  static std::uint8_t _charge_control_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    switch (pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case Power_Class::pmic_t::pmic_aw32001:
+      /// No voltage path: AW32001 step selection below the lowest step corrupts
+      /// neighbouring fields, so its voltage setter is not wired up here.
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5CoreMatrix)
+      {
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      /// CoreP4X: PM1 CHG_EN only.
+      return Power_Class::cap_set_charge_enable;
+#else
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case Power_Class::pmic_t::pmic_ip5306:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+    case Power_Class::pmic_t::pmic_axp192:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+#endif
+
+    case Power_Class::pmic_t::pmic_axp2101:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current | Power_Class::cap_set_charge_voltage;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      switch (board)
+      {
+      case board_t::board_M5StampS3Bat:
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+
+      case board_t::board_M5PaperColor:
+        /// CHG_EN_PP is not connected to the charger.
+        return 0;
+
+      case board_t::board_M5StickS3:
+      case board_t::board_M5PaperDIY:
+      case board_t::board_M5StopWatch:
+      case board_t::board_M5ChainCaptain:
+      case board_t::board_M5PaperMono:
+        return Power_Class::cap_set_charge_enable;
+
+      default:
+        break;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case Power_Class::pmic_t::pmic_m5pm1:
+      if (board == board_t::board_M5ToughC5)
+      {
+        return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+      }
+      break;
+#endif
+
+#endif
+
+    default:
+      break;
+    }
+
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      return Power_Class::cap_set_charge_enable | Power_Class::cap_set_charge_current;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5PowerHub:
+      return Power_Class::cap_set_charge_enable;
+#endif
+    default:
+      break;
+    }
+    return 0;
+  }
+
+  static std::uint8_t _power_output_caps(Power_Class::pmic_t pmic, board_t board)
+  {
+    (void)pmic; (void)board;   // some chip builds have no output path
+#if defined (M5UNIFIED_PC_BUILD)
+    return 0;   // the setters are stubs on the PC build
+#else
+    switch (board)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5CoreP4X:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
+
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+    case board_t::board_ArduinoNessoN1:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C5)
+    case board_t::board_M5ToughC5:
+      return (pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case board_t::board_M5CoreMatrix:
+      return Power_Class::cap_set_ext_output;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5StackCoreS3:
+    case board_t::board_M5StackCoreS3SE:
+    case board_t::board_M5StackChan:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
+
+    case board_t::board_M5StopWatch:
+      return ((pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0) | Power_Class::cap_set_vibration;
+
+    case board_t::board_M5StickS3:
+    case board_t::board_M5PaperColor:
+      return (pmic == Power_Class::pmic_t::pmic_m5pm1) ? Power_Class::cap_set_ext_output : 0;
+
+    case board_t::board_M5ChainCaptain:
+    case board_t::board_M5StampS3Bat:
+      return Power_Class::cap_set_ext_output;
+
+    case board_t::board_M5PowerHub:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_ext_port_bus;
+
+#elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
+    case board_t::board_M5StackCore2:
+      // The motor rail is AXP192 LDO3 or AXP2101 DLDO1; other PMICs have no route.
+      return Power_Class::cap_set_ext_output
+           | ((pmic == Power_Class::pmic_t::pmic_axp192 || pmic == Power_Class::pmic_t::pmic_axp2101)
+              ? Power_Class::cap_set_vibration : 0);
+
+    case board_t::board_M5Paper:
+    case board_t::board_M5Tough:
+    case board_t::board_M5StickC:
+    case board_t::board_M5StickCPlus:
+    case board_t::board_M5Station:
+      return Power_Class::cap_set_ext_output;
+#endif
+
+    default:
+      return 0;
+    }
+#endif
+  }
+
 #if !defined (M5UNIFIED_PC_BUILD)
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t ip2315_i2c_addr = 0x75; // M5PaperMono USB fast-charger
@@ -82,11 +337,6 @@ namespace m5
     ioe1.digitalWrite(M5IOE1_Class::gpio11, false);
   }
 
-  static void set_papermono_ip2315_enabled(bool enable)
-  {
-    M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio11, enable);
-  }
-
   static bool wait_papermono_ip2315_ready(void)
   {
     m5gfx::delay(2);
@@ -95,6 +345,130 @@ namespace m5
       if (M5.In_I2C.scanID(ip2315_i2c_addr, i2c_freq)) { return true; }
     }
     return false;
+  }
+
+  /// The IP2315 latches its mode when VIN is applied: I2C mode only if SCL and SDA
+  /// are both High at that moment, otherwise LED mode until VIN is removed. On this
+  /// board the lines are only pulled High while the gate (IOE1 GPIO11, the level
+  /// shifter OE) is open, so plugging USB in with the gate closed (always the case
+  /// while powered off) gives LED mode. In LED mode the charger drives LED1/LED2
+  /// (= SCL/SDA) at about 500 Hz, and opening the gate disturbs the internal I2C bus:
+  /// I2C traffic in that state stalls the board, and writes can land corrupted.
+  /// So the bus is checked with plain GPIO reads right after opening, and in LED mode
+  /// the gate is closed again without touching the charger. The result is kept until
+  /// VIN is seen removed.
+  static constexpr std::uint8_t papermono_ioe1_out_reg = 0x06;  // M5IOE1 GPIO_OUT_H (GPIO9..)
+  static constexpr std::uint8_t papermono_gate_bit = 1 << 2;    // GPIO11
+  /// LED mode is remembered until VIN is seen removed. A gate that could not be
+  /// confirmed closed is remembered too, with the byte to restore, and closing is
+  /// retried before anything else. Like the rest of this class, the sequence
+  /// assumes no other task uses the internal I2C bus meanwhile.
+  /// Limits: VIN removed and reapplied between two calls is not seen, so LED mode
+  /// stays remembered (the charger stays untouched); only the two charge APIs retry
+  /// an unconfirmed close, other users of the internal bus do not.
+  static bool papermono_ip2315_led_mode = false;
+  static bool papermono_gate_unclosed = false;
+  static std::uint8_t papermono_gate_saved = 0;
+
+  enum class papermono_gate_t : std::uint8_t { opened, led_mode, error };
+
+  static constexpr std::uint32_t papermono_bus_mask = (1u << (GPIO_NUM_47 - 32)) | (1u << (GPIO_NUM_48 - 32));
+
+  enum class papermono_bus_t : std::uint8_t { quiet, disturbed, unobserved };
+
+  /// quiet when neither SCL (G48) nor SDA (G47) goes Low for 4.5 ms after the gate
+  /// write. The ESP32's own outputs are disabled meanwhile so that only the bus is
+  /// read. IOE1 applies the write to its pin about 1.1 ms later; in LED mode SDA is
+  /// Low half of every 2 ms period. A watch with a gap between two reads longer
+  /// than 200 us (preemption) proves nothing and is repeated; unobserved when every
+  /// try had such a gap.
+  static papermono_bus_t papermono_bus_watch(void)
+  {
+    for (int retry = 0; retry < 4; ++retry)
+    {
+      std::uint32_t en = REG_READ(GPIO_ENABLE1_REG) & papermono_bus_mask;
+      REG_WRITE(GPIO_ENABLE1_W1TC_REG, en);
+      bool low = false;
+      std::uint32_t gap_max = 0;
+      auto t0 = m5gfx::micros();
+      auto prev = t0;
+      for (;;)
+      {
+        auto now = m5gfx::micros();
+        if (now - prev > gap_max) { gap_max = now - prev; }
+        prev = now;
+        if (now - t0 >= 4500) { break; }
+        if ((REG_READ(GPIO_IN1_REG) & papermono_bus_mask) != papermono_bus_mask) { low = true; break; }
+      }
+      REG_WRITE(GPIO_ENABLE1_W1TS_REG, en);
+      if (low) { return papermono_bus_t::disturbed; }
+      if (gap_max <= 200) { return papermono_bus_t::quiet; }
+    }
+    return papermono_bus_t::unobserved;
+  }
+
+  /// Close the gate, writing back the output byte saved before opening, and confirm
+  /// the whole byte by reading it back. When the bus is disturbed, each write is
+  /// placed right after both lines return High (the gap between the charger's
+  /// pulses), waiting at most 3 ms for each edge.
+  static bool papermono_gate_close(std::uint8_t saved, bool disturbed)
+  {
+    auto& ioe1 = M5.getIOExpander(0);
+    const std::uint8_t closed = saved & ~papermono_gate_bit;
+    for (int i = 0; i < 20; ++i)
+    {
+      if (disturbed)
+      {
+        std::uint32_t en = REG_READ(GPIO_ENABLE1_REG) & papermono_bus_mask;
+        REG_WRITE(GPIO_ENABLE1_W1TC_REG, en);
+        auto t = m5gfx::micros();
+        while (m5gfx::micros() - t < 3000 && (REG_READ(GPIO_IN1_REG) & papermono_bus_mask) == papermono_bus_mask) {}
+        t = m5gfx::micros();
+        while (m5gfx::micros() - t < 3000 && (REG_READ(GPIO_IN1_REG) & papermono_bus_mask) != papermono_bus_mask) {}
+        REG_WRITE(GPIO_ENABLE1_W1TS_REG, en);
+      }
+      std::uint8_t rb;
+      if (ioe1.writeRegister8(papermono_ioe1_out_reg, closed)
+       && ioe1.readRegister(papermono_ioe1_out_reg, &rb, 1) && rb == closed)
+      {
+        papermono_gate_unclosed = false;
+        return true;
+      }
+    }
+    papermono_gate_unclosed = true;
+    papermono_gate_saved = saved;
+    return false;
+  }
+
+  /// Retry closing a gate left unconfirmed by an earlier call. Call this before any
+  /// other access to the internal bus. false: still unconfirmed.
+  static bool papermono_gate_recover(void)
+  {
+    return !papermono_gate_unclosed || papermono_gate_close(papermono_gate_saved, true);
+  }
+
+  /// Open the gate. Call papermono_gate_recover() first. vin_present: the caller's
+  /// PM1 power-source reading.
+  /// opened: the bus is quiet, the charger can be accessed, close afterwards with the
+  /// saved byte; led_mode: the charger is in LED mode and the gate is closed;
+  /// error: the bus could not be judged, or the gate state is not confirmed (a failed
+  /// close is retried by the next papermono_gate_recover()).
+  static papermono_gate_t papermono_gate_open(bool vin_present, std::uint8_t* saved)
+  {
+    if (!vin_present) { papermono_ip2315_led_mode = false; }
+    if (papermono_ip2315_led_mode) { return papermono_gate_t::led_mode; }
+    auto& ioe1 = M5.getIOExpander(0);
+    if (!ioe1.readRegister(papermono_ioe1_out_reg, saved, 1)) { return papermono_gate_t::error; }
+    /// a write reported as failed may still have been applied: close in any case.
+    bool opened = ioe1.writeRegister8(papermono_ioe1_out_reg, *saved | papermono_gate_bit);
+    auto bus = papermono_bus_watch();
+    if (opened && bus == papermono_bus_t::quiet) { return papermono_gate_t::opened; }
+    bool closed = papermono_gate_close(*saved, bus != papermono_bus_t::quiet);
+    /// LED mode is remembered only on a clean judgement: the gate was opened, a line
+    /// went Low, the gate is closed again, and the charger is powered.
+    if (!closed || !opened || bus != papermono_bus_t::disturbed || !vin_present) { return papermono_gate_t::error; }
+    papermono_ip2315_led_mode = true;
+    return papermono_gate_t::led_mode;
   }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
@@ -110,6 +484,17 @@ namespace m5
 
   bool Power_Class::begin(void)
   {
+    /// On the boards that carry either an AXP192 or an AXP2101 the identity
+    /// is settled by a positive chip ID from the probe, and a later call
+    /// (M5.Power.begin() is public) then re-applies the register setup but
+    /// keeps the identity, so the capability set never changes afterwards.
+    /// If every probe failed, the board default (AXP192) is used but is not
+    /// treated as settled: a later begin() probes again instead of freezing
+    /// an identity that was never confirmed. Boards whose PMIC follows from
+    /// the board id alone do not go through the probe.
+    const bool identity_settled = _identity_state == identity_state_t::settled;
+    const pmic_t settled_pmic = _pmic;
+    (void)identity_settled; (void)settled_pmic;   // unused on chips without the AXP192/AXP2101 probe
     _pmic = pmic_t::pmic_unknown;
 
 #if !defined (M5UNIFIED_PC_BUILD)
@@ -344,12 +729,12 @@ namespace m5
           M5_LOGE("PM1 PWM ch1 could not be turned off, and GPIO4 could not be switched to GPIO mode; silence cannot be guaranteed.");
         }
       }
-      /// PM1 は常時給電で ESP のリセットを跨いで状態が残るため、直前に動いて
-      /// いたファームの設定に依存しないよう IRQ 関連を初期化する
+      /// The PM1 is always powered and keeps its state across ESP resets, so initialize the IRQ
+      /// settings instead of relying on whatever the previous firmware left
       M5pm1.clearWakeSource();
       M5pm1.clearIRQStatus();
       M5pm1.setGPIOIRQMaskBits(0x16);  // enable GPIO0(TP INT)/GPIO3(RTC nIRQ), disable other GPIO IRQ
-      /// PM1 GPIO0 は TP INT 入力。
+      /// PM1 GPIO0 is the TP INT input.
       M5pm1.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::input);
       /// settle battery presence early (the charger may still be idle).
@@ -376,24 +761,23 @@ namespace m5
       M5pm1.setDCDCOutput(true);
       M5pm1.setLDOOutput(true);
       M5pm1.setLedEnLevel(true);
-      /// PM1 GPIO1 は ESP32 の G4 へ配線された IRQ 出力。IRQ ピンを設定して
-      /// おかないと PM1 が IRQ ステータス (0x40-0x42) を自動クリアしてしまい、
-      /// 電源ボタンや RTC アラームの IRQ 検出が機能しない。
-      /// IRQ 機能へ切り替える前に push-pull 出力の High として設定しておき、
-      /// 解放時に能動的に High が駆動されるようにする。
+      /// PM1 GPIO1 is the IRQ output wired to ESP32 G4. Without an IRQ pin configured, the PM1
+      /// clears the IRQ status registers (0x40-0x42) by itself, and power button / RTC alarm IRQs
+      /// cannot be detected. Configure it as a push-pull output driving High before switching to
+      /// the IRQ function, so that releasing the IRQ actively drives the line High.
       M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
       M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
       M5pm1.setGPIOPull(M5PM1_Class::gpio1, M5PM1_Class::pull_up);
       M5pm1.setGPIOOutput(M5PM1_Class::gpio1, true);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::irq);
-      /// PM1 GPIO3 は RX8130 の nIRQ 入力 (外部プルアップ・アクティブ Low)。
-      /// 入力にしておくと IRQ ピン設定時のレベル変化スキャン対象になり、
-      /// RTC アラームが IRQ 出力 (= ESP32 G4 の Low) として伝わる。
+      /// PM1 GPIO3 is the RX8130 nIRQ input (external pull-up, active Low). As an input it is part
+      /// of the level-change scan of the IRQ pin, so an RTC alarm propagates to the IRQ output (=
+      /// ESP32 G4 Low).
       M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
-      /// make the PM1 IRQ output readable as the wakeup pin。
-      /// この線には外部プルアップが無く、IRQ 解放時に High へ戻す駆動も
-      /// 期待できないため、内部プルアップを有効にする。
+      /// make the PM1 IRQ output readable as the wakeup pin.
+      /// This line has no external pull-up and nothing drives it back High when the IRQ is
+      /// released, so enable the internal pull-up.
       m5gfx::pinMode(_wakeupPin, m5gfx::pin_mode_t::input_pullup);
       break;
     }
@@ -431,7 +815,7 @@ namespace m5
       // The charge voltage (0x64) is not always at the datasheet default either: a unit read 0x00,
       // which is reserved (4.6V in an early datasheet revision). The cell is a 4.2V type.
       // Set it before the TS change below lets the charger start.
-      Axp2101.setChargeVoltage(4200);
+      if (!Axp2101.setChargeVoltage(4200)) { ESP_LOGW("Power", "AXP2101: failed to set the charge voltage."); }
       Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
       // The touch INT is routed to the ESP32 as TOUCH_INT -> AW9523 P1_2 -> AW9523 INTN
       // -> I2C_INT -> GPIO21. The power key is wired to the AXP2101 PWRON only, and the
@@ -471,14 +855,27 @@ namespace m5
 
     case board_t::board_M5StampS3Bat:
       _pmic = pmic_t::pmic_m5pm1;
+      /// G3 = CHG_PROG of the charger: driven low = 650mA, left floating = 200mA
+      /// (official documentation). Only those two levels are defined, and the
+      /// PM1 keeps its state across an ESP reset, so the pin is released to an
+      /// input first (before anything else can expose a held high latch),
+      /// then the latch is normalized low while it is still an input.
+      /// The pull is cleared before the pin becomes an input (a held pull-up
+      /// would otherwise show on the pin). Every step is attempted even when
+      /// an earlier one failed: each of them only moves the pin towards a
+      /// defined state (no pull, input, low latch, push-pull, GPIO mux), so
+      /// a transient write failure must not leave a held high latch driven
+      /// just because the release before it did not go through.
+      (void)M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_none);
+      (void)M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input);
+      (void)M5pm1.setGPIOOutput(M5PM1_Class::gpio3, false);
+      (void)M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
+      (void)M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
       M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
-      M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio);
       M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output);
       M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::input);
-      M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
       M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull);
-      M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull);
       break;
 
     case board_t::board_M5PaperS3:
@@ -541,6 +938,8 @@ namespace m5
       _pmic = pmic_t::pmic_m5pm1;
       _wakeupPin = GPIO_NUM_1; // PY IQR
 
+      /// bring up the PM1 early so getWakeSource() sees WAKE_SRC before it is cleared below.
+      M5pm1.begin();
       M5pm1.clearWakeSource();
       M5pm1.clearIRQStatus();
       M5pm1.setGPIOIRQMaskBits(0x1E);  // enable GPIO0 interrupt, disable other GPIO IRQ
@@ -560,7 +959,7 @@ namespace m5
         ioe1.digitalWrite(M5IOE1_Class::gpio14, true);
       }
 
-      // Keep IP2316 off the I2C bus until charge control/status is requested.
+      // Keep IP2315 off the I2C bus until charge control/status is requested.
       init_papermono_ip2315_access();
       break;
 
@@ -594,7 +993,7 @@ namespace m5
       M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq); // Enabel VAMeter
       break;
     
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       _rtcIntPin = GPIO_NUM_14;
       Ina226.begin();
       INA226_Class::config_t cfg;
@@ -742,11 +1141,32 @@ namespace m5
       break;
     }
 
-    if (_pmic == Power_Class::pmic_t::pmic_axp192) {
-      if (!Axp192.begin()) {
-        if (Axp2101.begin()) {
-          _pmic = Power_Class::pmic_t::pmic_axp2101;
-        }
+    if (identity_settled)
+    {
+      _pmic = settled_pmic;
+    }
+    else if (_pmic == Power_Class::pmic_t::pmic_axp192)
+    { /// Both probes read the same ID register (0x03 = AXP192, 0x4A = AXP2101),
+      /// so a positive answer from either one settles the identity. A single
+      /// transient NACK must not leave the default in place while the other
+      /// chip already identified itself, so the pair is retried a few times
+      /// until one of them answers.
+      for (int retry = 0; retry < 3; ++retry)
+      {
+        if (Axp192.begin()) { _identity_state = identity_state_t::settled; break; }
+        if (Axp2101.begin()) { _pmic = Power_Class::pmic_t::pmic_axp2101; _identity_state = identity_state_t::settled; break; }
+        m5gfx::delay(1);
+      }
+      /// Without a positive ID the board default stays provisional: the
+      /// charge-state capability set is empty, getChargeState() reports
+      /// io_error, and charge setters refuse the unconfirmed register map.
+      /// A later explicit begin() probes again; a positive ID makes the
+      /// charge-state capability set available.
+      /// Control and output capabilities also stay empty while their setters
+      /// refuse the unconfirmed register map, so callers do not see unusable paths.
+      if (_identity_state != identity_state_t::settled)
+      {
+        _identity_state = identity_state_t::unconfirmed;
       }
     }
 
@@ -872,7 +1292,7 @@ namespace m5
       // key; let the ESP32 brown out and restart instead. Over-voltage (bit 5) stays enabled.
       Axp2101.bitOff(0x23, 0x1F);   // DCDC1-5 UVP power-off disable
       // Charge voltage: the power-on value may be reserved; see the CoreS3 setup.
-      Axp2101.setChargeVoltage(4200);
+      if (!Axp2101.setChargeVoltage(4200)) { ESP_LOGW("Power", "AXP2101: failed to set the charge voltage."); }
       // No battery thermistor on TS (reads about 2.9V); see the CoreS3 setup.
       Axp2101.bitOn(0x50, 0x10);    // TS pin: external input, does not affect the charger
 
@@ -892,6 +1312,10 @@ namespace m5
 #endif
 
 #endif
+    /// The PMIC identity is settled here (on the AXP192 / AXP2101 boards
+    /// only once a probe has answered; see the top of this function).
+    /// _initialized is raised by M5Unified::begin() once the whole
+    /// initialization has completed, not here.
     return (_pmic != pmic_t::pmic_unknown);
   }
 
@@ -900,8 +1324,9 @@ namespace m5
   static constexpr const uint8_t _core_s3_bus_en = 0b00000010; // BUS EN
   static constexpr const uint8_t _core_s3_usb_en = 0b00100000; // USB OTG EN
 
-  // AW9523 の出力ポートを操作する主体 (setExtOutput / setUsbOutput / スピーカー制御) を直列化する。
-  // BUS_OUT_EN を落とす手順は 200ms の待ちを挟むので、read-modify-write 同士の交差を排除する必要がある。
+  // Serialize everyone who touches the AW9523 output ports (setExtOutput / setUsbOutput / speaker
+  // control). Dropping BUS_OUT_EN includes a 200 ms wait, so interleaved read-modify-write
+  // sequences must be ruled out.
   static SemaphoreHandle_t _core_s3_mutex(void)
   {
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
@@ -964,38 +1389,40 @@ namespace m5
     return true;
   }
 
-  static void _core_s3_output_locked(uint8_t mask, bool enable)
+  // @return true = the requested state is on the device (every write acknowledged).
+  static bool _core_s3_output_locked(uint8_t mask, bool enable)
   {
     static constexpr const uint8_t port0_reg = 0x02;
     static constexpr const uint8_t port1_reg = 0x03;
     static constexpr const uint8_t port1_bitmask_boost = 0b10000000; // BOOST_EN
 
     uint8_t orig[2];
-    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq)) { return; }
+    if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, orig, sizeof(orig), i2c_freq)) { return false; }
 
     uint8_t buf[2] = { (uint8_t)(orig[0] | mask), (uint8_t)(orig[1] | port1_bitmask_boost) };
 
     if (!enable)
     {
       buf[0] = orig[0] & ~mask;
-      // if (0 == (p0 & (_core_s3_bus_en | _core_s3_usb_en))) // 両方が無効の場合のみ BOOST_EN を無効化する
       if (0 == (buf[0] & _core_s3_bus_en))
       {
         buf[1] &= ~port1_bitmask_boost;
       }
       if (orig[0] & mask & _core_s3_bus_en)
       {
-        // BUS_OUT_EN を 1→0 にするときは BOOST_EN を先に落とし、BUS_OUT が放電してから切り替える。
-        // BUS_OUT_EN=0 は BUS 入力側スイッチを ON にする操作なので、BUS_OUT が 5V のまま切り替えると
-        // USB VBUS が BUS_OUT へ流れ込み続け、以後 BUS_OUT_EN=0 でも 5V が残る (TS 検出も張り付き、
-        // setExtOutput(true) が cancel され続ける)。放電は無負荷で約 80ms、余裕をみて 200ms 待つ。
-        // BOOST_EN が読み取り時点で既に 0 でも、いつ 0 になったかは分からないので待ちは省略しない。
+        // When clearing BUS_OUT_EN (1 -> 0), drop BOOST_EN first and let BUS_OUT discharge before
+        // switching. BUS_OUT_EN=0 turns on the BUS input-side switch, so switching while BUS_OUT is
+        // still at 5 V lets USB VBUS keep flowing into BUS_OUT, and 5 V remains even with
+        // BUS_OUT_EN=0 afterwards (the TS detection sticks and setExtOutput(true) keeps being
+        // cancelled). Discharge takes about 80 ms with no load; wait 200 ms for margin. Even if
+        // BOOST_EN already reads 0, when it became 0 is unknown, so never skip the wait.
         auto restore = [&](void)
         {
-          // I2C の失敗後はデバイス側の反映が不確定なので、latch を読み直して実状態から戻す。
-          // BUS_OUT_EN が残っていれば BOOST_EN を開始時の値へ、落ちていれば BOOST_EN=0 を確定する。
-          // 読めなければ開始時の値を書き戻す (有効化方向なので順序の問題は生じない)。
-          // 復旧の書込自体も失敗し得るので、読み戻して一致するまで有界で繰り返す。
+          // After an I2C failure the device state is uncertain, so re-read the latch and recover
+          // from the actual state. If BUS_OUT_EN is still set, restore BOOST_EN to its initial
+          // value; if it is clear, settle on BOOST_EN=0. If it cannot be read, write back the
+          // initial values (enabling direction, so ordering is not an issue). The recovery write
+          // may fail too, so repeat with a bound until the read-back matches.
           for (int retry = 0; ; ++retry)
           {
             uint8_t cur[2];
@@ -1014,25 +1441,26 @@ namespace m5
             m5gfx::delay(1);
           }
         };
-        if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, orig[1] & ~port1_bitmask_boost, i2c_freq)) { restore(); return; }
+        if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, orig[1] & ~port1_bitmask_boost, i2c_freq)) { restore(); return false; }
         m5gfx::delay(200);
         uint8_t cur[2];
-        if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return; }
-        if (cur[1] & port1_bitmask_boost) { return; } // BOOST_EN が立て直されている: 放電を保証できないので出力を有効のまま残す
+        if (!M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
+        if (cur[1] & port1_bitmask_boost) { return false; } // BOOST_EN was set again: discharge cannot be guaranteed, so leave the output enabled (request not met)
         cur[0] &= ~mask;
-        if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); }
-        return;
+        if (!M5.In_I2C.writeRegister(aw9523_i2c_addr, port0_reg, cur, sizeof(cur), i2c_freq)) { restore(); return false; }
+        return true;
       }
     }
-    // 2 バイト一括書きは途中失敗で片方だけ反映され得るので 1 バイトずつ書き、先頭が失敗したら止める。
-    // 有効化は BOOST_EN → 出力 EN、無効化は出力 EN → BOOST_EN の順にすると、途中で止まっても
-    // 「出力 EN=1 で boost 停止」(出力が死んでいるのに有効と報告される) にはならない。
+    // A 2-byte write can fail halfway and apply only one byte, so write one byte at a time and stop
+    // if the first fails. Enable in the order BOOST_EN -> output EN and disable in the order output
+    // EN -> BOOST_EN, so a partial write never ends up as "output EN=1 with the boost stopped"
+    // (output dead but reported as enabled).
     if (enable)
     {
-      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return; }
+      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq)) { return false; }
       if ((mask & _core_s3_bus_en) && !(orig[0] & _core_s3_bus_en))
       {
-        if (!_core_s3_bus_precharge(orig[0])) { return; }
+        if (!_core_s3_bus_precharge(orig[0])) { return false; }
         // A precharged BUS_OUT left with BUS_OUT_EN = 0 is pulled up from VBUS, and every later
         // enable is then cancelled by the TS check; read the final write back, bounded retries.
         for (int retry = 0; retry < 3; ++retry)
@@ -1040,69 +1468,73 @@ namespace m5
           uint8_t cur;
           if (M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)
            && M5.In_I2C.readRegister(aw9523_i2c_addr, port0_reg, &cur, 1, i2c_freq)
-           && cur == buf[0]) { return; }
+           && cur == buf[0]) { return true; }
         }
-        return;
+        return false;
       }
-      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
+      return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq);
     }
-    else
-    {
-      if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return; }
-      M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq);
-    }
+    if (!M5.In_I2C.writeRegister8(aw9523_i2c_addr, port0_reg, buf[0], i2c_freq)) { return false; }
+    return M5.In_I2C.writeRegister8(aw9523_i2c_addr, port1_reg, buf[1], i2c_freq);
 //      Axp2101.setReg0x20Bit0(enable);
   }
 
-  static void _core_s3_output(uint8_t mask, bool enable)
+  static bool _core_s3_output(uint8_t mask, bool enable)
   {
     _core_s3_lock_t lock;
-    if (lock.locked) { _core_s3_output_locked(mask, enable); }
+    return lock.locked && _core_s3_output_locked(mask, enable);
   }
 
-  // 無バッテリーで BUS_OUT (TS で検出) に外部 5V が来ている間は、有効化すると自身の給電を断つので取り消す。
-  // 既に BUS_OUT_EN=1 なら TS の 5V は自身の出力なので判定しない。
-  // 判定に使う読み出しが失敗したときは「危険」側に倒す (読めない状態で有効化しない)。
+  // With no battery, while external 5 V is present on BUS_OUT (seen on TS), enabling would cut our
+  // own supply, so cancel. If BUS_OUT_EN is already 1, the 5 V on TS is our own output; skip the
+  // check. If a read used for the decision fails, fail safe (do not enable while the state is
+  // unknown).
   static bool _core_s3_ext_output_unsafe(AXP2101_Class& axp)
   {
     uint8_t r00;
     if (!axp.readRegister(0x00, &r00, 1)) { return true; }
-    if ((r00 & 0x08) || !(r00 & 0x20)) { return false; } // バッテリーあり、または VBUS なし
+    if ((r00 & 0x08) || !(r00 & 0x20)) { return false; } // battery present, or no VBUS
     uint8_t p0;
     if (!M5.In_I2C.readRegister(aw9523_i2c_addr, 0x02, &p0, 1, i2c_freq)) { return true; }
     if (p0 & _core_s3_bus_en) { return false; }
     uint8_t ts[2];
     if (!axp.readRegister(0x36, ts, 2)) { return true; }
     std::size_t raw = ((ts[0] & 0x3F) << 8) | ts[1];         // 14bit, 0.5mV/LSB
-    if (raw >= (0x3FFF - 32)) { return true; }                // ADC 無効値: 測れていないので危険側 (getTSVoltage の 0V 丸めは表示用)
+    // invalid ADC value: nothing measured, fail safe (the 0 V rounding in getTSVoltage is for
+    // display only)
+    if (raw >= (0x3FFF - 32)) { return true; }
     return raw > 4000;                                        // 2.0V
   }
 
-  // @return false = cancel した
-  static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable)
+  // @return true = reached the requested state. false = cancelled / could not take the lock / superseded by a
+  //   later request / write failed. Only a cancel is reported through cancelled, because the caller warns about it.
+  static bool _core_s3_set_ext_output(AXP2101_Class& axp, bool enable, bool* cancelled)
   {
-    // 判定と切替を同じ排他区間で行う (判定後に別タスクの off が割り込むと、古い判定で有効化してしまう)。
-    // TS の ADC 値は実電圧に最大 0.7s ほど遅れる。自身 (または並行する別タスク) の off 直後は古い 5V を
-    // 読み得るので、危険と判定したときは排他を解いて 20ms 待ち、再取得して判定し直す (最大 1s)。
-    // 外部給電なら高いままなので cancel になる。待ちの間は他の AW9523 操作を塞がない。
-    // 待機中に後発の要求が処理されたら古い要求は破棄する (最後の要求が勝つ)。
+    // Decide and switch inside the same critical section (an off from another task in between would
+    // enable on a stale decision). The TS ADC value lags the real voltage by up to about 0.7 s.
+    // Right after an off (ours or a concurrent task's) a stale 5 V may be read, so when judged
+    // unsafe, release the lock, wait 20 ms, re-read and decide again (up to 1 s). An external
+    // supply stays high and ends in a cancel. Other AW9523 operations are not blocked during the
+    // wait. If a later request is handled while waiting, the older one is dropped (last request
+    // wins).
     static uint32_t generation = 0;
     uint32_t my_generation = 0;
     uint32_t t0 = 0;
+    *cancelled = false;
     for (bool first = true; ; first = false)
     {
       {
         _core_s3_lock_t lock;
-        if (!lock.locked) { return true; }
-        if (first) { my_generation = ++generation; t0 = m5gfx::millis(); } // 待ち時間の起点は排他取得後 (mutex 待ちを含めない)
-        else if (my_generation != generation) { return true; }
+        if (!lock.locked) { return false; }
+        // the wait starts after the lock is taken (mutex wait excluded)
+        if (first) { my_generation = ++generation; t0 = m5gfx::millis(); }
+        else if (my_generation != generation) { return false; }
         if (!enable || !_core_s3_ext_output_unsafe(axp))
         {
-          _core_s3_output_locked(_core_s3_bus_en, enable);
-          return true;
+          return _core_s3_output_locked(_core_s3_bus_en, enable);
         }
       }
-      if ((m5gfx::millis() - t0) >= 1000) { return false; }
+      if ((m5gfx::millis() - t0) >= 1000) { *cancelled = true; return false; }
       m5gfx::delay(20);
     }
   }
@@ -1117,77 +1549,98 @@ namespace m5
 
 #endif
 
-  void Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
+  // Accumulates the per-port results of a masked request: false until a port
+  // was selected, then the AND of every selected port.
+  struct _port_result_t
   {
+    bool any = false;
+    bool ok = true;
+    void add(bool r) { any = true; ok &= r; }
+    operator bool(void) const { return any && ok; }
+  };
+
+  bool Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
+  {
+    // Contract: true only when every selected port reached the requested state.
+    // Ports are attempted in turn without stopping at the first failure (best effort),
+    // so false says "at least one did not take effect", not which one.
+    // A mask that selects none of this model's ports is false (nothing was done).
+    bool result = false;
 #if defined (M5UNIFIED_PC_BUILD)
     (void)enable;
     (void)port_mask;
 #else
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_ext_output)) { return false; }
+    if (port_mask == ext_port_mask_t::ext_none) { return false; }   // nothing selected
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
       {
         auto& ioe1 = M5.getIOExpander(0);
+        _port_result_t r;
         if (port_mask & ext_port_mask_t::ext_PA)
         {
-          ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
-          ioe1.setDirection(M5IOE1_Class::gpio5, true);
-          ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+          r.add(ioe1.setHighImpedance(M5IOE1_Class::gpio5, false));
+          r.add(ioe1.setDirection(M5IOE1_Class::gpio5, true));
+          r.add(ioe1.digitalWrite(M5IOE1_Class::gpio5, enable));
         }
         if (port_mask & ext_port_mask_t::ext_USB)
         {
-          ioe1.setHighImpedance(M5IOE1_Class::gpio2, false);
-          ioe1.setDirection(M5IOE1_Class::gpio2, true);
-          ioe1.digitalWrite(M5IOE1_Class::gpio2, enable);
+          r.add(ioe1.setHighImpedance(M5IOE1_Class::gpio2, false));
+          r.add(ioe1.setDirection(M5IOE1_Class::gpio2, true));
+          r.add(ioe1.digitalWrite(M5IOE1_Class::gpio2, enable));
         }
+        result = r;
       }
       break;
 
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
-      if (port_mask & ext_port_mask_t::ext_PA)
       {
-        auto& ioe = M5.getIOExpander(0);
-        ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
-        ioe.digitalWrite(2, enable);
-      }
-      if (M5.getBoard() == board_t::board_M5Tab5X
-       && (port_mask & ext_port_mask_t::ext_EXT))
-      {
-        auto& ioe = M5.getIOExpander(0);
-        ioe.setHighImpedance(3, false);
-        ioe.setDirection(3, true);
-        ioe.digitalWrite(3, enable);
-      }
-      if (port_mask & ext_port_mask_t::ext_USB)
-      {
-        auto& ioe = M5.getIOExpander(1);
-        ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down);
-        ioe.digitalWrite(3, enable);
+        _port_result_t r;
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          auto& ioe = M5.getIOExpander(0);
+          r.add(ioe.setPullMode(2, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down));
+          r.add(ioe.digitalWrite(2, enable));
+        }
+        if (M5.getBoard() == board_t::board_M5Tab5X
+         && (port_mask & ext_port_mask_t::ext_EXT))
+        {
+          auto& ioe = M5.getIOExpander(0);
+          r.add(ioe.setHighImpedance(3, false));
+          r.add(ioe.setDirection(3, true));
+          r.add(ioe.digitalWrite(3, enable));
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          auto& ioe = M5.getIOExpander(1);
+          r.add(ioe.setPullMode(3, enable ? IOExpander_Base::pull_up : IOExpander_Base::pull_down));
+          r.add(ioe.digitalWrite(3, enable));
+        }
+        result = r;
       }
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
-      M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
+      result = M5.getIOExpander(1).digitalWrite(2, enable); // 2 = EXT_PWR_EN
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
-      if (_pmic == pmic_t::pmic_m5pm1)
-      {
-        M5pm1.setExtOutput(enable);
-      }
+      result = M5pm1.setExtOutput(enable);
       break;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case board_t::board_M5CoreMatrix:
       { /// IOE1 G5 gates the Grove port power (both the 3.3V rail and the 5V boost)
         auto& ioe1 = M5.getIOExpander(0);
-        ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
-        ioe1.setDirection(M5IOE1_Class::gpio5, true);
-        ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
+        result = ioe1.setHighImpedance(M5IOE1_Class::gpio5, false);
+        result &= ioe1.setDirection(M5IOE1_Class::gpio5, true);
+        result &= ioe1.digitalWrite(M5IOE1_Class::gpio5, enable);
       }
       break;
 
@@ -1198,7 +1651,9 @@ namespace m5
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
       {
-        if (!_core_s3_set_ext_output(Axp2101, enable))
+        bool cancelled;
+        result = _core_s3_set_ext_output(Axp2101, enable, &cancelled);
+        if (cancelled)
         {
           ESP_LOGW("Power","setExtPower(true) is canceled.");
         }
@@ -1208,117 +1663,170 @@ namespace m5
     case board_t::board_M5StickS3:
     case board_t::board_M5StopWatch:
     case board_t::board_M5PaperColor:
-      if (_pmic == pmic_t::pmic_m5pm1)
-      {
-        M5pm1.setExtOutput(enable);
-      }
+      result = M5pm1.setExtOutput(enable);
       break;
 
     case board_t::board_M5ChainCaptain:
     {
+      _port_result_t r;
       if (port_mask & ext_port_mask_t::ext_PA)
       {
-        M5pm1.setGPIOOutput(M5PM1_Class::gpio0, enable);
+        r.add(M5pm1.setGPIOOutput(M5PM1_Class::gpio0, enable));
       }
       if (port_mask & (ext_port_mask_t::ext_PB1 | ext_port_mask_t::ext_PB2))
       {
-        M5pm1.setGPIOOutput(M5PM1_Class::gpio3, enable);
+        r.add(M5pm1.setGPIOOutput(M5PM1_Class::gpio3, enable));
       }
-      const bool boost_enabled = M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0)
-                              || M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3);
-      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio4, boost_enabled);
+      if (r.any)
+      { /// the boost follows the latched port states, so it is only touched when a port was selected.
+        /// If a latch cannot be read the boost is left as it is (false): switching it on a guess
+        /// could cut a port that is still enabled.
+        bool pa, pb;
+        if (M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio0, &pa) && M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio3, &pb))
+        {
+          r.add(M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio4, pa || pb));
+        }
+        else { r.add(false); }
+      }
+      result = r;
       break;
     }
     case board_t::board_M5StampS3Bat:
       // Use G1 Control 5V output
-      M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable);
+      result = M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable);
       break;
 
     case board_t::board_M5PowerHub:
-      if (port_mask & ext_port_mask_t::ext_USB)
       {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x01, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PA)
-      {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x02, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PC1)
-      {
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x03, enable, i2c_freq);
-      }
-      if (port_mask & ext_port_mask_t::ext_PWR485 || port_mask & ext_port_mask_t::ext_PWRCAN) {
-          M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x04, enable, i2c_freq);
+        _port_result_t r;
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x01, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PA)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x02, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PC1)
+        {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x03, enable, i2c_freq));
+        }
+        if (port_mask & ext_port_mask_t::ext_PWR485 || port_mask & ext_port_mask_t::ext_PWRCAN) {
+          r.add(M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x04, enable, i2c_freq));
+        }
+        result = r;
       }
       break;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case board_t::board_M5Paper:
       if (enable) { m5gfx::gpio_hi(M5Paper_EXT5V_ENABLE_PIN); }
       else        { m5gfx::gpio_lo(M5Paper_EXT5V_ENABLE_PIN); }
+      result = true;
       break;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
       {
+        // The protection check reads the PMIC; a failed read is treated as
+        // "cannot tell" and the enable request is refused without writing
+        // (a folded-to-zero reading would pass the check on the unsafe side).
         bool cancel = false;
+        bool ok = true;
         if (_pmic == pmic_axp2101) {
-          cancel = (enable && (Ina3221[0].getShuntVoltage(0) < 0.0f || Ina3221[0].getShuntVoltage(1) < 0.0f) && (8 >= Axp2101.getBatteryLevel()));
+          if (enable) {
+            // Without an INA3221 the current-direction check is omitted.
+            // A detected device must remain readable.
+            // The battery level is read only once a negative current is seen.
+            if (Ina3221[0].isEnabled()) {
+              int32_t sh0 = 0, sh1 = 0;
+              if (!Ina3221[0].getShuntMilliVoltage(0, &sh0) || !Ina3221[0].getShuntMilliVoltage(1, &sh1)) {
+                ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+                break;
+              }
+              if (sh0 < 0 || sh1 < 0) {
+                uint8_t level;
+                if (!Axp2101.readRegister(0xA4, &level, 1)) {   // same reading as getBatteryLevel()
+                  ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+                  break;
+                }
+                cancel = (8 >= (int8_t)level);
+              }
+            }
+          }
           if (!cancel) {
             if (enable) {
-              Axp2101.setBLDO2(3300);
+              result = Axp2101.setBLDO2(3300);
               break;
             }
             // Core2 v1.1: BLDO2 drives both the boost enable and the /EN of the
             // switch that ties USB VBUS to the 5V bus. While BLDO2 falls the switch
             // closes before the boost stops, and the boost output feeds back into
-            // VBUS -> PMIC -> boost. With no battery this sags VSYS; begin() disables
-            // the DCDC under-voltage power-off, so this ends in an ESP32 brownout reset
-            // at worst instead of a PMIC power-off latched until the power key.
-            Axp2101.setBLDO2(0);
+            // VBUS -> PMIC -> boost. With no battery this sags VSYS for about 1 ms; whether
+            // the ESP32 browns out depends on the USB supply's headroom, and no input-limit,
+            // load or BLDO2-timing change avoided it. On USB the bus stays powered from VBUS
+            // afterwards. Reapply the DCDC under-voltage power-off disable before switching,
+            // in case begin() could not write REG23, so the PMIC does not latch off; leave
+            // BLDO2 untouched if that write fails.
+            if (!Axp2101.bitOff(0x23, 0x1F)) { break; }
+            result = Axp2101.setBLDO2(0);
             break;
           }
         } else {
           // If ACIN is false and VBUS current is detected and the battery is low, power supply from Core to the outside is inhibited.
           // This is because supplying power externally consumes battery power when there is no power supply from ACIN and power is supplied from VBUS.
           // ※ If receiving power from M-Bus, PortA, etc., there is no need to setExtPower to true.
-          cancel = (enable && !Axp192.isACIN() && (0.0f < Axp192.getVBUSCurrent()) && (8 >= Axp192.getBatteryLevel()));
-          if (!cancel) {
-            Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); // GPIO0 : enable=LDO / disable=float
+          if (enable) {
+            uint8_t r00, vbus[2]; int8_t level;
+            if (!Axp192.readRegister(0x00, &r00, 1) || !Axp192.readRegister(0x5C, vbus, 2) || !Axp192.getBatteryLevel(&level)) {
+              ESP_LOGW("Power", "setExtOutput(true): protection reading failed, refused.");
+              break;
+            }
+            cancel = !(r00 & 0x80) && (((vbus[0] << 4) | vbus[1]) > 0) && (8 >= level);
           }
+          // GPIO0 : enable=LDO / disable=float. On failure EXTEN below is still written (best effort).
+          if (!cancel) { ok = Axp192.writeRegister8(0x90, enable ? 0x02 : 0x07); }
         }
         if (cancel)
         {
           ESP_LOGW("Power","setExtPower(true) is canceled.");
           break;
         }
+        result = Axp192.setEXTEN(enable) && ok;
       }
-      NON_BREAK;
+      break;
 
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      Axp192.setEXTEN(enable);
+      result = Axp192.setEXTEN(enable);
       break;
 
     case board_t::board_M5Station:
-      for (int i = 0; i < 5; ++i)
       {
-        if (port_mask & (1 << i)) { Axp192.setGPIO(i, enable); }
+        _port_result_t r;
+        for (int i = 0; i < 5; ++i)
+        {
+          if (port_mask & (1 << i)) { r.add(Axp192.setGPIO(i, enable)); }
+        }
+        if (port_mask & ext_port_mask_t::ext_USB)
+        {
+          if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
+          else        { m5gfx::gpio_lo(GPIO_NUM_12); }
+          r.add(true);
+        }
+        if (port_mask & ext_port_mask_t::ext_MAIN)
+        {
+          r.add(Axp192.setEXTEN(enable));
+        }
+        result = r;
       }
-      if (port_mask & ext_port_mask_t::ext_USB)
-      {
-        if (enable) { m5gfx::gpio_hi(GPIO_NUM_12); } // GPIO12 = M5Station USB power control
-        else        { m5gfx::gpio_lo(GPIO_NUM_12); }
-      }
-      if (port_mask & ext_port_mask_t::ext_MAIN)
-      {
-        Axp192.setEXTEN(enable);
-      }
+      break;
 #endif
 
     default:
       break;
     }
 #endif
+    return result;
   }
 
   bool Power_Class::getExtOutput(void)
@@ -1411,27 +1919,27 @@ namespace m5
     return false;
   }
 
-  void Power_Class::setUsbOutput(bool enable)
+  bool Power_Class::setUsbOutput(bool enable)
   {
     (void)enable;
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_usb_output)) { return false; }
     switch (M5.getBoard())
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
-      M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
-      break;
+      return M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5StackCoreS3:
     case board_t::board_M5StackCoreS3SE:
     case board_t::board_M5StackChan:
-      _core_s3_output(_core_s3_usb_en, enable);
-      break;
+      return _core_s3_output(_core_s3_usb_en, enable);
 
 #endif
     default:
-      break;
+      return false;
     }
   }
 
@@ -1592,21 +2100,42 @@ namespace m5
 #endif
   }
 
-  void Power_Class::_powerOff(bool withTimer)
+  bool Power_Class::_powerOff(bool withTimer)
   {
 #if defined(M5UNIFIED_PC_BUILD)
     (void)withTimer;
 #else
     bool use_deepsleep = true;
+    bool gpio_wake_armed = false;  // GPIO wake armed by this call; released when the sleep is cancelled
+    gpio_num_t rtc_pin = (gpio_num_t)_rtcIntPin;
+    auto cancel_sleep = [&](const char* msg) -> bool {
+      M5_LOGE("_powerOff: %s not sleeping.", msg);
+      if (gpio_wake_armed)
+      { // Only the pin armed here is released; the GPIO wake source itself may
+        // carry other pins owned by the application.
+        gpio_wakeup_disable(rtc_pin);
+      }
+      M5.Display.wakeup();
+      return false;
+    };
     if (withTimer && _rtcIntPin < GPIO_NUM_MAX)
     {
-      gpio_num_t pin = (gpio_num_t)_rtcIntPin;
+      gpio_num_t pin = rtc_pin;
 #if SOC_PM_SUPPORT_EXT_WAKEUP
       if (ESP_OK != esp_sleep_enable_ext0_wakeup( pin, false))
 #endif
       {
-        gpio_wakeup_enable( pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
-        esp_sleep_enable_gpio_wakeup();
+        esp_err_t gpio_err = gpio_wakeup_enable(pin, gpio_int_type_t::GPIO_INTR_LOW_LEVEL);
+        esp_err_t wake_err = gpio_err == ESP_OK ? esp_sleep_enable_gpio_wakeup() : ESP_FAIL;
+        if (gpio_err == ESP_OK && wake_err != ESP_OK)
+        {
+          gpio_wakeup_disable(pin);  // best effort rollback
+        }
+        if (gpio_err != ESP_OK || wake_err != ESP_OK)
+        {
+          return cancel_sleep("the RTC GPIO cannot be used as a wakeup source.");
+        }
+        gpio_wake_armed = true;
         use_deepsleep = false;
       }
     }
@@ -1653,43 +2182,48 @@ namespace m5
           int retry = 3;
           while (!M5pm1.powerOff() && --retry) { m5gfx::delay(10); }
           if (!retry)
-          { /// 電源を落とせないまま wake source 無しで眠ると、電源ボタンの単押しや
-            /// IRQ では復帰できなくなる (PM1 の二重クリックや USB 再接続による
-            /// 電源サイクルは可能)。単押しで復帰できるよう IRQ ピンを残して眠る
+          { /// Sleeping without a wake source while the power could not be cut would make a single
+            /// press of the power button or an IRQ unable to wake up (a PM1 double click or a USB
+            /// re-plug still power-cycles). Keep the IRQ pin armed so a single press can wake up
             M5_LOGE("_powerOff: M5PM1 powerOff failed.");
             arm_wakeup = true;
           }
         }
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
         if (arm_wakeup && _wakeupPin < GPIO_NUM_MAX)
-        { /// RTC の nIRQ は ESP32 に直結されておらず PM1 の IRQ 出力に集約される
-          /// 構成 (ToughC5 等)。IRQ 出力が解放される (High に戻る) のを確認して
-          /// から ANY_LOW を武装して眠り、その Low 遷移で deep sleep から復帰
-          /// できるようにする。
+        { /// Boards where the RTC nIRQ is not wired to the ESP32 but routed through the PM1 IRQ
+          /// output (ToughC5 etc.). Confirm the IRQ output is released (back to High), then arm
+          /// ANY_LOW and sleep so the Low transition wakes up from deep sleep.
           int retry = 40;
           while (!_releaseWakeupPin(_wakeupPin) && --retry) { m5gfx::delay(10); }
           if (!retry)
           {
             if (withTimer)
-            { /// 解放されない線を ANY_LOW で武装したまま眠ると即時復帰の
-              /// 再起動ループになるため、wake 経路を確保できなければ眠らない
+            { /// Sleeping with ANY_LOW armed on a line that never releases would reboot immediately
+              /// in a loop, so do not sleep unless a wake path is secured
               M5_LOGE("_powerOff: cannot release the wakeup pin. not sleeping.");
               M5.Display.wakeup();
-              return;
+              return false;
             }
-            /// powerOff 失敗時の fallback では武装せず従来通り眠る (ログのみ)
+            /// In the fallback after a failed powerOff, sleep without arming (log only)
             M5_LOGE("_powerOff: cannot release the wakeup pin.");
           }
           else
           {
             if (ESP_OK != esp_sleep_enable_ext1_wakeup(1ULL << _wakeupPin, ESP_EXT1_WAKEUP_ANY_LOW))
             {
+              if (withTimer)
+              {
+                M5_LOGE("_powerOff: GPIO%d cannot be used as a wakeup source. not sleeping.", (int)_wakeupPin);
+                M5.Display.wakeup();
+                return false;
+              }
               M5_LOGW("_powerOff: GPIO%d cannot be used as a wakeup source.", (int)_wakeupPin);
             }
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
             if (rtc_gpio_is_valid_gpio((gpio_num_t)_wakeupPin))
-            { /// IRQ 線には外部プルアップが無いため、deep sleep 中も有効な
-              /// RTC ドメインのプルアップで High を維持する
+            { /// The IRQ line has no external pull-up, so hold it High with the RTC-domain pull-up,
+              /// which stays active during deep sleep
               rtc_gpio_pullup_en((gpio_num_t)_wakeupPin);
               rtc_gpio_pulldown_dis((gpio_num_t)_wakeupPin);
             }
@@ -1706,7 +2240,12 @@ namespace m5
 #if SOC_PM_SUPPORT_EXT_WAKEUP
         if(_rtcIntPin == GPIO_NUM_MAX && _wakeupPin < GPIO_NUM_MAX)
         {
-          esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false);
+          if (ESP_OK != esp_sleep_enable_ext0_wakeup((gpio_num_t)_wakeupPin, false) && withTimer)
+          {
+            M5_LOGE("_powerOff: GPIO%d cannot be used as a wakeup source. not sleeping.", (int)_wakeupPin);
+            M5.Display.wakeup();
+            return false;
+          }
         }
 #endif
         break;
@@ -1764,27 +2303,55 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case board_t::board_M5PowerHub:
       {
-        // The STM32 arms the RTC alarm asynchronously after acknowledging the writes.
-        // Let it finish before the power-off request can overtake the alarm update.
+        // The STM32 applies the RTC alarm registers from its main loop (about
+        // 13 ms per iteration), after the I2C write was acknowledged, and a
+        // power-off request that overtakes that step leaves the device asleep
+        // with no alarm armed (firmware 0xF3: 0 of 6 wake-ups with no gap, 6 of 6
+        // with 500 ms). Give the firmware time to arm the alarm.
         static constexpr uint32_t powerhub_alarm_settle_ms = 500;
+        // The power is cut a few loop iterations after the request. Wait for it
+        // without touching the I2C bus; a device that is still running after this
+        // is reported as not sleeping. The request itself cannot be withdrawn, so
+        // a firmware that stalls longer than this and then powers off is a known
+        // limitation of the "returned means still awake" contract.
+        static constexpr uint32_t powerhub_poweroff_timeout_ms = 3000;
         if (withTimer) { m5gfx::delay(powerhub_alarm_settle_ms); }
+        uint8_t saved[5];
+        const bool saved_ok = M5.In_I2C.readRegister(powerhub_i2c_addr, 0x01, saved, sizeof(saved), i2c_freq);
+        auto restore_powerhub = [&]() {
+          // Restore outputs and measurement, or at least begin()'s measurement setting.
+          const bool restored = saved_ok
+              ? M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x01, saved, sizeof(saved), i2c_freq)
+              : M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq);
+          if (!restored) { M5_LOGE("_powerOff: PowerHub state could not be restored."); }
+        };
         uint8_t buf[6]={};
         M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x00, buf, sizeof(buf), i2c_freq);
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq);
-        // Do not resume the sketch with outputs off and the alarm still armed.
-        use_deepsleep = false;
-        break;
+        if (!M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0xE0, 1, i2c_freq))
+        {
+          restore_powerhub();
+          return cancel_sleep("PowerHub did not accept the power-off request.");
+        }
+        _poweroff_requested = true;
+        for (uint32_t waited = 0; waited < powerhub_poweroff_timeout_ms; waited += 100) { m5gfx::delay(100); }
+        // Outputs may briefly return before a delayed accepted power-off takes effect.
+        restore_powerhub();
+        return cancel_sleep("PowerHub did not power off.");
       }
 #endif
     }
 
     if (use_deepsleep) { esp_deep_sleep_start(); }
-    esp_light_sleep_start();
+    if (esp_light_sleep_start() != ESP_OK)
+    {
+      return cancel_sleep("light sleep could not be entered.");
+    }
     esp_restart();
 #endif
+    return false;
   }
 
-  void Power_Class::_timerSleep(void)
+  bool Power_Class::_timerSleep(bool rtc_armed)
   {
 #if !defined (M5UNIFIED_PC_BUILD)
 
@@ -1796,10 +2363,14 @@ namespace m5
     {
     case board_t::board_M5StickC:
     case board_t::board_M5StickCPlus:
-      esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
+      if (rtc_armed && ESP_OK != esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0))
+      {
+        M5_LOGE("_timerSleep: GPIO35 cannot be used as a wakeup source. not sleeping.");
+        M5.Display.wakeup();
+        return false;
+      }
       esp_deep_sleep_start();
-      return;
-      break;
+      return false;
 
     case board_t::board_M5StackCore2:
     case board_t::board_M5Tough:
@@ -1814,7 +2385,7 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32S3)
     switch (M5.getBoard())
     {
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       M5.getIOExpander(0).resetIrq();
       break;
 
@@ -1823,14 +2394,14 @@ namespace m5
     }
 #endif
 #endif
-    _powerOff(true);
+    return _powerOff(rtc_armed);
   }
 
   bool Power_Class::_releaseWakeupPin(std::uint_fast8_t wakeup_pin, bool* clear_comm_ok)
   {
-    // clear_comm_ok は「この呼び出し内でクリア通信が一度でも成功したか」を返す。
-    // ピンが解放されない理由が「要因がまだ生きている (指が触れている等)」なのか
-    // 「デバイスと通信できない (回復見込みなし)」なのかを呼び出し元が区別できる。
+    // clear_comm_ok reports whether at least one clear transaction succeeded within this call, so
+    // the caller can tell "the source is still active (finger still touching, etc.)" from "the
+    // device cannot be reached (no recovery expected)" when the pin does not release.
     bool comm_ok = false;
     for (int retry = 8; retry > 0; --retry)
     {
@@ -1897,17 +2468,15 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C5) || defined (CONFIG_IDF_TARGET_ESP32C61)
           if (M5.getBoard() == board_t::board_M5ToughC5
            || M5.getBoard() == board_t::board_M5CoreMatrix)
-          { // PM1 の IRQ 出力線には外部プルアップが無く、プルダウンすると
-            // Low に固定されて wakeup ピンが解放されなくなる。内部プルアップで
-            // High を維持し、IRQ アサート (Low) だけを wakeup 条件にする。
+          { // The PM1 IRQ output has no external pull-up; a pull-down would hold it Low and the
+            // wakeup pin would never release. Hold it High with the internal pull-up and wake only
+            // on IRQ assert (Low).
             rtc_gpio_pullup_en((gpio_num_t)wpin);
             rtc_gpio_pulldown_dis((gpio_num_t)wpin);
           }
           else
 #endif
           { /// TODO: reconsider these pull settings.
-            // They came in with this EXT1 branch, which was written for M5Tab5 (ESP32-P4),
-            // and every board that reaches here now shares them.
             // Pulling the pin down biases it toward the ANY_LOW wakeup condition, so a pin
             // without an external pull-up would wake up immediately. On CoreS3 this works
             // only because I2C_INT has an external 10k pull-up, and it costs about 60uA
@@ -1927,11 +2496,11 @@ namespace m5
         while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
           if (!clear_comm_ok)
-          { // 割り込み要因のクリア通信自体が失敗している。解放されない線を
-            // ANY_LOW で待つ構成のまま眠ると即時復帰の再起動ループになるため、
-            // 失敗が連続する場合は眠らずに戻る。一時的な失敗 (デバイスの
-            // ビジー等) は許容し、成功が挟まれば数え直す。
-            // ( 要因が生きているだけなら従来通り解放を待つ )
+          { // The clear transaction itself is failing. Sleeping with ANY_LOW armed on a line that
+            // never releases would reboot immediately in a loop, so return without sleeping when
+            // failures persist. Transient failures (device busy etc.) are tolerated; a success in
+            // between resets the count. (If only the source is still active, keep waiting for the
+            // release.)
             if (++comm_fail >= 3)
             {
               M5_LOGE("deepSleep: cannot release the wakeup pin. not sleeping.");
@@ -2030,8 +2599,8 @@ namespace m5
         while (!_releaseWakeupPin(wpin, &clear_comm_ok))
         {
           if (!clear_comm_ok)
-          { // クリア通信の失敗が連続する場合は解放を待たない。light sleep は
-            // 即時復帰しても実行が戻るだけなので deep sleep と違い眠って構わない
+          { // Do not wait for the release when clear transactions keep failing. Unlike deep sleep,
+            // an immediate wakeup from light sleep just returns execution, so sleeping is fine
             if (++comm_fail >= 3)
             {
               M5_LOGE("lightSleep: cannot release the wakeup pin.");
@@ -2082,52 +2651,212 @@ namespace m5
     _powerOff(false);
   }
 
-  void Power_Class::timerSleep( int seconds )
+  // Wake sources survive a light sleep, so a timer left by an earlier sleep must be
+  // dropped before an RTC-only sleep. "Not set" (ESP_ERR_INVALID_STATE) is fine.
+  bool Power_Class::_disableEspTimerWakeup(void)
+  {
+#if defined (M5UNIFIED_PC_BUILD)
+    return true;
+#else
+    esp_err_t err = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+    return err == ESP_OK || err == ESP_ERR_INVALID_STATE;
+#endif
+  }
+
+  bool Power_Class::timerSleep( int seconds )
   {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     if (M5.getBoard() == board_t::board_M5Tab5)
     {
       M5_LOGE("timerSleep(seconds) is not supported on Tab5, use timerSleep(time). not sleeping.");
-      return;
+      return false;
     }
 #endif
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    M5.Rtc.setAlarmIRQ(seconds);
+    if (seconds <= 0 || (std::uint32_t)seconds > UINT32_MAX / 1000)
+    {
+      M5_LOGE("timerSleep: invalid duration. not sleeping.");
+      return false;
+    }
+    bool rtc_enabled = M5.Rtc.isEnabled();
+    if (rtc_enabled && !M5.Rtc.hasTimerIRQ())
+    { // Refused before the existing IRQ is touched.
+      M5_LOGE("timerSleep: periodic RTC timer IRQ is not available, use timerSleep(time). not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
+    if (rtc_enabled)
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    std::uint32_t applied_msec = (std::uint32_t)seconds * 1000;
+    if (rtc_enabled && !M5.Rtc.setTimerIRQ((std::uint32_t)seconds * 1000, &applied_msec))
+    {
+      M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
 #if !defined (M5UNIFIED_PC_BUILD)
-    esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+    // The ESP timer is set to the period the RTC actually applies (the RTC rounds to
+    // its step) so that both wake sources agree on the deadline.
+    if (esp_sleep_enable_timer_wakeup((std::uint64_t)applied_msec * 1000ULL) != ESP_OK)
+    {
+      if (!_disableEspTimerWakeup())
+      {
+        if (rtc_enabled)
+        {
+          bool irq_disabled = M5.Rtc.disableIRQ();
+          bool irq_cleared = M5.Rtc.clearIRQ();
+          if (!(irq_disabled && irq_cleared)) {
+            M5_LOGE("timerSleep: RTC IRQ cleanup failed after ESP timer setup failed.");
+          }
+        }
+        M5_LOGE("timerSleep: ESP timer wakeup setup and cleanup failed. not sleeping.");
+        return false;
+      }
+      if (!rtc_enabled)
+      {
+        M5_LOGE("timerSleep: ESP timer wakeup could not be set. not sleeping.");
+        return false;
+      }
+      M5_LOGW("timerSleep: ESP timer wakeup could not be set; using the RTC alarm only.");
+    }
 #endif
-    _timerSleep();
+    if (_timerSleep(rtc_enabled)) { return true; }
+    // A PowerHub power-off request cannot be cancelled and may still complete;
+    // keep its RTC alarm armed instead of dismantling the wake path.
+    if (_poweroff_requested) { return false; }
+    if (rtc_enabled)
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared)) {
+        M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+      }
+    }
+    if (!_disableEspTimerWakeup()) {
+      M5_LOGE("timerSleep: ESP timer cleanup failed after sleep was cancelled.");
+    }
+    return false;
   }
 
-  void Power_Class::timerSleep( const rtc_time_t& time)
+  bool Power_Class::timerSleep( const rtc_time_t& time)
   {
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    // An alarm setup failure must not enter sleep without an RTC wake source.
-    if (M5.Rtc.setAlarmIRQ(time) <= 0)
+    if ((time.hours < 0 && time.minutes < 0) || !M5.Rtc.canSetAlarm(nullptr, &time))
+    { // No alarm field at all would only clear the alarm; there would be nothing to wake on.
+      // Checked (including the driver's own limits) before the existing IRQ is touched.
+      M5_LOGE("timerSleep: invalid alarm time. not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
+    if (M5.Rtc.isEnabled())
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    if (!M5.Rtc.setAlarmIRQ(time))
     {
       M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (!_disableEspTimerWakeup())
+    {
+      M5_LOGE("timerSleep: a leftover ESP timer wakeup could not be disabled. not sleeping.");
       M5.Rtc.disableIRQ();
       M5.Rtc.clearIRQ();
-      return;
+      return false;
     }
-    _timerSleep();
+    if (_timerSleep()) { return true; }
+    // The accepted PowerHub request may still power off after the timeout.
+    if (_poweroff_requested) { return false; }
+    bool irq_disabled = M5.Rtc.disableIRQ();
+    bool irq_cleared = M5.Rtc.clearIRQ();
+    if (!(irq_disabled && irq_cleared)) {
+      M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+    }
+    return false;
   }
 
-  void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
+  bool Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
   {
-    M5.Rtc.disableIRQ();
-    M5.Rtc.clearIRQ();
-    // An alarm setup failure must not enter sleep without an RTC wake source.
-    if (M5.Rtc.setAlarmIRQ(date, time) <= 0)
+    if ((time.hours < 0 && time.minutes < 0 && date.date < 0 && date.weekDay < 0)
+     || !M5.Rtc.canSetAlarm(&date, &time))
+    { // No alarm field at all would only clear the alarm; there would be nothing to wake on.
+      // Checked (including the driver's own limits) before the existing IRQ is touched.
+      M5_LOGE("timerSleep: invalid alarm time. not sleeping.");
+      return false;
+    }
+#if defined (M5UNIFIED_PC_BUILD)
+    M5_LOGE("timerSleep: not available in the PC build. not sleeping.");
+    return false;
+#endif
+    if (_poweroff_requested)
+    {
+      M5_LOGE("timerSleep: an earlier power-off request is still pending. not sleeping.");
+      return false;
+    }
+    if (M5.Rtc.isEnabled())
+    {
+      bool irq_disabled = M5.Rtc.disableIRQ();
+      bool irq_cleared = M5.Rtc.clearIRQ();
+      if (!(irq_disabled && irq_cleared))
+      {
+        M5_LOGE("timerSleep: RTC IRQ could not be cleared. not sleeping.");
+        return false;
+      }
+    }
+    if (!M5.Rtc.setAlarmIRQ(date, time))
     {
       M5_LOGE("timerSleep: RTC alarm could not be set. not sleeping.");
+      M5.Rtc.disableIRQ();  // best effort: the driver's own rollback may have failed too
+      M5.Rtc.clearIRQ();
+      return false;
+    }
+    if (!_disableEspTimerWakeup())
+    {
+      M5_LOGE("timerSleep: a leftover ESP timer wakeup could not be disabled. not sleeping.");
       M5.Rtc.disableIRQ();
       M5.Rtc.clearIRQ();
-      return;
+      return false;
     }
-    _timerSleep();
+    if (_timerSleep()) { return true; }
+    // The accepted PowerHub request may still power off after the timeout.
+    if (_poweroff_requested) { return false; }
+    bool irq_disabled = M5.Rtc.disableIRQ();
+    bool irq_cleared = M5.Rtc.clearIRQ();
+    if (!(irq_disabled && irq_cleared)) {
+      M5_LOGE("timerSleep: RTC IRQ cleanup failed after sleep was cancelled.");
+    }
+    return false;
   }
 
   std::int32_t Power_Class::_getBatteryAdcRaw(void)
@@ -2301,12 +3030,15 @@ namespace m5
   /// A batteryless charger can hold CHG_STAT low against a collapsed node,
   /// so a low CHG_STAT alone does not prove charge current (ToughC5 only;
   /// the CoreMatrix retry blips are filtered by the 100ms streak below).
-  bool Power_Class::_vbatNodeDown(void)
+  bool Power_Class::_vbatNodeDown(bool* io_ok)
   {
 #if defined (CONFIG_IDF_TARGET_ESP32C5)
     bool powered;
-    return M5pm1.getVbatNodePowered(&powered) && !powered;
+    bool ok = M5pm1.getVbatNodePowered(&powered);
+    if (io_ok) { *io_ok = ok; }
+    return ok && !powered;
 #else
+    if (io_ok) { *io_ok = true; }
     return false;
 #endif
   }
@@ -2325,36 +3057,59 @@ namespace m5
   /// Until the first verdict, -1 (unknown) is reported and the battery APIs
   /// pass that on instead of guessing. (On the CoreMatrix a detach while
   /// charging can go unnoticed until charging is disabled.)
-  std::int8_t Power_Class::_batteryPresent(void)
+  /// Every piece of presence evidence (the CHG_STAT low streak, the VBAT
+  /// sample baseline and its stable / unstable / low counters) only means
+  /// something as an unbroken sequence of successful, charger-enabled
+  /// observations. A failed read, a disabled charger, or a charge enable
+  /// switch is a gap: the evidence is dropped so nothing observed on the far
+  /// side of the gap can complete a streak or a sample count that began
+  /// before it. The verdict itself is kept.
+  void Power_Class::_bp_dropEvidence(void)
   {
+    _bp_chg_low_ms = 0;
+    _bp_last_ms = 0;
+    _bp_stable = 0;
+    _bp_unstable = 0;
+    _bp_low = 0;
+  }
+
+  std::int8_t Power_Class::_batteryPresent(bool* io_ok)
+  {
+    /// io_ok reports whether every read of this evaluation succeeded. The
+    /// verdict itself is cached across failed reads (a transient NACK must not
+    /// flip the presence), so a caller that has to distinguish "read failed"
+    /// from "last known verdict" looks at io_ok, not at the return value.
+    /// A failed read ends the evaluation with the cached verdict and drops
+    /// the transient evidence (see _bp_dropEvidence).
+    if (io_ok) { *io_ok = true; }
     bool chg_enabled = true;
-    if (M5pm1.getBatteryCharge(&chg_enabled) && !chg_enabled)
-    { /// with the charger idle there is no float voltage: a collapsed node
+    if (!M5pm1.getBatteryCharge(&chg_enabled)) { if (io_ok) { *io_ok = false; } _bp_dropEvidence(); return _batt_present; }
+    if (!chg_enabled)
+    { /// a disabled charger breaks the continuity of the enabled-path
+      /// evidence, and nothing observed here is kept as a baseline for it:
+      /// the first sample after re-enabling starts the sampling afresh. The
+      /// settle rule below has its own timer (_chg_off_ms).
+      _bp_dropEvidence();
+      /// with the charger idle there is no float voltage: a collapsed node
       /// proves "no battery" at once. A high reading is trusted as "present"
       /// only once the node has settled after charging stopped (the initial
-      /// _chg_off_ms = 0 gives a boot the same settle window); until then it
-      /// only seeds the sampling.
+      /// _chg_off_ms = 0 gives a boot the same settle window).
       std::uint16_t mv = 0;
-      if (M5pm1.getBatteryVoltage(&mv))
-      {
-        if (mv <= 2600) { _batt_present = 0; }
-        else if ((m5gfx::millis() - _chg_off_ms) > 1500) { _batt_present = 1; }
-        else if (_bp_last_ms == 0)
-        { /// not settled yet: only seed the first sampling baseline.
-          auto t = m5gfx::millis();
-          _bp_last_ms = t ? t : 1;
-          _bp_last_mv = mv;
-        }
-      }
+      if (!M5pm1.getBatteryVoltage(&mv)) { if (io_ok) { *io_ok = false; } }
+      else if (mv <= 2600) { _batt_present = 0; }
+      else if ((m5gfx::millis() - _chg_off_ms) > 1500) { _batt_present = 1; }
       return _batt_present;
     }
 
     std::uint32_t now = m5gfx::millis();
 
     bool chg_stat;
-    if (_readChargeStat(&chg_stat))
+    if (!_readChargeStat(&chg_stat)) { if (io_ok) { *io_ok = false; } _bp_dropEvidence(); return _batt_present; }
     {
-      if (!chg_stat && !_vbatNodeDown())
+      bool node_ok;
+      bool node_down = _vbatNodeDown(&node_ok);
+      if (!node_ok) { if (io_ok) { *io_ok = false; } _bp_dropEvidence(); return _batt_present; }
+      if (!chg_stat && !node_down)
       { /// low = charging into a live node; require a >=100ms streak so a
         /// batteryless retry blip cannot pass as real charge current.
         if (_bp_chg_low_ms == 0) { _bp_chg_low_ms = now ? now : 1; }
@@ -2371,7 +3126,7 @@ namespace m5
     }
 
     std::uint16_t mv = 0;
-    if (!M5pm1.getBatteryVoltage(&mv)) { return _batt_present; }
+    if (!M5pm1.getBatteryVoltage(&mv)) { if (io_ok) { *io_ok = false; } _bp_dropEvidence(); return _batt_present; }
 
     if (mv > 4450)
     { /// only the batteryless sawtooth peaks above any real battery
@@ -2416,6 +3171,24 @@ namespace m5
       if (_bp_low >= 2) { _batt_present = 0; }
     }
     return _batt_present;
+  }
+
+  /// ToughC5 / CoreMatrix: CHG_STAT behind the battery presence gate.
+  /// With no battery the charger retries periodically and CHG_STAT blips low,
+  /// so the presence has to be decided before the line is believed.
+  charge_state_t Power_Class::_chargeStateFromChgStat(void)
+  {
+    /// Procedure order: the presence gate first (its own reads decide io_error
+    /// and undetermined, and "no battery" settles not_charging without the
+    /// line), then CHG_STAT only when a battery is there.
+    bool io_ok;
+    std::int8_t present = _batteryPresent(&io_ok);
+    if (!io_ok) { return charge_state_t::io_error; }
+    if (present < 0) { return charge_state_t::undetermined; }
+    if (present == 0) { return charge_state_t::not_charging; }
+    bool level;
+    if (!_readChargeStat(&level)) { return charge_state_t::io_error; }
+    return level ? charge_state_t::not_charging : charge_state_t::charging;
   }
 #endif
 
@@ -2590,67 +3363,69 @@ namespace m5
 #endif
   }
 
-  void Power_Class::setBatteryCharge(bool enable)
+  bool Power_Class::setBatteryCharge(bool enable)
   {
+    (void)enable;   // some chip builds have no control path at all
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_enable)) { return false; }
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case pmic_t::pmic_aw32001:
-      Aw32001.setBatteryCharge(enable);
-      return;
+      return Aw32001.setBatteryCharge(enable);
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
-      /// the presence check must not read VBAT before the node collapses
+      /// the presence check must not read VBAT before the node collapses,
+      /// and a charge enable switch is a gap in its evidence.
       if (!enable) { _chg_off_ms = m5gfx::millis(); }
-      M5pm1.setBatteryCharge(enable);
-      return;
+      _bp_dropEvidence();
+      return M5pm1.setBatteryCharge(enable);
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case pmic_t::pmic_m5pm1:
-      M5pm1.setBatteryCharge(enable);
-      return;
+      return M5pm1.setBatteryCharge(enable);
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
-      Ip5306.setBatteryCharge(enable);
-      return;
+      return Ip5306.setBatteryCharge(enable);
 
     case pmic_t::pmic_axp192:
-      Axp192.setBatteryCharge(enable);
-      return;
+      return Axp192.setBatteryCharge(enable);
 
 #endif
 
     case pmic_t::pmic_axp2101:
-      Axp2101.setBatteryCharge(enable);
-      break;
+      return Axp2101.setBatteryCharge(enable);
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3) || defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
       {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-        // M5PaperColor does not support charge control
-        if (M5.getBoard() == board_t::board_M5PaperColor) {
-          return;
-        }
-        // M5PaperMono: charging is controlled by the IP2316 charger, not PM1.
+        // M5PaperMono: charging is controlled by the IP2315 charger, not PM1.
         if (M5.getBoard() == board_t::board_M5PaperMono) {
-          set_papermono_ip2315_enabled(true);
-          if (wait_papermono_ip2315_ready()) {
-            if (enable) { M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
-            else        { M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq); }
-          }
-          set_papermono_ip2315_enabled(false);
-          return;
+          /// every write of the sequence counts: a gate left in the wrong
+          /// state after a failed close is not a success. A charger in LED mode
+          /// cannot be controlled until VIN is reapplied.
+          if (!papermono_gate_recover()) { return false; }
+          M5PM1_Class::pwr_src_t sources;
+          if (!M5pm1.getPowerSource(&sources)) { return false; }
+          std::uint8_t saved;
+          if (papermono_gate_open((sources & (M5PM1_Class::vin | M5PM1_Class::vinout)) != 0, &saved)
+              != papermono_gate_t::opened) { return false; }
+          bool res = wait_papermono_ip2315_ready()
+                  && (enable ? M5.In_I2C.bitOn (ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq)
+                             : M5.In_I2C.bitOff(ip2315_i2c_addr, 0x01, 1 << 0, i2c_freq));
+          return papermono_gate_close(saved, false) && res;
         }
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32C5)
-        /// the presence check must not read VBAT before the node collapses
+        /// the presence check must not read VBAT before the node collapses,
+        /// and a charge enable switch is a gap in its evidence.
         if (!enable) { _chg_off_ms = m5gfx::millis(); }
+        _bp_dropEvidence();
 #endif
-        M5pm1.setBatteryCharge(enable);
+        return M5pm1.setBatteryCharge(enable);
       }
-      return;
 #endif
 
 #endif
@@ -2660,137 +3435,187 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
       case board_t::board_M5Tab5X:
-        M5.getIOExpander(1).digitalWrite(7, enable);
-        break;
+        /// CHG_EN (IOE1 G7) is owned by this function alone; setChargeCurrent
+        /// only selects the QC step.
+        return M5.getIOExpander(1).digitalWrite(7, enable);
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub:
-        M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x06, enable, i2c_freq);
-        break;
+        return M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x06, enable, i2c_freq);
 #endif
       default:
-        return;
+        break;
       }
-      return;
+      break;
     }
+    return false;
   }
 
-  void Power_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
+  bool Power_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { (void)max_mA; (void)applied_mA;   // some chip builds have no control path at all
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (max_mA == 0)
+    { /// 0 is not a step (where a current path exists it selects the lowest
+      /// one). Warn once: code written for the old Tab5 / Tab5X behaviour
+      /// used 0 to stop charging. The flag only limits the log output.
+      static bool warned = false;
+      if (!warned)
+      {
+        warned = true;
+        M5_LOGW("setChargeCurrent(0): 0 is not a charge current step. Use setBatteryCharge(false) to stop charging.");
+      }
+    }
+    // Keep the zero-current warning above even on models without a current path.
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_current)) { return false; }
+    /// The step contract: the highest step not above max_mA, clamped up to the
+    /// lowest step when the request is under all of them. 0 is not a step
+    /// (setBatteryCharge(false) stops charging), and applied_mA is only written
+    /// when the write actually went through.
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case pmic_t::pmic_aw32001:
-      Aw32001.setChargeCurrent(max_mA);
-      return;
+      return Aw32001.setChargeCurrent(max_mA, applied_mA);
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5CoreMatrix)
-      {
+      { /// IOE1 G3 selects between two steps: driven low = 650mA, released to
+        /// an input = 180mA.
         auto& ioe1 = M5.getIOExpander(0);
-        if (max_mA >= 650)
+        const bool select_650mA = (max_mA >= 650);
+        bool res = ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
+        if (select_650mA)
         {
-          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
-          ioe1.digitalWrite(M5IOE1_Class::gpio3, false);
-          ioe1.setHighImpedance(M5IOE1_Class::gpio3, false);
-          ioe1.setDirection(M5IOE1_Class::gpio3, true);
+          res = ioe1.digitalWrite(M5IOE1_Class::gpio3, false) && res;
+          res = ioe1.setHighImpedance(M5IOE1_Class::gpio3, false) && res;
+          res = ioe1.setDirection(M5IOE1_Class::gpio3, true) && res;
         }
         else
         {
-          ioe1.setPullMode(M5IOE1_Class::gpio3, IOExpander_Base::pull_none);
-          ioe1.setDirection(M5IOE1_Class::gpio3, false);
+          res = ioe1.setDirection(M5IOE1_Class::gpio3, false) && res;
         }
+        if (!res) { return false; }
+        if (applied_mA) { *applied_mA = select_650mA ? 650 : 180; }
+        return true;
       }
-      return;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    case pmic_t::pmic_m5pm1:
-      (void)max_mA;
-      return;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case pmic_t::pmic_ip5306:
-      Ip5306.setChargeCurrent(max_mA);
-      return;
+      return Ip5306.setChargeCurrent(max_mA, applied_mA);
 
     case pmic_t::pmic_axp192:
-      Axp192.setChargeCurrent(max_mA);
-      return;
+      return Axp192.setChargeCurrent(max_mA, applied_mA);
 
 #endif
 
     case pmic_t::pmic_axp2101:
-      Axp2101.setChargeCurrent(max_mA);
-      break;
+      return Axp2101.setChargeCurrent(max_mA, applied_mA);
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5StampS3Bat) {
-        if (max_mA >= 650)
-          M5pm1.setGPIOOutput(M5PM1_Class::gpio3, false);
-        else
-          M5pm1.setGPIOOutput(M5PM1_Class::gpio3, true);
+      { /// PM1 G3 = CHG_PROG: driven low selects 650mA, left floating (input,
+        /// no pull) selects 200mA. The pin is never driven high.
+        const bool select_650mA = (max_mA >= 650);
+        /// The whole pin setup is part of the transaction, including the mux
+        /// (mode and latch only take effect while the pin is muxed to GPIO).
+        /// The pin is released to an input with no pull first, the low latch
+        /// and driver type are set, the mux is switched while the pin is
+        /// still an input, and only then (650mA) does it become an output.
+        /// Every releasing step is attempted even after an earlier failure
+        /// (each one only moves the pin towards a defined state, so a held
+        /// high latch is not left driven by a failed release), while the
+        /// output switch runs only when every step before it went through.
+        /// applied_mA is only reported when the whole transaction succeeded.
+        bool res = true;
+        res = M5pm1.setGPIOPull(M5PM1_Class::gpio3, M5PM1_Class::pull_none) && res;
+        res = M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::input) && res;
+        res = M5pm1.setGPIOOutput(M5PM1_Class::gpio3, false) && res;
+        res = M5pm1.setGPIODrive(M5PM1_Class::gpio3, M5PM1_Class::push_pull) && res;
+        res = M5pm1.setGPIOFunction(M5PM1_Class::gpio3, M5PM1_Class::gpio) && res;
+        if (select_650mA)
+        {
+          res = res && M5pm1.setGPIOMode(M5PM1_Class::gpio3, M5PM1_Class::output);
         }
-      break;
+        if (!res) { return false; }
+        if (applied_mA) { *applied_mA = select_650mA ? 650 : 200; }
+        return true;
+      }
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case pmic_t::pmic_m5pm1:
-      if (M5.getBoard() == board_t::board_M5ToughC5)
       {
         // ToughC5 CHG_PROG is IOE1 G1: low selects 650 mA, high selects 180 mA.
         // Set the latch before enabling push-pull output to avoid a transient
         // selection of the opposite current during the mode transition.
         auto& ioe1 = M5.getIOExpander(0);
         const bool select_180mA = max_mA < 650;
-        ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
-        ioe1.digitalWrite(M5IOE1_Class::gpio1, select_180mA);
-        ioe1.setHighImpedance(M5IOE1_Class::gpio1, false);
-        ioe1.setDirection(M5IOE1_Class::gpio1, true);
+        bool res = ioe1.setPullMode(M5IOE1_Class::gpio1, IOExpander_Base::pull_none);
+        res = ioe1.digitalWrite(M5IOE1_Class::gpio1, select_180mA) && res;
+        res = ioe1.setHighImpedance(M5IOE1_Class::gpio1, false) && res;
+        res = ioe1.setDirection(M5IOE1_Class::gpio1, true) && res;
+        if (!res) { return false; }
+        if (applied_mA) { *applied_mA = select_180mA ? 180 : 650; }
+        return true;
       }
-      return;
 #endif
 
 #endif
 
     default:
+      break;
+    }
+
+    switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
-      switch (M5.getBoard()) {
-        case board_t::board_M5Tab5:
-        case board_t::board_M5Tab5X: {
-          switch (max_mA) {
-            case 0:
-              // charge disable
-              M5.getIOExpander(1).digitalWrite(7, false); // CHG_EN = HIGH
-              // qc disable
-              M5.getIOExpander(1).digitalWrite(5, true); // CHG_EN = LOW
-              break;
-
-            case 500:
-              // charge enable
-              M5.getIOExpander(1).digitalWrite(7, true); // CHG_EN = HIGH
-              // qc disable
-              M5.getIOExpander(1).digitalWrite(5, true); // CHG_EN = LOW
-              break;
-
-            case 1000:
-              // charge enable
-              M5.getIOExpander(1).digitalWrite(7, true); // CHG_EN = HIGH
-              // qc enable
-              M5.getIOExpander(1).digitalWrite(5, false); // CHG_EN = LOW
-              break;
-
-            default:
-              break;
-          }
-        }
-        break;
-
-      default:
-        return;
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      { /// Two steps, selected by QC (IOE1 G5, active low): 500mA / 1000mA.
+        /// CHG_EN (G7) is not touched here - it belongs to setBatteryCharge().
+        const bool select_1000mA = (max_mA >= 1000);
+        if (!M5.getIOExpander(1).digitalWrite(5, !select_1000mA)) { return false; }
+        if (applied_mA) { *applied_mA = select_1000mA ? 1000 : 500; }
+        return true;
       }
 #endif
-      return;
+    default:
+      break;
     }
+    return false;
+  }
+
+  bool Power_Class::_readBatteryCurrent(std::int32_t* mA)
+  { /// The boards whose charge state is decided by the battery current read it
+    /// through here, so that a failed read stays distinguishable from 0mA.
+    /// The public getBatteryCurrent() keeps folding a failure into 0.
+    if (mA == nullptr) { return false; }
+    switch (M5.getBoard())
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5Tab5:
+    case board_t::board_M5Tab5X:
+      { // The shunt is wired so that charge current reads negative; invert to
+        // match the documented convention (+ = charge / - = discharge).
+        float ampere;
+        if (!Ina226.readShuntCurrent(&ampere)) { return false; }
+        *mA = (std::int32_t)(-1000.0f * ampere);
+        return true;
+      }
+#endif
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case board_t::board_M5PowerHub:
+      {
+        uint8_t buf[2];
+        if (!M5.In_I2C.readRegister(powerhub_i2c_addr, 0x32, buf, sizeof(buf), i2c_freq)) { return false; }
+        *mA = -(std::int16_t)((buf[1] << 8) | buf[0]);
+        return true;
+      }
+#endif
+    default:
+      break;
+    }
+    return false;
   }
 
   int32_t Power_Class::getBatteryCurrent(void)
@@ -2833,17 +3658,17 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
       case board_t::board_M5Tab5X:
-        // The shunt is wired so that charge current reads negative; invert to
-        // match the documented convention (+ = charge / - = discharge).
-        return -1000.0f * Ina226.getShuntCurrent();
 #endif
-
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub:
-        uint8_t buf[2];
-        if(M5.In_I2C.readRegister(powerhub_i2c_addr, 0x32, buf, sizeof(buf), i2c_freq))
-          return -(int16_t)((buf[1] << 8) | buf[0]);
-        return 0;
+#endif
+#if defined (CONFIG_IDF_TARGET_ESP32P4) || defined (CONFIG_IDF_TARGET_ESP32S3)
+        { /// a failed read is reported as 0mA here; getChargeState() uses the
+          /// checked path instead.
+          std::int32_t mA = 0;
+          _readBatteryCurrent(&mA);
+          return mA;
+        }
 #endif
       default:
         return 0;
@@ -2851,8 +3676,11 @@ namespace m5
     }
   }
 
-  void Power_Class::setChargeVoltage(std::uint16_t max_mV)
+  bool Power_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
   {
+    (void)max_mV; (void)applied_mV;   // some chip builds have no control path at all
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_charge_control_caps(_pmic, M5.getBoard()) & cap_set_charge_voltage)) { return false; }
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -2863,176 +3691,351 @@ namespace m5
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     case pmic_t::pmic_ip5306:
-      Ip5306.setChargeVoltage(max_mV);
-      return;
+      return Ip5306.setChargeVoltage(max_mV, applied_mV);
 
     case pmic_t::pmic_axp192:
-      Axp192.setChargeVoltage(max_mV);
-      return;
+      return Axp192.setChargeVoltage(max_mV, applied_mV);
 
 #endif
 
     case pmic_t::pmic_axp2101:
-      Axp2101.setChargeVoltage(max_mV);
-      break;
+      return Axp2101.setChargeVoltage(max_mV, applied_mV);
 
 #endif
 
     default:
-      switch (M5.getBoard()) {
-#if defined (CONFIG_IDF_TARGET_ESP32P4)
-      case board_t::board_M5Tab5:
-      case board_t::board_M5Tab5X:
-        // TODO:implement
-#endif
-      default:
-        return;
-      }
+      break;
     }
+    return false;
   }
 
-  Power_Class::is_charging_t Power_Class::isCharging(void)
+  charge_state_set_t Power_Class::getChargeStateCaps(void)
   {
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return charge_state_set_t(); }
+    return _charge_state_caps(_pmic, M5.getBoard());
+  }
+
+  bool Power_Class::canReport(charge_state_t state)
+  {
+    return getChargeStateCaps().contains(state);
+  }
+
+  std::uint8_t Power_Class::getChargeControlCaps(void)
+  {
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return 0; }
+    return _charge_control_caps(_pmic, M5.getBoard());
+  }
+
+  charge_state_t Power_Class::_getChargeState(void)
+  {
+    if (!_initialized) { return charge_state_t::not_initialized; }
+    if (_identity_state == identity_state_t::unconfirmed) { return charge_state_t::io_error; }   // see begin(): the PMIC never answered its ID probe
+
     switch (_pmic)
     {
 #if defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
 
     case pmic_t::pmic_aw32001:
-      return Aw32001.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      {
+        auto status = Aw32001.getChargeStatus();
+        if (status == AW32001_Class::CS_UNKNOWN) { return charge_state_t::io_error; }
+        if (status == AW32001_Class::CS_PRE_CHARGE
+         || status == AW32001_Class::CS_CHARGE)      { return charge_state_t::charging; }
+        if (status == AW32001_Class::CS_CHARGE_DONE) { return charge_state_t::full; }
+        bool enabled;
+        if (!Aw32001.getBatteryCharge(&enabled)) { return charge_state_t::io_error; }
+        return enabled ? charge_state_t::not_charging : charge_state_t::disabled;
+      }
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C61)
     case pmic_t::pmic_m5pm1:
       /// CoreMatrix: the AW32901 CHG_STAT is wired to IOE1 G8 (low = charging)
       if (M5.getBoard() == board_t::board_M5CoreMatrix)
       {
-        /// With no battery the charger retries periodically and CHG_STAT
-        /// blips low for a moment; report "not charging" instead.
-        {
-          std::int8_t present = _batteryPresent();
-        if (present < 0) { return is_charging_t::charge_unknown; }
-        if (present == 0) { return is_charging_t::is_discharging; }
-        }
-        bool level;
-        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio8, &level))
-        { /// do not report an I2C failure as "charging"
-          return is_charging_t::charge_unknown;
-        }
-        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+        return _chargeStateFromChgStat();
       }
-      return is_charging_t::charge_unknown;
+      break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case pmic_t::pmic_m5pm1:
-      {
+      { /// CoreP4X: the charger status is wired to IOE1 G6 (low = charging).
+        /// There is no battery presence signal to gate it with.
         bool level;
-        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level)) {
-          return is_charging_t::charge_unknown;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level))
+        { /// do not report a failed read as "charging"
+          return charge_state_t::io_error;
         }
-        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
+        return level ? charge_state_t::not_charging : charge_state_t::charging;
       }
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     case pmic_t::pmic_ip5306:
-      return Ip5306.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      { /// The enable setting (SYS_CTL0 bit4) and its effective value
+        /// (REG_READ0 bit3) are different registers: the setting survives an
+        /// unplugged supply, the effective one drops with it. Reading both is
+        /// what separates "the user disabled it" from "there is no supply".
+        /// Limit: the IP5306 has no battery presence signal at all, so a board
+        /// running with no cell installed still reports charging.
+        bool flag;
+        if (!Ip5306.getBatteryCharge(&flag)) { return charge_state_t::io_error; }
+        if (!flag) { return charge_state_t::disabled; }
+        if (!Ip5306.readChargeActive(&flag)) { return charge_state_t::io_error; }
+        if (!flag) { return charge_state_t::not_charging; }
+        if (!Ip5306.readChargeFull(&flag)) { return charge_state_t::io_error; }
+        return flag ? charge_state_t::full : charge_state_t::charging;
+      }
 
     case pmic_t::pmic_axp192:
-      return Axp192.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      { /// REG00H bit2 is the battery current direction and REG33H bit7 the
+        /// charger enable. Completion has no bit of its own here, so full is
+        /// never reported. The enable register is only read once the first
+        /// step has not decided: a charge in progress does not depend on it.
+        bool charging, enabled;
+        if (!Axp192.readChargeActive(&charging)) { return charge_state_t::io_error; }
+        if (charging) { return charge_state_t::charging; }
+        if (!Axp192.getBatteryCharge(&enabled)) { return charge_state_t::io_error; }
+        return enabled ? charge_state_t::not_charging : charge_state_t::disabled;
+      }
 
 #endif
 
     case pmic_t::pmic_axp2101:
-      return Axp2101.isCharging() ? is_charging_t::is_charging : is_charging_t::is_discharging;
-    //   return Axp2101.getChargeDirection() ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      { /// One REG01H read carries both the charger state machine (bit[2:0])
+        /// and the battery current direction (bit[6:5]).
+        /// Order matters: the charger is asked first, and only once it says it
+        /// is not charging does the current direction narrow the answer down.
+        std::uint8_t status;
+        if (!Axp2101.readPmuStatus2(&status)) { return charge_state_t::io_error; }
+        std::uint8_t machine = status & 0x07;
+        /// 0b000-0b011 = trickle / pre / constant current / constant voltage
+        if (machine <= 0x03) { return charge_state_t::charging; }
+        /// 0b100 = charge done. (disabling the charger clears it, so this does
+        /// not shadow the disabled branch below)
+        if (machine == 0x04) { return charge_state_t::full; }
+        bool enabled;
+        if (!Axp2101.getBatteryCharge(&enabled)) { return charge_state_t::io_error; }
+        if (!enabled) { return charge_state_t::disabled; }
+        switch (status & 0x60)
+        {
+        case 0x40: return charge_state_t::discharging;
+        case 0x00: return charge_state_t::idle;
+        default:   break;
+        }
+        return charge_state_t::not_charging;
+      }
 
 #endif
 
     default:
-      switch (M5.getBoard()) {
+      break;
+    }
+
+    switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
-        case board_t::board_M5PaperMono:
+      case board_t::board_M5PaperMono:
+      {
+        if (!papermono_gate_recover()) { return charge_state_t::io_error; }
+        // No external power -> not charging. PWR_SRC is a bitmap, and the battery bit may coexist with VIN.
+        M5PM1_Class::pwr_src_t sources;
+        if (!M5pm1.getPowerSource(&sources)) { return charge_state_t::io_error; }
+        // VIN removed: the charger mode is decided again on the next plug-in.
+        if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout)))
         {
-          // No external power -> not charging. PWR_SRC is a bitmap, and the battery bit may coexist with VIN.
-          auto sources = M5pm1.getPowerSource();
-          if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout))) { return is_charging_t::is_discharging; }
-          // External power present. The IP2316 charger reports
-          // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
-          // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
-          set_papermono_ip2315_enabled(true);
-          is_charging_t res = is_charging_t::is_discharging;
-          if (wait_papermono_ip2315_ready())
-          {
-            uint8_t chg_stat = M5.In_I2C.readRegister8(ip2315_i2c_addr, 0xC7, i2c_freq);
-            res = (chg_stat & (1 << 7)) ? is_charging_t::is_charging : is_charging_t::is_discharging;
-          }
-          set_papermono_ip2315_enabled(false);
-          return res;
+          papermono_ip2315_led_mode = false;
+          return charge_state_t::not_charging;
         }
-        break;
+        // External power present. The IP2315 charger reports
+        // its state in REG_CHG_STAT(0xC7): bit7 = charging in progress (measured:
+        // 0x82 charging / 0x45 charge-complete / 0x00 charge-disabled).
+        // The other bits carry meaning too, but their definition is unconfirmed,
+        // so only bit7 is used and full / disabled are not reported.
+        /// a charger that does not answer through the gate is an unfinished
+        /// procedure, not missing evidence: io_error, not undetermined. The
+        /// gate writes themselves are part of the procedure, so a failed open
+        /// or close is io_error as well. A charger in LED mode has no readable
+        /// state until VIN is reapplied: undetermined.
+        std::uint8_t saved;
+        switch (papermono_gate_open(true, &saved))
+        {
+        case papermono_gate_t::led_mode: return charge_state_t::undetermined;
+        case papermono_gate_t::error:    return charge_state_t::io_error;
+        default: break;
+        }
+        charge_state_t res = charge_state_t::io_error;
+        uint8_t chg_stat;
+        if (wait_papermono_ip2315_ready()
+         && M5.In_I2C.readRegister(ip2315_i2c_addr, 0xC7, &chg_stat, 1, i2c_freq))
+        {
+          res = (chg_stat & (1 << 7)) ? charge_state_t::charging : charge_state_t::not_charging;
+        }
+        if (!papermono_gate_close(saved, false)) { res = charge_state_t::io_error; }
+        return res;
+      }
 
-        case board_t::board_M5StickS3:
-        {
-          // PM1_G0 is charging status input pin, low=charging / high=not charging
-          return M5pm1.getGPIOInput(M5PM1_Class::gpio0) ? is_charging_t::is_discharging : is_charging_t::is_charging;
-        }
-        break;
+      case board_t::board_M5PaperColor:
+      { /// The charger status is wired to neither the PM1 nor the MCU, so only
+        /// the negative side can be answered: with no external power there can
+        /// be no charging. Anything else stays undetermined.
+        M5PM1_Class::pwr_src_t sources;
+        if (!M5pm1.getPowerSource(&sources)) { return charge_state_t::io_error; }
+        if (!(sources & (M5PM1_Class::vin | M5PM1_Class::vinout))) { return charge_state_t::not_charging; }
+        return charge_state_t::undetermined;
+      }
 
-        case board_t::board_M5PaperDIY:
-        {
-          // PM1_G3 is CHG_STAT, low=charging / high=not charging
-          return M5pm1.getGPIOInput(M5PM1_Class::gpio3) ? is_charging_t::is_discharging : is_charging_t::is_charging;
-        }
-        break;
-      
-        case board_t::board_M5StopWatch: // M5PM1_G2
-        case board_t::board_M5StampS3Bat: // M5PM1_G2
-        {
-          // PM1_G2 is charging status input pin, low=charging / high=not charging
-          return M5pm1.getGPIOInput(M5PM1_Class::gpio2) ? is_charging_t::is_discharging : is_charging_t::is_charging;
-        }
-        break;
+      case board_t::board_M5StickS3:     // PM1 G0
+      case board_t::board_M5PaperDIY:    // PM1 G3
+      case board_t::board_M5StopWatch:   // PM1 G2
+      case board_t::board_M5StampS3Bat:  // PM1 G2
+      { /// CHG_STAT on a PM1 GPIO, low = charging.
+        auto pin = (M5.getBoard() == board_t::board_M5StickS3)  ? M5PM1_Class::gpio0
+                 : (M5.getBoard() == board_t::board_M5PaperDIY) ? M5PM1_Class::gpio3
+                 : M5PM1_Class::gpio2;
+        std::uint8_t bits;
+        /// getGPIOInput() folds a failed read into "high"; read the whole
+        /// register instead so that a failure is not reported as not_charging.
+        if (!M5pm1.getGPIOInputBits(&bits)) { return charge_state_t::io_error; }
+        return (bits & (1 << (std::uint8_t)pin)) ? charge_state_t::not_charging : charge_state_t::charging;
+      }
 
-        case board_t::board_M5ChainCaptain:
-          return M5.getIOExpander(0).digitalRead(M5IOE1_Class::gpio3)
-            ? is_charging_t::is_discharging
-            : is_charging_t::is_charging;
-          break;
+      case board_t::board_M5ChainCaptain:
+      { /// CHG_STAT is on IOE1 G3, low = charging.
+        bool level;
+        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, &level))
+        {
+          return charge_state_t::io_error;
+        }
+        return level ? charge_state_t::not_charging : charge_state_t::charging;
+      }
 
       case board_t::board_M5PaperS3:
-        return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+        /// CHG_STAT is wired to an MCU pin, so there is no failing read here:
+        /// this is the only model that never answers io_error.
+        return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false)
+             ? charge_state_t::charging : charge_state_t::not_charging;
 
-      case board_t::board_M5PowerHub: // 0x50 reg is not accurate
-        return (getBatteryCurrent() > 10) ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      case board_t::board_M5PowerHub:
+      { /// battery current over a threshold. The accuracy of this reading is
+        /// not trusted, so the sign is not used to tell discharging from idle.
+        std::int32_t mA;
+        if (!_readBatteryCurrent(&mA)) { return charge_state_t::io_error; }
+        return (mA > 10) ? charge_state_t::charging : charge_state_t::not_charging;
+      }
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
       case board_t::board_M5Tab5:
       case board_t::board_M5Tab5X:
-        return M5.getIOExpander(1).digitalRead(6) // io1.gpio6 == CHG_STAT
-          ? is_charging_t::is_charging : is_charging_t::is_discharging;
+      { /// The INA226 battery current decides the state.
+        /// IOE1 G6 is deliberately not used: it is the IP2326 BAT_STAT, which
+        /// only marks the trickle / constant-current stage and reads high both
+        /// while charging and while charging is disabled.
+        /// not_charging is never reported here - a stopped charge is observed
+        /// as idle.
+        std::int32_t mA;
+        if (!_readBatteryCurrent(&mA)) { return charge_state_t::io_error; }
+        static constexpr std::int32_t threshold_mA = 10;
+        if (mA >  threshold_mA) { return charge_state_t::charging; }
+        if (mA < -threshold_mA) { return charge_state_t::discharging; }
+        return charge_state_t::idle;
+      }
 #endif
 #if defined (CONFIG_IDF_TARGET_ESP32C5)
       case board_t::board_M5ToughC5:
-      {
         // The LGS4056 CHG_STAT is wired to IOE1 G3, low=charging / high=not charging.
         // Near full charge it alternates with the charger's top-off cycle (~10-20s).
-        { /// with no battery the charger can still assert CHG_STAT briefly;
-          /// report "not charging" instead.
-          std::int8_t present = _batteryPresent();
-          if (present < 0) { return is_charging_t::charge_unknown; }
-          if (present == 0) { return is_charging_t::is_discharging; }
-        }
-        bool level;
-        if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio3, &level))
-        { // do not report an I2C failure as "charging"
-          return is_charging_t::charge_unknown;
-        }
-        return level ? is_charging_t::is_discharging : is_charging_t::is_charging;
-      }
+        return _chargeStateFromChgStat();
 #endif
       default:
-        return is_charging_t::charge_unknown;
-      }
+        break;
     }
+    return charge_state_t::unsupported;
+  }
+
+  charge_state_t Power_Class::getChargeState(void)
+  {
+    charge_state_t res = _getChargeState();
+#if defined (M5UNIFIED_PC_BUILD) || defined (M5UNIFIED_CHECK_CHARGE_STATE_CAPS) \
+ || (defined (CORE_DEBUG_LEVEL) && CORE_DEBUG_LEVEL >= 4) \
+ || (defined (CONFIG_LOG_DEFAULT_LEVEL) && CONFIG_LOG_DEFAULT_LEVEL >= 4)
+    /// The procedure and the capability table are written separately, so the
+    /// two are cross checked where a failing check can actually be seen: a
+    /// state that is not advertised would silently break every caller that
+    /// asked getChargeStateCaps() what to expect.
+    const bool valid = !charge_states_known.contains(res)
+        || _charge_state_caps(_pmic, M5.getBoard()).contains(res);
+#if defined (M5UNIFIED_PC_BUILD)
+    assert(valid);
+#else
+    // Diagnostics must not change the returned state or stop a running device.
+    if (!valid)
+    {
+      ESP_LOGE("Power", "Charge state %u is absent from caps (pmic=%u board=%u)",
+          static_cast<unsigned>(res), static_cast<unsigned>(_pmic), static_cast<unsigned>(M5.getBoard()));
+    }
+#endif
+#endif
+    return res;
+  }
+
+  bool Power_Class::isCharging(void)
+  {
+    return charge_states_any_charging.contains(getChargeState());
+  }
+
+  battery_presence_t Power_Class::getBatteryPresence(void)
+  {
+    if (!_initialized) { return battery_presence_t::not_initialized; }
+    if (_identity_state == identity_state_t::unconfirmed) { return battery_presence_t::io_error; }   // see begin(): the PMIC never answered its ID probe
+
+    switch (_pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32C3)
+#elif defined (CONFIG_IDF_TARGET_ESP32C6)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5CoreMatrix)
+      { /// there is no presence signal: it is inferred, and stays undetermined
+        /// until the first verdict. (see _batteryPresent) The verdict is
+        /// cached across failed reads, so the bus is probed first: a dead bus
+        /// is io_error, not the last verdict.
+        bool io_ok;
+        std::int8_t bp = _batteryPresent(&io_ok);
+        if (!io_ok) { return battery_presence_t::io_error; }
+        return (bp < 0)  ? battery_presence_t::undetermined
+             : (bp == 0) ? battery_presence_t::absent
+                         : battery_presence_t::present;
+      }
+      break;
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+#else
+
+    case pmic_t::pmic_axp2101:
+      { /// REG00H bit3 follows an attach / detach.
+        std::uint8_t status;
+        if (!Axp2101.readPmuStatus1(&status)) { return battery_presence_t::io_error; }
+        return (status & 0x08) ? battery_presence_t::present : battery_presence_t::absent;
+      }
+
+#if defined (CONFIG_IDF_TARGET_ESP32C5)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5ToughC5)
+      { /// see the CoreMatrix note above.
+        bool io_ok;
+        std::int8_t bp = _batteryPresent(&io_ok);
+        if (!io_ok) { return battery_presence_t::io_error; }
+        return (bp < 0)  ? battery_presence_t::undetermined
+             : (bp == 0) ? battery_presence_t::absent
+                         : battery_presence_t::present;
+      }
+      break;
+#endif
+
+#endif
+
+    default:
+      break;
+    }
+    return battery_presence_t::unsupported;
   }
 
   float Power_Class::_readExtValue(ext_port_mask_t port_mask, bool is_voltage)
@@ -3089,7 +4092,7 @@ namespace m5
         return 0;
       }
 
-      case board_t::board_M5StampPLC:
+      case board_t::board_M5StamPLC:
         if (port_mask & (ext_port_mask_t::ext_PWR485 | ext_port_mask_t::ext_PWRCAN)) {
           if (is_voltage)
             return Ina226.getBusVoltage() * 1000;
@@ -3147,8 +4150,11 @@ namespace m5
     }
   }
 
-  void Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
+  bool Power_Class::setExtPortBusConfig(const ext_port_bus_t& config)
   {
+    (void)config;
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_ext_port_bus)) { return false; }
     switch (M5.getBoard()) {
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
       case board_t::board_M5PowerHub: {
@@ -3158,53 +4164,63 @@ namespace m5
         buf[2] = config.currentLimit & 0xFF;
         buf[3] = config.enable;
         buf[4] = config.direction;
-        M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x20, buf, sizeof(buf), i2c_freq);
-      } break;
+        return M5.In_I2C.writeRegister(powerhub_i2c_addr, 0x20, buf, sizeof(buf), i2c_freq);
+      }
     #endif
       default:
-        break;
+        return false;
     }
   }
 
 
-  void Power_Class::setVibration(uint8_t level)
+  bool Power_Class::setVibration(uint8_t level)
   {
+    if (_identity_state == identity_state_t::unconfirmed) { return false; }   // see begin(): the PMIC never answered its ID probe
+    if (!(_power_output_caps(_pmic, M5.getBoard()) & cap_set_vibration)) { return false; }
 #if !defined (M5UNIFIED_PC_BUILD) && defined (CONFIG_IDF_TARGET_ESP32S3)
-    if (M5.getBoard() == board_t::board_M5StopWatch)
     {
       // M5IOE1 PWM1 (0x1B/0x1C) -> pin IO9 / G9 motor; duty 12-bit in [11:0], EN=bit7 of high byte.
       auto& ioe1 = static_cast<M5IOE1_Class&>(M5.getIOExpander(0));
       if (level == 0) {
-        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
-      } else {
-        // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
-        ioe1.setHighImpedance(M5IOE1_Class::gpio9, false);
-        ioe1.setDirection(M5IOE1_Class::gpio9, true);
-        uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
-        ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
+        return ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, 0, pwm_polarity_t::normal, false);
       }
-      return;
+      // PWM needs IO9 in output mode (M5IOE1 pin index 8 -> GPIO_MODE_H bit0).
+      if (!ioe1.setHighImpedance(M5IOE1_Class::gpio9, false)) { return false; }
+      if (!ioe1.setDirection(M5IOE1_Class::gpio9, true)) { return false; }
+      uint16_t duty12 = static_cast<uint16_t>((static_cast<uint32_t>(level) * 0x0FFFu) / 255u);
+      return ioe1.setPwmDuty12bit(M5IOE1_Class::pwm_ch1, duty12);
     }
 #endif
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    if (M5.getBoard() == board_t::board_M5StackCore2)
     {
+      // A non-zero level is clamped up to the lowest voltage the rail can
+      // produce, so that every non-zero request drives the motor rather than
+      // silently mapping to "rail off" (AXP192 LDO3 starts at 1800 mV,
+      // AXP2101 DLDO1 at 500 mV).
       uint32_t mv = level ? 480 + level * 12 : 0;
       switch (_pmic)
       {
         case pmic_t::pmic_axp192:
-          Axp192.setLDO3(mv);
-          break;
+          if (mv && mv < 1800) { mv = 1800; }
+          return Axp192.setLDO3(mv);
 
         case pmic_t::pmic_axp2101:
-          Axp2101.setDLDO1(mv);
-          break;
+          if (mv && mv < 500) { mv = 500; }
+          return Axp2101.setDLDO1(mv);
 
         default:
           break;
       }
     }
 #endif
+    (void)level;
+    return false;
+  }
+
+  std::uint8_t Power_Class::getPowerOutputCaps(void)
+  {
+    if (!_initialized || _identity_state == identity_state_t::unconfirmed) { return 0; }
+    return _power_output_caps(_pmic, M5.getBoard());
   }
 
 }

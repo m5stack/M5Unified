@@ -52,8 +52,8 @@
 #include "utility/led/LED_PaperMono_Class.hpp"
 
 #if defined (ARDUINO) && defined (CONFIG_IDF_TARGET_ESP32P4)
-// ESP-Hosted (Arduino core HAL) の SDIO ピン設定。弱参照にして、WiFi/BLE を使わないビルドには
-// ESP-Hosted のコードを引き込まない (リンカが解決しなければ nullptr になる)。
+// SDIO pin setup of ESP-Hosted (Arduino core HAL). Weak references, so builds that do not use
+// WiFi/BLE do not pull in the ESP-Hosted code (nullptr when the linker does not resolve them).
 extern "C" bool hostedSetPins(int8_t clk, int8_t cmd, int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t rst) __attribute__((weak));
 extern "C" bool hostedIsInitialized(void) __attribute__((weak));
 #endif
@@ -86,6 +86,8 @@ namespace m5
 int8_t M5Unified::_get_pin_table[pin_name_max];
 
 #if defined (M5UNIFIED_PC_BUILD)
+  int8_t M5Unified::_get_power_hold_pin(board_t) { return -1; }
+
   void M5Unified::_setup_pinmap(board_t)
   {
     std::fill(_get_pin_table, _get_pin_table + pin_name_max, 255);
@@ -93,7 +95,6 @@ int8_t M5Unified::_get_pin_table[pin_name_max];
 #else
 // Pin number table. Place unknown at the end of the table. 
 // If there is no corresponding value, the value of unknown is used.
-// ピン番号テーブル。 unknownをテーブルの最後に配置する。該当が無い場合はunknownの値が使用される。
 static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
                             // In SCL,SDA, EX SCL,SDA
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -102,6 +103,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5StackChan  , GPIO_NUM_11, GPIO_NUM_12, GPIO_NUM_1, GPIO_NUM_2  },
 { board_t::board_M5StickS3    , GPIO_NUM_48,GPIO_NUM_47 , GPIO_NUM_10,GPIO_NUM_9  },
 { board_t::board_M5StampS3    , 255        ,255         , GPIO_NUM_15,GPIO_NUM_13 },
+{ board_t::board_M5DualKey    , 255        ,255         , 255        ,255         }, // No wired I2C pins.
 { board_t::board_M5Capsule    , GPIO_NUM_10,GPIO_NUM_8  , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5Dial       , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
 { board_t::board_M5DinMeter   , GPIO_NUM_12,GPIO_NUM_11 , GPIO_NUM_15,GPIO_NUM_13 },
@@ -115,7 +117,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperDIY   , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_42,GPIO_NUM_41 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
+{ board_t::board_M5StamPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
 { board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
 { board_t::board_M5PaperColor , GPIO_NUM_2 ,GPIO_NUM_3  , GPIO_NUM_5 ,GPIO_NUM_4  },
@@ -143,7 +145,8 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
-{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  }, // PortA は内部バスと同一 (レベルシフタ経由の物理分配)
+// PortA shares the internal bus (physical fan-out through a level shifter)
+{ board_t::board_M5ToughC5    , GPIO_NUM_3 ,GPIO_NUM_2  , GPIO_NUM_3 ,GPIO_NUM_2  },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
@@ -222,7 +225,7 @@ static constexpr const uint8_t _pin_table_sd[][7] = {
 { board_t::board_M5CardputerADV,GPIO_NUM_40, GPIO_NUM_14, GPIO_NUM_39, 255        , 255       , GPIO_NUM_12 },
 { board_t::board_M5PaperS3    , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5PaperDIY   , GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_40, 255        , 255       , GPIO_NUM_47 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  255        , 255       , GPIO_NUM_10 },
+{ board_t::board_M5StamPLC   , GPIO_NUM_7,  GPIO_NUM_8,  GPIO_NUM_9,  255        , 255       , GPIO_NUM_10 },
 { board_t::board_M5PaperColor , GPIO_NUM_15, GPIO_NUM_13, GPIO_NUM_14, 255        , 255       , GPIO_NUM_47 },
 { board_t::board_M5PaperMono  , GPIO_NUM_13, GPIO_NUM_12, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8  },
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
@@ -250,7 +253,8 @@ static constexpr const uint8_t _pin_table_other0[][2] = {
 { board_t::board_M5AtomS3U    , GPIO_NUM_35 },
 { board_t::board_M5AtomS3Lite , GPIO_NUM_35 },
 { board_t::board_M5StampS3    , GPIO_NUM_21 },
-{ board_t::board_M5StampPLC   , GPIO_NUM_21 },
+{ board_t::board_M5DualKey    , GPIO_NUM_21 },
+{ board_t::board_M5StamPLC   , GPIO_NUM_21 },
 { board_t::board_M5AirQ       , GPIO_NUM_21 },
 { board_t::board_M5Dial       , GPIO_NUM_21 },
 { board_t::board_M5DinMeter   , GPIO_NUM_21 },
@@ -417,6 +421,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 },
 #elif defined (CONFIG_IDF_TARGET_ESP32H2)
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
+{ board_t::board_M5ToughC5,
+  255        , GPIO_NUM_0 ,
+  255        , GPIO_NUM_1 ,
+  255        , 255        ,
+  GPIO_NUM_7 , GPIO_NUM_4 ,
+  GPIO_NUM_8 , GPIO_NUM_6 ,
+  GPIO_NUM_9 , 255        ,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_12, GPIO_NUM_11,
+  GPIO_NUM_2 , GPIO_NUM_3 ,
+  GPIO_NUM_2 , GPIO_NUM_3 ,
+  GPIO_NUM_23, GPIO_NUM_24,
+  GPIO_NUM_27, GPIO_NUM_28,
+  255        , GPIO_NUM_5 ,
+  255        , 255        ,
+  255        , 255        ,
+},
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 { board_t::board_M5Stack  ,
   255        , GPIO_NUM_35,
@@ -473,6 +494,13 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 { board_t::board_unknown  , 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 },
 };
 
+  int8_t M5Unified::_get_power_hold_pin(board_t id)
+  {
+    for (const auto& row : _pin_table_other1)
+    { if (row[0] == id) { return static_cast<int8_t>(row[1]); } }
+    return -1;
+  }
+
   void M5Unified::_setup_pinmap(board_t id)
   {
     if (id == board_t::board_M5Tab5X) {
@@ -501,7 +529,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #endif
 
   /// @return true when every write in the table was acknowledged.
-  static bool in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t i2c_freq = 100000u, const uint8_t retry = 0)
+  static bool in_i2c_bulk_write(const uint8_t i2c_addr, const uint8_t* bulk_data, const uint32_t freq = 100000u, const uint8_t retry = 0)
   {
     // bulk_data example..
     // const uint8_t bulk_data[] = {
@@ -513,7 +541,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     while (*bulk_data) {
       uint8_t len = *bulk_data++;
       uint8_t r = retry + 1;
-      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, i2c_freq) && --r) { m5gfx::delay(1); }
+      while (!M5.In_I2C.writeRegister(i2c_addr, bulk_data[0], &bulk_data[1], len - 1, freq) && --r) { m5gfx::delay(1); }
       all_ok &= (r != 0);
       bulk_data += len;
     }
@@ -608,7 +636,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (spk_cfg.pin_bck == GPIO_NUM_34 && enabled)
     {
       Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, true);
-      /// サンプリングレートに応じてAW88298のレジスタの設定値を変える;
+      /// AW88298 register values depend on the sample rate
       static constexpr uint8_t rate_tbl[] = {4,5,6,8,10,11,15,20,22,44};
       size_t reg0x06_value = 0;
       size_t rate = (spk_cfg.sample_rate + 1102) / 2205;
@@ -621,7 +649,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       aw88298_write_reg( 0x06, reg0x06_value );
       aw88298_write_reg( 0x0C, 0x0064 );  // volume setting (full volume)
     }
-    else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+    /// Stop the internal speaker when disabling, or when the target is not the internal speaker.
+    else
     {
       aw88298_write_reg( 0x04, 0x4000 );  // I2SEN=0 AMPPD=0 PWDN=0
       Power_Class::_core_s3_aw9523_bit(0x02, 0b00000100, false);
@@ -656,7 +685,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         ESP_LOGD("M5Unified", "enabling es8311\n");
         in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
       }
-      else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
+      else /// Stop the internal speaker when disabling.
       {
         ESP_LOGD("M5Unified", "disabling es8311\n");
         self->In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 0b00001000, 100000);
@@ -827,16 +856,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       M5.In_I2C.bitOn(pi4io1_i2c_addr, 0x05, 0b00000010, 400000);
     }
     else
-    { // 正規の power-down シーケンス。end() は cb(false) を I2S 停止より先に呼ぶため、
-      // ここは MCLK/BCLK が生きているうちに実行される。旧実装 (reg8 のみ書き込み) では
-      // DAC 稼働状態のままクロックが絶たれ、次回 enable の reset が毎回異なる残留状態
-      // から行われて受信位相が begin ごとに不定になっていた。毎回同一の power-down
-      // 状態へ落としてから終了することで、次回 enable を常に定義済み状態から始める。
-      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (過渡音を出さない)
-      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000); // DACCONTROL3: mute (SoftRamp 維持)
-      m5gfx::delay(1);                                             // soft-ramp 遷移待ち
-      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000); // DACPOWER: DAC L/R down + 全出力 off
-      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000); // CHIPPOWER: 全停止 (ADF deinit と同一の終端状態)
+    { // Power down in a fixed order while MCLK/BCLK are still running
+      // (end() calls cb(false) before stopping I2S), so the next enable
+      // always starts from the same defined state.
+      M5.In_I2C.bitOff(pi4io1_i2c_addr, 0x05, 0b00000010, 400000); // AMP off (no transient click)
+      // DACCONTROL3: mute (keep SoftRamp)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr, 25, 0x24, 400000);
+      // wait for the soft-ramp transition
+      m5gfx::delay(1);
+      // DACPOWER: DAC L/R down, all outputs off
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  4, 0xC0, 400000);
+      // CHIPPOWER: everything off (same end state as the ESP-ADF es8388 deinit)
+      M5.In_I2C.writeRegister8(es8388_i2c_addr,  2, 0xFF, 400000);
     }
 #endif
     return true;
@@ -1356,83 +1387,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     return true;
   }
 
-#if defined (CONFIG_IDF_TARGET_ESP32) && SOC_TOUCH_SENSOR_SUPPORTED
-  /// @param channel touch channel ids. (ESP-IDF v6 removed the touch_pad_t enum, so plain integers are used here)
-  /// @return true = all channels were read successfully.
-  static bool _read_touch_pad(uint32_t* results, const int* channel, const size_t channel_count)
-  {
-    for (size_t i = 0; i < channel_count; ++i) { results[i] = 0; }
-#if defined ( TOUCH_SENSOR_DEFAULT_FILTER_CONFIG )
-    if (channel_count > TOUCH_TOTAL_CHAN_NUM) { return false; }
-
-    /* Step 1: Create a new touch sensor controller handle with default sample configuration */
-    touch_sensor_sample_config_t sample_cfg = {};
-    sample_cfg.charge_duration_ms = 5.0f;
-    sample_cfg.charge_volt_lim_h = TOUCH_VOLT_LIM_H_1V7;
-    sample_cfg.charge_volt_lim_l = TOUCH_VOLT_LIM_L_0V5;
-
-    touch_sensor_config_t sens_cfg = {};
-    sens_cfg.power_on_wait_us = 256;
-    sens_cfg.meas_interval_us = 320.0;
-    sens_cfg.intr_trig_mode = TOUCH_INTR_TRIG_ON_BELOW_THRESH;
-    sens_cfg.intr_trig_group = TOUCH_INTR_TRIG_GROUP_BOTH;
-    sens_cfg.sample_cfg_num = 1;
-    sens_cfg.sample_cfg = &sample_cfg;
-    touch_sensor_handle_t sens_handle = nullptr;
-    if (touch_sensor_new_controller(&sens_cfg, &sens_handle) != ESP_OK) { return false; }
-
-    touch_channel_config_t chan_cfg = {};
-    chan_cfg.abs_active_thresh[0] = 1024;
-    chan_cfg.charge_speed = TOUCH_CHARGE_SPEED_7;
-    chan_cfg.init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT;
-    chan_cfg.group = TOUCH_CHAN_TRIG_GROUP_BOTH;
-    touch_channel_handle_t chan_handle[TOUCH_TOTAL_CHAN_NUM] = { nullptr, };
-    size_t created = 0;
-    while (created < channel_count
-        && touch_sensor_new_channel(sens_handle, channel[created], &chan_cfg, &chan_handle[created]) == ESP_OK) {
-      ++created;
-    }
-    bool result = false;
-    if (created == channel_count) {
-      touch_sensor_filter_config_t filter_cfg = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
-      if (touch_sensor_config_filter(sens_handle, &filter_cfg) == ESP_OK) {
-        bool scanned = false;
-        if (touch_sensor_enable(sens_handle) == ESP_OK) {
-          scanned = (touch_sensor_trigger_oneshot_scanning(sens_handle, 64) == ESP_OK);
-          touch_sensor_disable(sens_handle);
-        }
-        if (scanned) {
-          result = true;
-          for (size_t i = 0; i < channel_count; i++) {
-            result &= (touch_channel_read_data(chan_handle[i], TOUCH_CHAN_DATA_TYPE_SMOOTH, &results[i]) == ESP_OK);
-          }
-        }
-        // Passing nullptr releases the software filter timer. (del_controller does not)
-        touch_sensor_config_filter(sens_handle, nullptr);
-      }
-    }
-    while (created) {
-      touch_sensor_del_channel(chan_handle[--created]);
-    }
-    touch_sensor_del_controller(sens_handle);
-    return result;
-#else
-    if (touch_pad_init() != ESP_OK) { return false; }
-    bool result = true;
-    for (size_t i = 0; i < channel_count; i++) {
-      result &= (touch_pad_config((touch_pad_t)channel[i], TOUCH_PAD_THRESHOLD_MAX) == ESP_OK);
-    }
-    for (size_t i = 0; i < channel_count; i++) {
-      uint16_t tmp = 0;
-      result &= (touch_pad_read((touch_pad_t)channel[i], &tmp) == ESP_OK);
-      results[i] = tmp;
-    }
-    touch_pad_deinit();
-    return result;
-#endif
-  }
-#endif
-
   bool M5Unified::_microphone_enabled_cb_tab5(void* args, bool enabled)
   {
     (void)args;
@@ -1569,563 +1523,57 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr gpio_num_t CoreInk_BUTTON_PWR_PIN = GPIO_NUM_27;
 #endif
 
-  /// probe を始める前に一度だけ、デバイスの電源が安定するのを待つ。
-  /// 待ちが要るのは「電源投入から間もない」ことであってアドレスごとの事情ではないので、
-  /// 判定の入口で一度払う。旧実装は最初の probe が常に真を返して連鎖が止まっていたため
-  /// 結果的に 1 回しか待っていなかった。それを意図として書き直したもの。
-  void M5Unified::_wait_i2c_device_power(void)
+  board_t M5Unified::_default_fallback_board(void)
   {
-#if !defined(M5UNIFIED_PC_BUILD)
-    static bool waited = false;
-    if (!waited)
-    {
-      waited = true;
-      m5gfx::delay(50);
-    }
-#endif
-  }
-
-  bool M5Unified::_probe_i2c_addr(uint8_t sda, uint8_t scl, uint8_t addr)
-  {
-#if defined(M5UNIFIED_PC_BUILD)
-    return false;
-#else
-    /// アドレスの存在確認はソフトウェア I2C ポートで行う (オープンドレイン駆動で
-    /// ACK 競合が起きず、ハードウェアのペリフェラルにも触れない)。
-    /// ポートは M5GFX の autodetect probe (-1) と分ける。ソフト I2C のスロットは
-    /// 所有権を持たず、init が既存の設定を黙って奪う作りなので、ライブラリ同士で
-    /// 同じスロットを共有しない。
-    static constexpr int_fast16_t probe_i2c_port = -2;
-
-    _wait_i2c_device_power();
-
-    m5gfx::gpio::pin_backup_t pin_backup[] = { scl, sda };
-
-    // ここでは待たない。電源安定待ちは判定の入口で一度だけ行う (_wait_i2c_device_power)。
-    // アドレスごとに待つと、判定が空振りするたびに数十 ms が起動時間へ積み上がる。
-    m5gfx::pinMode(scl, m5gfx::pin_mode_t::input_pullup);
-    m5gfx::pinMode(sda, m5gfx::pin_mode_t::input_pullup);
-
-    // 指定ピンが「外部プルアップの載った I2C バス」かどうかを先に確かめる。
-    // ここは I2C ピンとは限らない場所を駆動する機種判別なので、判定を外すと
-    // 機種の読みが変わる。判定方式は M5GFX の autodetect probe と同一のものを使う
-    // (実機での実績がある形から動かさない。変えるなら該当機種すべてで再検証が要る)。
-    //
-    // 4 回の read のうち、後半 2 回は入力プルダウンにしても High になること
-    // (= 外部プルアップが内部プルダウンに勝つこと) を確認するもの。
-    // 弱いプルアップ (内部プルダウンと同程度の抵抗値) では通らないが、
-    // 「強いプルアップがある = I2C バスである」を要求するのがこの判定の趣旨。
-    const uint8_t cmd_bus_check_list[] = {
-      m5gfx::gpio::command_write_low          , scl,
-      m5gfx::gpio::command_read               , scl,  // low チェック
-      m5gfx::gpio::command_write_low          , sda,
-      m5gfx::gpio::command_read               , sda,  // low チェック
-      m5gfx::gpio::command_mode_input_pulldown, scl,
-      m5gfx::gpio::command_delay_usec         , 10,
-      m5gfx::gpio::command_read               , scl,  // 外部プルアップがあるなら High
-      m5gfx::gpio::command_mode_input_pullup  , scl,
-      m5gfx::gpio::command_mode_input_pulldown, sda,
-      m5gfx::gpio::command_delay_usec         , 10,
-      m5gfx::gpio::command_read               , sda,  // 外部プルアップがあるなら High
-      m5gfx::gpio::command_mode_input_pullup  , sda,
-      m5gfx::gpio::command_end
-    };
-    auto bus_check = [&](void) -> uint32_t
-    {
-      // ラッチを Low にしてから出力へ切り替える。直前は input_pullup (ラッチ High)
-      // なので、先に出力にすると一瞬 push-pull で High を駆動してしまう。
-      // ここは相手が何か分からないピンなので、High は一度も駆動しない。
-      m5gfx::gpio_lo(scl); m5gfx::pinMode(scl, m5gfx::pin_mode_t::output);
-      m5gfx::gpio_lo(sda); m5gfx::pinMode(sda, m5gfx::pin_mode_t::output);
-      return m5gfx::gpio::command(cmd_bus_check_list);
-    };
-
-    // 0x02 は「SCL は外部プルアップで戻るのに SDA だけ Low のまま」。前回の通信の
-    // 途中で止まったデバイスがデータ線を握っている典型で (ソフトリセットでは
-    // デバイスの電源が切れないため実際に起きる)、プルアップの無いただの Low ピンとは
-    // このシグネチャで区別できる。この場合だけは STOP を見せて握りを解かせ、
-    // もう一度確かめる。それ以外の不一致は I2C バスではないとみなして即座に帰る。
-    uint32_t check = bus_check();
-    if (check != 0x03 && check != 0x02)
-    {
-      for (auto& backup : pin_backup) { backup.restore(); }
-      return false;
-    }
-
-    // 前回の通信の途中で止まっているデバイスに STOP を見せて論理状態を戻す。
-    // START だけで戻らないデバイスが実在する (同ファイルの StampS3/Capsule 判別に
-    // 「STOP を出さないと正しく動作しないデバイスがあった (UnitHEART MAX30100)」の記録がある)。
-    // 線を Low へ駆動するか解放するかの 2 状態しか使わない (High を駆動しない) ので、
-    // デバイスが線を握っていてもパッド同士の衝突にはならない。
-    {
-      auto line_lo = [](uint8_t pin)
-      { m5gfx::gpio_lo(pin); m5gfx::pinMode(pin, m5gfx::pin_mode_t::output); };
-      auto line_hi = [](uint8_t pin)
-      { m5gfx::pinMode(pin, m5gfx::pin_mode_t::input_pullup); };
-      for (int i = 0; i < 8; ++i)
-      {
-        line_lo(scl); m5gfx::delayMicroseconds(5);
-        line_lo(sda); m5gfx::delayMicroseconds(5);
-        line_hi(scl); m5gfx::delayMicroseconds(5);
-        line_hi(sda); m5gfx::delayMicroseconds(5);  // SCL High 中の SDA Low->High = STOP
-      }
-    }
-
-    if (check != 0x03 && bus_check() != 0x03)
-    { // 握りが解けなかった。ここから先は probe しても意味がない。
-      for (auto& backup : pin_backup) { backup.restore(); }
-      return false;
-    }
-
-    bool hit = false;
-    if (m5gfx::i2c::init(probe_i2c_port, sda, scl).has_value())
-    {
-      // クロックが上がらないバス、前の通信の途中でデバイスがデータ線を握っている
-      // バスは、いずれも beginTransaction 側が検出して復旧または中断する。
-      // NACK の場合も beginTransaction 自体は成功を返し (内部で STOP を出して
-      // エラーをラッチする)、そのエラーは endTransaction が報告する。
-      // したがって両方の成功をもって「ACK が返った」と判定する。
-      hit = m5gfx::i2c::beginTransaction(probe_i2c_port, addr, 100000, false).has_value()
-         && m5gfx::i2c::endTransaction(probe_i2c_port).has_value();
-      m5gfx::i2c::release(probe_i2c_port);
-    }
-    for (auto& backup : pin_backup) {
-        backup.restore();
-    }
-    return hit;
-#endif
-  }
-
-  board_t M5Unified::_check_boardtype(board_t board)
-  {
+    // Build selection follows explicit fallback and detector candidates.
 #if defined (M5UNIFIED_PC_BUILD)
+    return board_t::board_unknown;
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
-    if (board == board_t::board_unknown)
-    {
-      switch (m5gfx::get_pkg_ver())
-      {
-      case EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6:
-        board = board_t::board_M5TimerCam;
-        break;
-
-      case EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4:
-        {
-          m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_2, GPIO_NUM_13, GPIO_NUM_19, GPIO_NUM_22, GPIO_NUM_27, GPIO_NUM_33, GPIO_NUM_34 };
-          m5gfx::pinMode(GPIO_NUM_34, m5gfx::pin_mode_t::input);
-          m5gfx::pinMode(GPIO_NUM_2, m5gfx::pin_mode_t::input_pullup);
-          board = board_t::board_M5StampPico;
-          if (m5gfx::gpio_in(GPIO_NUM_2)) // Branches other than StampPico ( StampPico G2 is always LOW )
-          {
-            board = board_t::board_M5AtomU;
-            if (m5gfx::gpio_in(GPIO_NUM_34)) { // Branches other than AtomU ( AtomU G34 is always LOW )
-              board = board_t::board_M5AtomMatrix;
-#if SOC_TOUCH_SENSOR_SUPPORTED
-/* G27(RGBLED)に対してタッチセンサを用い、容量の差に基づいて Matrix の識別を行う。
-  G27に対してタッチセンサを使用すると、得られる値は Lite/ECHOの方が大きく、Matrixの方が小さい。
-  なおタッチセンサの値には個体差があるため、判定の基準として絶対値ではなく G13(NC)のタッチセンサ値を比較に用いる。
-*/
-              uint32_t results[2] = { 0, 0 };
-              static constexpr int s_channel_id[] = {
-                  4, //Touch pad channel 4 is GPIO13(ESP32)
-                  7, //Touch pad channel 7 is GPIO27(ESP32)
-              };
-              bool touch_ok = _read_touch_pad(results, s_channel_id, 2);
-
-              int diff = (results[1] * 3 - results[0]);
-              // M5_LOGV("G13 = %d / G27 = %d / diff = %d", results[0], results[1], diff);
-   // true==(Lite/ECHO) / false==AtomMatrix (on read failure, keep the AtomMatrix default)
-              if (touch_ok && diff >= 0)
-#else
-/*
-  タッチセンサAPIが使えない場合の処理 (ESP-IDFのバージョンに依る)
-  GPIOの立上り速度の差を用いて LiteとMatrix の識別を行う。
-  (Matrixの方がinput_pullupでHIGHになるまでの時間が長いため、この性質を利用して判定する)
-*/
-              portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-              uint32_t g27 = 0;
-              // 8回読み取って立上り速度の差を見る
-              for (int i = 0; i < 8; ++i)
-              {
-                lgfx::pinMode(GPIO_NUM_27, lgfx::pin_mode_t::input_pulldown);
-                delay(1);
-                taskENTER_CRITICAL(&mux);
-                lgfx::pinMode(GPIO_NUM_27, lgfx::pin_mode_t::input_pullup);
-                g27 += lgfx::gpio_in(GPIO_NUM_27);
-                taskEXIT_CRITICAL(&mux);
-              }
-
-              // Branches other than AtomMatrix ( AtomMatrix G27 is delayed from becoming HIGH )
-              if (g27 > 4)
+#if defined (ARDUINO_M5STACK_CORE_ESP32) || defined (ARDUINO_M5STACK_FIRE) || defined (ARDUINO_M5Stack_Core_ESP32)
+    return board_t::board_M5Stack;
+#elif defined (ARDUINO_M5STACK_CORE2) || defined (ARDUINO_M5STACK_Core2)
+    return board_t::board_M5StackCore2;
+#elif defined (ARDUINO_M5STICK_C) || defined (ARDUINO_M5Stick_C)
+    return board_t::board_M5StickC;
+#elif defined (ARDUINO_M5STICK_C_PLUS) || defined (ARDUINO_M5Stick_C_Plus)
+    return board_t::board_M5StickCPlus;
+#elif defined (ARDUINO_M5STACK_COREINK) || defined (ARDUINO_M5Stack_CoreInk)
+    return board_t::board_M5StackCoreInk;
+#elif defined (ARDUINO_M5STACK_PAPER) || defined (ARDUINO_M5STACK_Paper)
+    return board_t::board_M5Paper;
+#elif defined (ARDUINO_M5STACK_TOUGH)
+    return board_t::board_M5Tough;
+#elif defined (ARDUINO_M5STACK_ATOM) || defined (ARDUINO_M5Stack_ATOM)
+    return board_t::board_M5AtomLite;
+#elif defined (ARDUINO_M5STACK_TIMER_CAM) || defined (ARDUINO_M5Stack_Timer_CAM)
+    return board_t::board_M5TimerCam;
 #endif
-              {
-                auto result = m5gfx::gpio::command(
-                  (const uint8_t[]) {
-                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_22,
-                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_19,
-                  m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_33,
-                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_33,
-                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_19,
-                  m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_22,
-                  m5gfx::gpio::command_read               , GPIO_NUM_33,
-                  m5gfx::gpio::command_read               , GPIO_NUM_19,
-                  m5gfx::gpio::command_read               , GPIO_NUM_22,
-                  m5gfx::gpio::command_mode_input         , GPIO_NUM_33,
-                  m5gfx::gpio::command_mode_input         , GPIO_NUM_19,
-                  m5gfx::gpio::command_mode_input         , GPIO_NUM_22,
-                  m5gfx::gpio::command_delay              , 1,
-                  m5gfx::gpio::command_read               , GPIO_NUM_33,
-                  m5gfx::gpio::command_read               , GPIO_NUM_19,
-                  m5gfx::gpio::command_read               , GPIO_NUM_22,
-                  m5gfx::gpio::command_end
-                  }
-                );
-                // G19 G22 G33 = ECHOのI2Sスピーカ用ピン。プルアップを無効化するとすぐにLOWになるため、この性質を利用して判定する。
-                // なお当該ピンに何かを外付けしている場合は判定に失敗する可能性がある。
-                board = board_t::board_M5AtomLite;
-                if ((result) == 0b111000)
-                { // Branches for AtomECHO
-                  board = board_t::board_M5AtomVoice;
-                }
-              }
-            }
-          }
-          for (auto &backup : pin_backup) {
-            backup.restore();
-          }
-        }
-        break;
-
-      case 6: // EFUSE_RD_CHIP_VER_PKG_ESP32PICOV3_02: // ATOM PSRAM
-        board = board_t::board_M5AtomPsram;
-        break;
-
-      default:
-
-#if defined ( ARDUINO_M5STACK_CORE_ESP32 ) || defined ( ARDUINO_M5STACK_FIRE ) || defined ( ARDUINO_M5Stack_Core_ESP32 )
-
-        board = board_t::board_M5Stack;
-
-#elif defined ( ARDUINO_M5STACK_CORE2 ) || defined ( ARDUINO_M5STACK_Core2 )
-
-        board = board_t::board_M5StackCore2;
-
-#elif defined ( ARDUINO_M5STICK_C ) || defined ( ARDUINO_M5Stick_C )
-
-        board = board_t::board_M5StickC;
-
-#elif defined ( ARDUINO_M5STICK_C_PLUS ) || defined ( ARDUINO_M5Stick_C_Plus )
-
-        board = board_t::board_M5StickCPlus;
-
-#elif defined ( ARDUINO_M5STACK_COREINK ) || defined ( ARDUINO_M5Stack_CoreInk )
-
-        board = board_t::board_M5StackCoreInk;
-
-#elif defined ( ARDUINO_M5STACK_PAPER ) || defined ( ARDUINO_M5STACK_Paper )
-
-        board = board_t::board_M5Paper;
-
-#elif defined ( ARDUINO_M5STACK_TOUGH )
-
-        board = board_t::board_M5Tough;
-
-#elif defined ( ARDUINO_M5STACK_ATOM ) || defined ( ARDUINO_M5Stack_ATOM )
-
-        board = board_t::board_M5AtomLite;
-
-#elif defined ( ARDUINO_M5STACK_TIMER_CAM ) || defined ( ARDUINO_M5Stack_Timer_CAM )
-
-        board = board_t::board_M5TimerCam;
-
-#endif
-        break;
-      }
-    }
-
+    // Pure exclusion belongs to package defaults, below build selection.
+    const auto pkg = m5gfx::get_pkg_ver();
+    if (pkg == 6) { return board_t::board_M5AtomPsram; } // PICO-V3
+    if (pkg == 5) { return board_t::board_M5StampPico; } // PICO-D4
+    // StampPico and AtomPsram have no positive detector and remain defaults.
+    // All D0WDQ6 members have detectors; other packages have no M5 boards.
+    // Do not assume a rejected member. Unknown retains the generic I2C map.
+    return board_t::board_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
-
-    switch (m5gfx::get_pkg_ver())
-    {
-    default:
-    case 0: // EFUSE_PKG_VERSION_ESP32S3:     // QFN56
-      if (board == board_t::board_unknown)
-      { 
-        #if defined (BOARD_ID) && BOARD_ID == 147
-          board = board_t::board_M5DualKey;
-          // !!!NOTE: Set to input mode to prevent the device from failing to shut down.
-          m5gfx::pinMode(GPIO_NUM_7, m5gfx::pin_mode_t::input);
-          m5gfx::pinMode(GPIO_NUM_8, m5gfx::pin_mode_t::input);
-          break;
-        #endif
-        /// StampS3 or AtomS3Lite,S3U ?
-        ///   After setting GPIO38 to INPUT PULL-UP, change to INPUT and read it.
-        ///   In the case of STAMPS3: Returns 0. Charge is sucked by SGM2578.
-        ///   In the case of ATOMS3Lite/S3U : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
-        ///
-        /// AtomS3Lite or AtomS3U ?
-        ///   After setting GPIO4 to INPUT PULL-UP, read it.
-        ///   In the case of ATOMS3Lite : Returns 0. Charge is sucked by InfraRed.
-        ///   In the case of ATOMS3U    : Returns 1. Charge remains. ( Since it is not connected to anywhere. )
-
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_4, GPIO_NUM_8, GPIO_NUM_10, GPIO_NUM_12, GPIO_NUM_38 };
-        auto result = m5gfx::gpio::command(
-          (const uint8_t[]) {
-          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_4,
-          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_12,
-          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_38,
-          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_8,
-          m5gfx::gpio::command_mode_input_pulldown, GPIO_NUM_10,
-          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_4,
-          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_12,
-          m5gfx::gpio::command_mode_input_pullup  , GPIO_NUM_38,
-          m5gfx::gpio::command_read               , GPIO_NUM_8,
-          m5gfx::gpio::command_read               , GPIO_NUM_10,
-          m5gfx::gpio::command_read               , GPIO_NUM_4,
-          m5gfx::gpio::command_read               , GPIO_NUM_12,
-          m5gfx::gpio::command_read               , GPIO_NUM_38,
-          m5gfx::gpio::command_mode_input         , GPIO_NUM_38,
-          m5gfx::gpio::command_delay              , 1,
-          m5gfx::gpio::command_read               , GPIO_NUM_38,
-          m5gfx::gpio::command_end
-          }
-        );
-        /// result には、command_read で得たGPIOの状態が1bitずつ4回分入っている。
-        board = ((const board_t[])
-          { //                                                      ↓StampS3 pattern↓
-            board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
-            board_t::board_M5AtomS3Lite,board_t::board_M5AtomS3Lite,board_t::board_unknown  , board_t::board_M5AtomS3Lite, // ← AtomS3Lite pattern
-            board_t::board_M5AtomS3U,   board_t::board_M5AtomS3U,   board_t::board_M5StampS3, board_t::board_M5AtomS3U,    // ← AtomS3U pattern
-            board_t::board_unknown,     board_t::board_unknown,     board_t::board_M5StampS3, board_t::board_unknown,      // ← unknown
-          })[result&15];
-        if ((result & 3) == 2) { // StampS3 pattern
-          if ((result >> 3) == 0b110) {
-            board = board_t::board_M5Capsule;
-            // 自動検出の際。PortAに余分な波形が出ているので、一度 I2C STOPコンディションを出しておく。
-            // ※ これをしないと正しく動作しないデバイスが存在した。UnitHEART MAX30100
-            // Release the Grove pins afterwards: left as push-pull outputs they keep driving High,
-            // and drivers that only enable the input (e.g. RMT RX on ESP-IDF 5.4+) cannot see the line.
-            m5gfx::gpio::pin_backup_t grove_backup[] = { GPIO_NUM_15, GPIO_NUM_13 };
-            m5gfx::gpio::command(
-              (const uint8_t[]) {
-              m5gfx::gpio::command_mode_output, GPIO_NUM_15,
-              m5gfx::gpio::command_write_low  , GPIO_NUM_15,
-              m5gfx::gpio::command_mode_output, GPIO_NUM_13,
-              m5gfx::gpio::command_write_low  , GPIO_NUM_13,
-              m5gfx::gpio::command_write_high , GPIO_NUM_15,
-              m5gfx::gpio::command_write_high , GPIO_NUM_13,
-              m5gfx::gpio::command_end
-              }
-            );
-            for (auto &backup : grove_backup) {
-              backup.restore();
-            }
-          }
-        }
-        for (auto &backup : pin_backup) {
-          backup.restore();
-        }
-      }
-
-      if (board == board_t::board_unknown) {
-        /// PowerHub ?
-        if (_probe_i2c_addr(45, 48, 0x50)) {
-          board = board_t::board_M5PowerHub;
-        }
-      }
-      break;
-
-    case 1: // EFUSE_PKG_VERSION_ESP32S3PICO: // LGA56
-    if (board == board_t::board_unknown) {
-        /// 内部 I2C バス (SDA45/SCL0) に載るデバイスで先に決める。他ピンの probe を
-        /// 間に挟まないので、ここで確定する機種は 48/47 に一切触れずに済む
-        /// (AtomVoiceS3R では GPIO48 が I2S の DOUT)。
-        ///
-        /// AtomS3RExt / AtomS3RCam have a BMI270 on the internal I2C bus.
-        /// この 2 機種は基板が共通で、カメラ部がユーザーの扱えるブレッドボードに
-        /// なっているため、内部バスにユーザーのデバイスが載りうる。オンボードで
-        /// 必ず存在する BMI270 を先に見て、後から載ったアドレスに identity を
-        /// 奪われないようにする。
-        if (_probe_i2c_addr(45, 0, 0x68)
-         || _probe_i2c_addr(45, 0, 0x69)) {
-          board = board_t::board_M5AtomS3RExt;
-        }
-        /// AtomVoiceS3R ?
-        else if (_probe_i2c_addr(45, 0, 0x18)) {
-          board = board_t::board_M5AtomVoiceS3R;
-        }
-        /// Stamp-S3Bat ? (内部バスに何も居なかったときだけ別のピンを触る)
-        else if (_probe_i2c_addr(48, 47, 0x6E)) {
-          board = board_t::board_M5StampS3Bat;
-        }
-        /// StampS3Mini has no other onboard device that can identify it.
-        else {
-          board = board_t::board_M5StampS3Mini;
-        }
-      }
-
-      if (board == board_t::board_M5AtomS3RExt)
-      { /// AtomS3RCam or AtomS3RExt ?
-      // Cam    = GC0308 = I2C 7bit addr = 0x21
-      // CamM12 = OV3660 = I2C 7bit addr = 0x3C
-        m5gfx::gpio_lo(GPIO_NUM_18);
-        m5gfx::pinMode(GPIO_NUM_18, m5gfx::pin_mode_t::output);
-        m5gfx::gpio::pin_backup_t pin_backup[] = { GPIO_NUM_9, GPIO_NUM_12, GPIO_NUM_21 };
-        { // G9=SCL, G12=SDA, G21=XCLK
-          m5gfx::gpio::command(
-            (const uint8_t[]) {
-            m5gfx::gpio::command_write_low, GPIO_NUM_9,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_9,  // SCL
-            m5gfx::gpio::command_write_low, GPIO_NUM_12,
-            m5gfx::gpio::command_mode_output, GPIO_NUM_12, // SDA
-            m5gfx::gpio::command_mode_output, GPIO_NUM_21, // XCL
-            m5gfx::gpio::command_write_high, GPIO_NUM_9,
-            m5gfx::gpio::command_write_high, GPIO_NUM_21,
-            m5gfx::gpio::command_write_high, GPIO_NUM_12,
-          });
-          auto lo_reg = m5gfx::get_gpio_lo_reg(GPIO_NUM_21);
-          auto hi_reg = m5gfx::get_gpio_hi_reg(GPIO_NUM_21);
-
-          // prepare camera module (need XCLK signal)
-          for (int xclk = 32768 * 54; xclk != 0; --xclk)
-          {
-            *lo_reg = 1 << GPIO_NUM_21;
-            *hi_reg = 1 << GPIO_NUM_21;
-          }
-          uint32_t result = 0;
-          for (uint8_t i2caddr: (const uint8_t[]){ 0x3C << 1, 0x21 << 1 }) {
-            for (int xclk = 32768 * 2; xclk != 0; --xclk) {
-              *lo_reg = 1 << GPIO_NUM_21;
-              *hi_reg = 1 << GPIO_NUM_21;
-            }
-            bool nack = true;
-            // The camera module is identified using I2C communication via GPIO self-operation.
-            *lo_reg = 1 << GPIO_NUM_12;  // SDA LOW = START
-            for (int cycle = 0; cycle < 20; ++cycle) {
-              for (int j = 0; j < 2; ++j) {
-                for (int xclk = 8; xclk != 0; --xclk) {
-                  *lo_reg = 1 << GPIO_NUM_21;
-                  *hi_reg = 1 << GPIO_NUM_21;
-                }
-                *((cycle & 1) ? hi_reg : lo_reg) = 1 << GPIO_NUM_9; // SCL
-              }
-              if (cycle & 1) {
-                if (cycle == 17) {
-                  nack = m5gfx::gpio_in(GPIO_NUM_12);
-                }
-              } else {
-                *((i2caddr & 0x80) ? hi_reg : lo_reg) = 1 << GPIO_NUM_12; // SDA
-                i2caddr <<= 1;
-                if (cycle >= 16) {
-                  m5gfx::pinMode(GPIO_NUM_12, (cycle == 16) ? m5gfx::pin_mode_t::input : m5gfx::pin_mode_t::output);
-                }
-              }
-            }
-            *hi_reg = 1 << GPIO_NUM_12;  // SDA HIGH = STOP
-            result = result << 1 | nack;
-          }
-          // printf("CAM TEST  RESULT: %08x \r\n", (int)result);
-          if (result == 1 || result == 2) {
-          // result == 1 : OV3660
-          // result == 2 : GC0308
-            board = board_t::board_M5AtomS3RCam;
-          }
-        }
-        for (auto &backup : pin_backup) {
-          backup.restore();
-        }
-      }
-    }
-
-
+    // ESP32-S3 package 0 is QFN56 and package 1 is LGA56.
+    if (m5gfx::get_pkg_ver() == 1) { return board_t::board_M5StampS3Mini; }
+    return board_t::board_M5StampS3;
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
-    if (board == board_t::board_unknown)
-    { // StampC3 or StampC3U ?
-      uint32_t tmp = *((volatile uint32_t *)(IO_MUX_GPIO20_REG));
-      m5gfx::pinMode(GPIO_NUM_20, m5gfx::pin_mode_t::input_pulldown);
-      // StampC3 has a strong external pull-up on GPIO20, which is HIGH even when input_pulldown is set.
-      // Therefore, if it is LOW, it is not StampC3 and can be assumed to be StampC3U.
-      // However, even if it goes HIGH, something may be connected to GPIO20 by StampC3U, so it is treated as unknown.
-      // The StampC3U determination uses the fallback_board setting.
-      if (m5gfx::gpio_in(GPIO_NUM_20) == false)
-      {
-        board = board_t::board_M5StampC3U;
-      }
-      *((volatile uint32_t *)(IO_MUX_GPIO20_REG)) = tmp;
-    }
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C6)
-    if (board == board_t::board_unknown)
-    {
-      if (m5gfx::get_pkg_ver() == 1)
-      { // QFN32 : NanoC6 = C6FH4 (FLASH_CAP=1) / StampC6 = C6FH8 (FLASH_CAP=2)
-        if (REG_GET_FIELD(EFUSE_RD_MAC_SPI_SYS_4_REG, EFUSE_FLASH_CAP) == 2)
-        {
-          board = board_t::board_M5StampC6;
-        }
-        else
-        { // NanoC6
-          board = board_t::board_M5NanoC6;
-        }
-      }
-      // QFN40 (PKG_VERSION=0) : NessoN1 / UnitC6L carry displays and are
-      // identified by M5GFX; an undetected QFN40 board stays unknown.
-    }
-
-#elif defined (CONFIG_IDF_TARGET_ESP32C5)
-    if (board == board_t::board_unknown)
-    {
-#if defined (BOARD_ID) && BOARD_ID == 153
-      board = board_t::board_M5StampC5;
-#else
-      // StampC5 = ESP32-C5HF4 (in-package 4MB flash, no PSRAM) : FLASH_CAP=1, PSRAM_CAP=0
-      // ToughC5 = ESP32-C5HR8 (8MB PSRAM) carries a display and is identified by M5GFX.
-      std::uint32_t sys2 = REG_READ(EFUSE_RD_MAC_SYS2_REG);
-      if (((sys2 >> EFUSE_FLASH_CAP_S) & EFUSE_FLASH_CAP_V) == 1
-       && ((sys2 >> EFUSE_PSRAM_CAP_S) & EFUSE_PSRAM_CAP_V) == 0)
-      {
-        board = board_t::board_M5StampC5;
-      }
-#endif
-    }
-
-#elif defined (CONFIG_IDF_TARGET_ESP32H2)
-    if (board == board_t::board_unknown)
-    { // NanoH2
-      board = board_t::board_M5NanoH2;
-    }
-
+    return board_t::board_M5StampC3U;
+#elif defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32H2) || defined (CONFIG_IDF_TARGET_ESP32C5)
+    // Package-only Stamp suggestions arrive as detector candidates. Do not
+    // assume a Nano or Stamp after its positive detector rejects the board.
+    return board_t::board_unknown;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-    if (board == board_t::board_unknown)
-    {
-#if defined (BOARD_ID) && BOARD_ID == 31
-      board = board_t::board_M5CoreP4X;
+    // Unidentified P4 modules have no display or board-specific power contract.
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+    return info.revision >= 300 ? board_t::board_M5StampP4X : board_t::board_M5StampP4;
 #else
-      m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
-      m5gfx::pinMode(GPIO_NUM_0, m5gfx::pin_mode_t::input_pulldown);
-      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 and M5Tab5X G32 always High
-      {
-        esp_chip_info_t chip_info;
-        esp_chip_info(&chip_info);
-        board = chip_info.revision >= 300
-              ? board_t::board_M5Tab5X
-              : board_t::board_M5Tab5;
-      }
-      else if(m5gfx::gpio_in(GPIO_NUM_0)) // M5UnitPoEP4 G0 always High
-        board = board_t::board_M5UnitPoEP4;
-      else
-      {
-        esp_chip_info_t chip_info;
-        esp_chip_info(&chip_info);
-        board = chip_info.revision >= 300
-              ? board_t::board_M5StampP4X
-              : board_t::board_M5StampP4;
-      }
+    return board_t::board_unknown;
 #endif
-    }
-
-#endif
-
-    return board;
   }
 
   void M5Unified::_setup_i2c(board_t board)
@@ -2142,14 +1590,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     i2c_port_t ex_port = I2C_NUM_0;
 #if SOC_I2C_NUM == 1 || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32C5)
     i2c_port_t in_port = I2C_NUM_0;
-// M5GFX が LP_I2C 対応をコンパイルする条件と同一に保つこと
-// (条件を満たさない SDK では LP ポートを開けないため HP のまま運用する)
+// Keep identical to the condition under which M5GFX compiles its LP_I2C support (an SDK that does
+// not meet it cannot open the LP port, so the HP port stays in use)
 #if defined (CONFIG_IDF_TARGET_ESP32C5) && defined ( SOC_LP_I2C_NUM ) && ( SOC_LP_I2C_NUM > 0 ) \
  && __has_include ( <driver/i2c_master.h> ) && defined ( ESP_IDF_VERSION_VAL ) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
     if (board == board_t::board_M5ToughC5)
-    { /// 内部バス (G2/G3) は LP_I2C の固定パッドと一致するため LP ポートへ割り当てる。
-      /// PortA も同じバスの物理分配なので Ex_I2C は同ポートを共有し (初代 BASIC と
-      /// 同じ形)、HP の I2C0 は丸ごと空く。
+    { /// The internal bus (G2/G3) matches the fixed LP_I2C pads, so it goes to the LP port. PortA
+      /// is a physical fan-out of the same bus, so Ex_I2C shares the port (as on the original Core
+      /// BASIC), and the HP I2C0 stays completely free.
       in_port = LP_I2C_NUM_0;
       ex_port = LP_I2C_NUM_0;
     }
@@ -2211,7 +1659,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       {
         auto ioexp = new PI4IOE5V6408_Class;
         ioexp->begin();
@@ -2229,8 +1677,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
     case board_t::board_M5ToughC5:
-      { /// LCD 電源/リセット/バックライトのほか TF 電源 (PYG6) と
-        /// TF カード検出 (PYG14) がこの IOE にぶら下がる
+      { /// Besides LCD power/reset/backlight, TF power (PYG6) and TF card detect (PYG14) hang off
+        /// this IO expander
         auto ioexp = new M5IOE1_Class;
         ioexp->begin();
         _io_expander[0].reset(ioexp);
@@ -2468,12 +1916,36 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 
     case board_t::board_M5Capsule:
+      {
+        // Board detection leaves stray edges on the Port A lines. Issue an I2C STOP so
+        // a device on the port (e.g. UnitHEART MAX30100) does not stay mid-transfer,
+        // then release the pins: left as push-pull outputs they keep driving High, and
+        // drivers that only enable the input (e.g. RMT RX on ESP-IDF 5.4+) cannot see the line.
+        m5gfx::gpio::pin_backup_t grove_backup[] = { GPIO_NUM_15, GPIO_NUM_13 };
+        m5gfx::gpio::command(
+          (const uint8_t[]) {
+          m5gfx::gpio::command_mode_output, GPIO_NUM_15,
+          m5gfx::gpio::command_write_low  , GPIO_NUM_15,
+          m5gfx::gpio::command_mode_output, GPIO_NUM_13,
+          m5gfx::gpio::command_write_low  , GPIO_NUM_13,
+          m5gfx::gpio::command_write_high , GPIO_NUM_15,
+          m5gfx::gpio::command_write_high , GPIO_NUM_13,
+          m5gfx::gpio::command_end
+          }
+        );
+        for (auto &backup : grove_backup) {
+          backup.restore();
+        }
+      }
+      m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
+      break;
+
     case board_t::board_M5Dial:
     case board_t::board_M5DinMeter:
       m5gfx::pinMode(GPIO_NUM_42, m5gfx::pin_mode_t::input);
       break;
 
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
       {
         auto& ioexp = getIOExpander(0);
         // lcd backlight
@@ -2584,8 +2056,8 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     case board_t::board_M5Tab5:
     case board_t::board_M5Tab5X:
 #if defined (ARDUINO)
-      // 汎用 esp32p4 ボード選択時、core 既定の SDIO ピンでは C6 (WiFi/BLE) に届かない。
-      // WiFi.begin より前 (ESP-Hosted 初期化前) に Tab5 の配線へ差し替える。
+      // With the generic esp32p4 board selected, the core's default SDIO pins do not reach the C6
+      // (WiFi/BLE). Switch to the Tab5 wiring before WiFi.begin (before ESP-Hosted initializes).
       if (hostedSetPins && !(hostedIsInitialized && hostedIsInitialized()))
       {
         hostedSetPins(GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_11, GPIO_NUM_10, GPIO_NUM_9, GPIO_NUM_8, GPIO_NUM_15);
@@ -2938,7 +2410,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               {
                 flg_atomic_spk = true;
                 ESP_LOGD("M5Unified", "ATOMIC SPK");
-                // atomic_spkのSDカード用ピンを割当
+                // Assign the SD card pins of Atomic SPK
                 _get_pin_table[sd_spi_sclk] = GPIO_NUM_7;
                 _get_pin_table[sd_spi_copi] = GPIO_NUM_6;
                 _get_pin_table[sd_spi_cipo] = GPIO_NUM_8;
@@ -3116,7 +2588,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         }
         break;
 
-      case board_t::board_M5StampPLC:
+      case board_t::board_M5StamPLC:
         if (cfg.internal_spk)
         {
           spk_cfg.pin_data_out = GPIO_NUM_44;
@@ -3224,7 +2696,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
               {
                 flg_atomic_spk = true;
                 ESP_LOGD("M5Unified", "ATOMIC SPK");
-                // atomic_spkのSDカード用ピンを割当
+                // Assign the SD card pins of Atomic SPK
                 _get_pin_table[sd_spi_sclk] = pin;
                 _get_pin_table[sd_spi_copi] = GPIO_NUM_19;
                 _get_pin_table[sd_spi_cipo] = GPIO_NUM_33;
@@ -3356,11 +2828,10 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     switch (getBoard())
     {
     case board_t::board_M5ToughC5:
-      { // TOUCH_INT や RTC_INT は PM1 に集約され、PM1 の IRQ 出力 -> GPIO4 が
-        // 唯一の wakeup ピンになる。IRQ 出力は IRQ ステータス (0x40-0x42) が
-        // 全て 0 になるまで Low を保つため、ここでクリアして解放する。
-        // WAKE_SRC が残っていると IRQ Status 3 の WAKEUP ビットが再セット
-        // され続けるので、先に WAKE_SRC を消す。
+      { // TOUCH_INT and RTC_INT are routed into the PM1, so the PM1 IRQ output -> GPIO4 is the only
+        // wakeup pin. The IRQ output stays Low until the IRQ status registers (0x40-0x42) are all
+        // 0, so clear them here to release it. While WAKE_SRC is set, the WAKEUP bit of IRQ Status
+        // 3 keeps getting set again, so clear WAKE_SRC first.
         res  = Power.M5pm1.clearWakeSource();
         res &= Power.M5pm1.clearIRQStatus();
       }
@@ -3592,7 +3063,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                         | ((!m5gfx::gpio_in(GPIO_NUM_0)) & 1) << 1;
       break;
 
-    case board_t::board_M5StampPLC:
+    case board_t::board_M5StamPLC:
     {
       use_rawstate_bits = 0b00111;
       uint8_t value = 0xFF;

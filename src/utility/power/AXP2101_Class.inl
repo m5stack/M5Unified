@@ -43,46 +43,37 @@ namespace m5
   }
 
   // 0=ALDO1 ~ 3=ALDO4 / 4=BLDO1 / 5=BLDO2
-  void AXP2101_Class::_set_LDO(std::uint8_t num, int voltage)
+  bool AXP2101_Class::_set_LDO(std::uint8_t num, int voltage)
   {
-    if (num > 5) return;
+    if (num > 5) return false;
     std::uint8_t reg_volt = num + 0x92;
     voltage -= 500;
     /// convert voltage to value
     std::uint_fast8_t val = (voltage < 0) ? 0 : std::min(voltage / 100, 0x1E);
-    writeRegister8(reg_volt, val);
+    // The enable bit is written even when the voltage write failed. An enable
+    // request reports the AND of both writes; a disable request reports only
+    // whether the enable bit was cleared.
+    // (An enable request may then bring the rail up at its previous voltage
+    // and still report false: the requested state was not reached.)
+    bool ok = writeRegister8(reg_volt, val);
 
     std::uint_fast8_t reg90bit = 1 << num;
-    if (voltage < 0)
-    {
-      bitOff(0x90, reg90bit);
-    }
-    else
-    {
-      bitOn(0x90, reg90bit);
-    }
+    return (voltage < 0) ? bitOff(0x90, reg90bit) : (bitOn(0x90, reg90bit) && ok);
   }
 
-  void AXP2101_Class::_set_DLDO(std::uint8_t num, int voltage)
+  bool AXP2101_Class::_set_DLDO(std::uint8_t num, int voltage)
   {
-    if (num > 1) return;
+    if (num > 1) return false;
 
     std::uint8_t reg_volt = num + 0x99;
     voltage -= 500;
     /// convert voltage to value
     std::uint_fast8_t val = (voltage < 0) ? 0 : std::min(voltage / (num ? 50 : 100), num ? 0x13 : 0x1C);
-    writeRegister8(reg_volt, val);
+    bool ok = writeRegister8(reg_volt, val);
 
     uint8_t reg = 0x90 + num;
     uint8_t bit = num ? 0x01 : 0x80;
-    if (voltage < 0)
-    {
-      bitOff(reg, bit);
-    }
-    else
-    {
-      bitOn(reg, bit);
-    }
+    return (voltage < 0) ? bitOff(reg, bit) : (bitOn(reg, bit) && ok);
   }
 
   bool AXP2101_Class::_get_LDOEn(std::uint8_t num)
@@ -95,13 +86,29 @@ namespace m5
     return res;
   }
 
-  void AXP2101_Class::setBatteryCharge(bool enable)
+  bool AXP2101_Class::setBatteryCharge(bool enable)
   {
     std::uint8_t val = 0;
-    if (readRegister(0x18, &val, 1))
-    {
-      writeRegister8(0x18, (val & 0xFD) | (enable << 1));
-    }
+    if (!readRegister(0x18, &val, 1)) { return false; }
+    return writeRegister8(0x18, (val & 0xFD) | (enable << 1));
+  }
+
+  bool AXP2101_Class::getBatteryCharge(bool* enabled)
+  {
+    std::uint8_t val = 0;
+    if (enabled == nullptr || !readRegister(0x18, &val, 1)) { return false; }
+    *enabled = (val & 0x02) != 0;
+    return true;
+  }
+
+  bool AXP2101_Class::readPmuStatus1(std::uint8_t* value)
+  {
+    return value != nullptr && readRegister(0x00, value, 1);
+  }
+
+  bool AXP2101_Class::readPmuStatus2(std::uint8_t* value)
+  {
+    return value != nullptr && readRegister(0x01, value, 1);
   }
 
   void AXP2101_Class::setPreChargeCurrent(std::uint16_t max_mA)
@@ -115,38 +122,36 @@ namespace m5
     writeRegister8(0x61, i); 
   }
 
-  void AXP2101_Class::setChargeCurrent(std::uint16_t max_mA)
-  {
+  bool AXP2101_Class::setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA)
+  { /// reg 0x62 counts in steps of 25mA up to 200mA and 100mA above it, so the
+    /// register value is the table index + 4 (code 4 = the lowest step, 100mA).
     max_mA /= 5;
     if (max_mA > 1000/5) { max_mA = 1000/5; }
     static constexpr std::uint8_t table[] = { 125 / 5, 150 / 5, 175 / 5, 200 / 5, 300 / 5, 400 / 5, 500 / 5, 600 / 5, 700 / 5, 800 / 5, 900 / 5, 1000 / 5, 255 };
 
     size_t i = 0;
     while (table[i] <= max_mA) { ++i; }
-    i += 4;
-    writeRegister8(0x62, i);
+    if (!writeRegister8(0x62, i + 4)) { return false; }
+    if (applied_mA) { *applied_mA = i ? (std::uint16_t)(table[i - 1] * 5) : 100; }
+    return true;
   }
 
-  void AXP2101_Class::setChargeVoltage(std::uint16_t max_mV)
+  bool AXP2101_Class::setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV)
   { /// reg 0x64 selects the constant-voltage target: 1 = 4.0V through 5 = 4.4V,
     /// with 0 reserved. An early revision of the datasheet also documented a
     /// 4.6V setting, which later revisions dropped; nothing this library runs
     /// on carries a cell that charges to 4.6V, so a request that high is held
     /// at the highest step both revisions agree on rather than sent to a code
     /// whose meaning depends on the silicon.
-    ///
-    /// The earlier form subtracted a bias from the argument before comparing.
-    /// The argument is unsigned, so a request under the lowest step wrapped
-    /// around and selected code 0, as did a request that reached the 4.6V
-    /// entry - asking for a gentler charge voltage produced either a reserved
-    /// code or the highest voltage, depending on the silicon.
     static constexpr std::uint16_t table[] = { 4000, 4100, 4200, 4350, 4400 };
     size_t i = (sizeof(table) / sizeof(table[0])) - 1;
     /// pick the highest step that does not exceed the request, and the lowest
     /// step when the request is under all of them.
     while (i && table[i] > max_mV) { --i; }
 
-    writeRegister8(0x64, static_cast<std::uint8_t>(i + 1));
+    if (!writeRegister8(0x64, static_cast<std::uint8_t>(i + 1))) { return false; }
+    if (applied_mV) { *applied_mV = table[i]; }
+    return true;
   }
 
   std::int8_t AXP2101_Class::getBatteryLevel(void)
