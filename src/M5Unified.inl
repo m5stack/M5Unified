@@ -1608,6 +1608,16 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     if (in_scl == ex_scl && in_sda == ex_sda) {
       in_port = ex_port;
     }
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (board == board_t::board_M5StamP4XHub)
+    { /// Grove13 is a fan-out of the internal bus, so Ex_I2C shares its port and Wire stays free
+      /// for the other Grove sockets. The pin table keeps Port A unset: Wire on those pins would
+      /// take them from Wire1 and stop the internal bus.
+      ex_port = in_port;
+      ex_scl = in_scl;
+      ex_sda = in_sda;
+    }
+#endif
 #endif
     if ((uint_fast8_t)in_scl < GPIO_NUM_MAX)
     {
