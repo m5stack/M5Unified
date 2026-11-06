@@ -3351,6 +3351,8 @@ namespace m5
       return M5pm1.getBatteryVoltage();
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case pmic_t::pmic_m5pm1:
+      /// The Hub has no battery.
+      if (M5.getBoard() != board_t::board_M5CoreP4X) { return 0; }
       return M5pm1.getBatteryVoltage();
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -3433,7 +3435,8 @@ namespace m5
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case pmic_t::pmic_m5pm1:
-      {
+      { /// The Hub has no battery.
+        if (M5.getBoard() != board_t::board_M5CoreP4X) { return -2; }
         int16_t bat_mv = getBatteryVoltage();
         if (bat_mv <= 0) {
           return -1;
@@ -4149,6 +4152,9 @@ namespace m5
       }
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case pmic_t::pmic_m5pm1:
+      if (M5.getBoard() == board_t::board_M5StamP4XHub) { return battery_presence_t::absent; }
+      break;
 #else
 
     case pmic_t::pmic_axp2101:
