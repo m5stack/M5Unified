@@ -98,8 +98,12 @@ namespace m5
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case Power_Class::pmic_t::pmic_m5pm1:
-      /// CoreP4X
-      return charge_state_t::charging | charge_state_t::not_charging;
+      /// CoreP4X. The Hub has no charger status input.
+      if (board == board_t::board_M5CoreP4X)
+      {
+        return charge_state_t::charging | charge_state_t::not_charging;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case Power_Class::pmic_t::pmic_ip5306:
@@ -186,8 +190,12 @@ namespace m5
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case Power_Class::pmic_t::pmic_m5pm1:
-      /// CoreP4X: PM1 CHG_EN only.
-      return Power_Class::cap_set_charge_enable;
+      /// CoreP4X: PM1 CHG_EN only. On the Hub that pin switches Grove12 (see setGroveOutput).
+      if (board == board_t::board_M5CoreP4X)
+      {
+        return Power_Class::cap_set_charge_enable;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case Power_Class::pmic_t::pmic_ip5306:
@@ -3892,6 +3900,8 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       { /// CoreP4X: the charger status is wired to IOE1 G6 (low = charging).
         /// There is no battery presence signal to gate it with.
+        /// The Hub has no status input: its IOE1 G6 is the Grove0 switch.
+        if (M5.getBoard() != board_t::board_M5CoreP4X) { break; }
         bool level;
         if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level))
         { /// do not report a failed read as "charging"
