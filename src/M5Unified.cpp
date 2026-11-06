@@ -34,6 +34,7 @@
 #include "utility/PI4IOE5V6408_Class.inl"
 #include "utility/LED_Class.inl"
 #include "utility/led/LED_PMIC_Class.inl"
+#include "utility/led/LED_M5StamP4XHub_Class.inl"
 #include "utility/led/LED_PaperMono_Class.inl"
 #include "utility/led/LED_PowerHub_Class.inl"
 #include "utility/led/LED_Strip_Class.inl"

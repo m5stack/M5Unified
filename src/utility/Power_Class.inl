@@ -98,8 +98,12 @@ namespace m5
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case Power_Class::pmic_t::pmic_m5pm1:
-      /// CoreP4X
-      return charge_state_t::charging | charge_state_t::not_charging;
+      /// CoreP4X. The Hub has no charger status input.
+      if (board == board_t::board_M5CoreP4X)
+      {
+        return charge_state_t::charging | charge_state_t::not_charging;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case Power_Class::pmic_t::pmic_ip5306:
@@ -186,8 +190,12 @@ namespace m5
       break;
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     case Power_Class::pmic_t::pmic_m5pm1:
-      /// CoreP4X: PM1 CHG_EN only.
-      return Power_Class::cap_set_charge_enable;
+      /// CoreP4X: PM1 CHG_EN only. On the Hub that pin switches Grove12 (see setGroveOutput).
+      if (board == board_t::board_M5CoreP4X)
+      {
+        return Power_Class::cap_set_charge_enable;
+      }
+      break;
 #else
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     case Power_Class::pmic_t::pmic_ip5306:
@@ -265,6 +273,9 @@ namespace m5
     {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
+      return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
+
+    case board_t::board_M5StamP4XHub:
       return Power_Class::cap_set_ext_output | Power_Class::cap_set_usb_output;
 
     case board_t::board_M5Tab5:
@@ -519,6 +530,23 @@ namespace m5
         // M5IOE1_G6 is the active-low charger status input.
         ioe1.setDirection(M5IOE1_Class::gpio6, false);
         ioe1.setPullMode(M5IOE1_Class::gpio6, IOExpander_Base::pull_up);
+      }
+      break;
+
+    case board_t::board_M5StamP4XHub:
+      {
+        _pmic = pmic_t::pmic_m5pm1;
+        M5pm1.begin();
+        Ina226.setAddress(0x40);
+        Ina226.begin();
+        INA226_Class::config_t cfg;
+        cfg.sampling_rate = INA226_Class::Sampling::Rate64;
+        cfg.bus_conversion_time = INA226_Class::ConversionTime::US_2116;
+        cfg.shunt_conversion_time = INA226_Class::ConversionTime::US_2116;
+        cfg.mode = INA226_Class::Mode::ShuntAndBus;
+        cfg.shunt_res = 0.005f;
+        cfg.max_expected_current = 5.0f;
+        Ina226.config(cfg);
       }
       break;
 
@@ -1559,6 +1587,68 @@ namespace m5
     operator bool(void) const { return any && ok; }
   };
 
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+  // StampP4X Hub: Grove channel -> M5IOE1 pin index (0 = gpio1/PIN_1 .. 13 = gpio14/PIN_14).
+  // 0xFF marks the two channels the PM1 drives instead (12 = CHG_EN_PP, 15 = GPIO2).
+  // Net names, matching the silkscreen:
+  //   ch0 IOEG6  ch1 IOEG7  ch2 IOEG14 ch3 IOEG1  ch4 IOEG5  ch5 IOEG10
+  //   ch6 IOEG12 ch7 IOEG11 ch8 IOEG4  ch9 IOEG13 ch10 IOEG9 ch11 IOEG2
+  //   ch12 PMP2  ch13 IOEG3 ch14 IOEG8 ch15 PMG2
+  // i.e. index = IOEG number - 1, so ch0 is index 5 (M5IOE1_PIN_6 = IOEG6).
+  static constexpr std::uint8_t stampp4xhub_grove_ioe_pin[16] =
+  { 5, 6, 13, 0, 4, 9, 11, 10, 3, 12, 8, 1, 0xFF, 2, 7, 0xFF };
+#endif
+
+  bool Power_Class::setGroveOutput(std::uint8_t channel, bool enable)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (M5.getBoard() != board_t::board_M5StamP4XHub || channel >= 16) { return false; }
+
+    const std::uint8_t pin = stampp4xhub_grove_ioe_pin[channel];
+    if (pin != 0xFF)
+    {
+      // The switch enables are active high and have no pull-down, so the
+      // direction and the latch are set before leaving high impedance.
+      auto& ioe1 = M5.getIOExpander(0);
+      bool ok = ioe1.setHighImpedance(pin, false);
+      ok = ioe1.setDirection(pin, true) && ok;
+      return ioe1.digitalWrite(pin, enable) && ok;
+    }
+
+    if (channel == 12)
+    { /// Grove12 shares the PM1 charge-enable pin (CHG_EN_PP).
+      return M5pm1.setBatteryCharge(enable);
+    }
+    /// Grove15 is switched by PM1 GPIO2. The PM1 boots with every GPIO in
+    /// open-drain mode (GPIO_DRV = 0x1F) and the MT9700 enable has no pull-up,
+    /// so the pin must be push-pull or it can never drive the switch high.
+    bool ok = M5pm1.setGPIOFunction(M5PM1_Class::gpio2, M5PM1_Class::gpio);
+    ok = M5pm1.setGPIODrive(M5PM1_Class::gpio2, M5PM1_Class::push_pull) && ok;
+    ok = M5pm1.setGPIOMode(M5PM1_Class::gpio2, M5PM1_Class::output) && ok;
+    return M5pm1.setGPIOOutput(M5PM1_Class::gpio2, enable) && ok;
+#else
+    (void)channel; (void)enable;
+    return false;
+#endif
+  }
+
+  bool Power_Class::getGroveOutput(std::uint8_t channel)
+  {
+#if defined (CONFIG_IDF_TARGET_ESP32P4)
+    if (M5.getBoard() != board_t::board_M5StamP4XHub || channel >= 16) { return false; }
+
+    const std::uint8_t pin = stampp4xhub_grove_ioe_pin[channel];
+    if (pin != 0xFF) { return M5.getIOExpander(0).getWriteValue(pin); }
+
+    bool high = false;
+    if (channel == 12) { return M5pm1.getBatteryCharge(&high) && high; }
+    return M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio2, &high) && high;
+#else
+    (void)channel;
+    return false;
+#endif
+  }
+
   bool Power_Class::setExtOutput(bool enable, ext_port_mask_t port_mask)
   {
     // Contract: true only when every selected port reached the requested state.
@@ -1591,6 +1681,30 @@ namespace m5
           r.add(ioe1.setHighImpedance(M5IOE1_Class::gpio2, false));
           r.add(ioe1.setDirection(M5IOE1_Class::gpio2, true));
           r.add(ioe1.digitalWrite(M5IOE1_Class::gpio2, enable));
+        }
+        result = r;
+      }
+      break;
+
+    case board_t::board_M5StamP4XHub:
+      {
+        _port_result_t r;
+        /// Grove13 is the I2C port (the Port A of this board) and Grove14 the
+        /// USB port. ext_MAIN, and the library's default mask, mean the whole
+        /// 16-channel array, so a plain setExtOutput() still switches all of it.
+        const bool all = (port_mask == (ext_port_mask_t)0xFF)
+                      || (port_mask & ext_port_mask_t::ext_MAIN);
+        if (all)
+        {
+          for (std::uint8_t channel = 0; channel < 16; ++channel)
+          {
+            r.add(setGroveOutput(channel, enable));
+          }
+        }
+        else
+        {
+          if (port_mask & ext_port_mask_t::ext_PA) { r.add(setGroveOutput(13, enable)); }
+          if (port_mask & ext_port_mask_t::ext_USB) { r.add(setGroveOutput(14, enable)); }
         }
         result = r;
       }
@@ -1843,6 +1957,15 @@ namespace m5
     case board_t::board_M5Tab5X:
       return M5.getIOExpander(0).getWriteValue(3);
 
+    case board_t::board_M5StamP4XHub:
+      { /// true when any Grove channel is switched on.
+        for (std::uint8_t channel = 0; channel < 16; ++channel)
+        {
+          if (getGroveOutput(channel)) { return true; }
+        }
+        return false;
+      }
+
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
     case board_t::board_ArduinoNessoN1:
       return M5.getIOExpander(1).getWriteValue(2); // E1-> 2 = EXT_PWR_EN
@@ -1929,6 +2052,17 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
       return M5.getIOExpander(0).digitalWrite(M5IOE1_Class::gpio2, enable);
+
+    case board_t::board_M5StamP4XHub:
+      {
+        // USB-A 5V is switched by PM1 GPIO1 (active-high). Push-pull is
+        // required: the PM1 boots with open-drain outputs and the switch
+        // enable has no pull-up.
+        bool ok = M5pm1.setGPIOFunction(M5PM1_Class::gpio1, M5PM1_Class::gpio);
+        ok = M5pm1.setGPIODrive(M5PM1_Class::gpio1, M5PM1_Class::push_pull) && ok;
+        ok = M5pm1.setGPIOMode(M5PM1_Class::gpio1, M5PM1_Class::output) && ok;
+        return M5pm1.setGPIOOutput(M5PM1_Class::gpio1, enable) && ok;
+      }
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -1950,6 +2084,12 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     case board_t::board_M5CoreP4X:
       return M5.getIOExpander(0).getWriteValue(M5IOE1_Class::gpio2);
+
+    case board_t::board_M5StamP4XHub:
+      {
+        bool high = false;
+        return M5pm1.getGPIOOutputLatch(M5PM1_Class::gpio1, &high) && high;
+      }
 #endif
 
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
@@ -3760,6 +3900,8 @@ namespace m5
     case pmic_t::pmic_m5pm1:
       { /// CoreP4X: the charger status is wired to IOE1 G6 (low = charging).
         /// There is no battery presence signal to gate it with.
+        /// The Hub has no status input: its IOE1 G6 is the Grove0 switch.
+        if (M5.getBoard() != board_t::board_M5CoreP4X) { break; }
         bool level;
         if (!M5.getIOExpander(0).getInputLevel(M5IOE1_Class::gpio6, &level))
         { /// do not report a failed read as "charging"
