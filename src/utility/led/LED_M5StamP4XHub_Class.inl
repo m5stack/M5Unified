@@ -19,17 +19,18 @@ namespace m5
   bool LED_M5StamP4XHub_Class::begin(void)
   {
     auto& pmic = M5.Power.M5pm1;
-    pmic.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
-    pmic.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio);
-    pmic.setGPIODrive(M5PM1_Class::gpio4, M5PM1_Class::push_pull);
-    pmic.setGPIODrive(M5PM1_Class::gpio0, M5PM1_Class::push_pull);
-    pmic.setGPIOPull(M5PM1_Class::gpio4, M5PM1_Class::pull_none);
-    pmic.setGPIOPull(M5PM1_Class::gpio0, M5PM1_Class::pull_none);
-    pmic.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::output);
-    pmic.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::output);
+    bool ok = pmic.setGPIOFunction(M5PM1_Class::gpio4, M5PM1_Class::gpio);
+    ok = pmic.setGPIOFunction(M5PM1_Class::gpio0, M5PM1_Class::gpio) && ok;
+    ok = pmic.setGPIODrive(M5PM1_Class::gpio4, M5PM1_Class::push_pull) && ok;
+    ok = pmic.setGPIODrive(M5PM1_Class::gpio0, M5PM1_Class::push_pull) && ok;
+    ok = pmic.setGPIOPull(M5PM1_Class::gpio4, M5PM1_Class::pull_none) && ok;
+    ok = pmic.setGPIOPull(M5PM1_Class::gpio0, M5PM1_Class::pull_none) && ok;
     setBrightness(_brightness);
-    display();
-    return true;
+    // Active low: set the latches first so that a dark LED does not flash.
+    ok = _apply() && ok;
+    if (!ok) { return false; }
+    ok = pmic.setGPIOMode(M5PM1_Class::gpio4, M5PM1_Class::output);
+    return pmic.setGPIOMode(M5PM1_Class::gpio0, M5PM1_Class::output) && ok;
   }
 
   void LED_M5StamP4XHub_Class::setColors(const RGBColor* values, size_t index, size_t length)
@@ -50,6 +51,11 @@ namespace m5
 
   void LED_M5StamP4XHub_Class::display(void)
   {
+    _apply();
+  }
+
+  bool LED_M5StamP4XHub_Class::_apply(void)
+  {
     uint32_t br = _brightness + 1;
     br = br * br;
 
@@ -58,10 +64,10 @@ namespace m5
     const uint16_t b = (_rgb_buffer.B8() * br) >> 8;
 
     auto& pmic = M5.Power.M5pm1;
-    pmic.setLedEnLevel(r >= 2048);
+    bool ok = pmic.setLedEnLevel(r >= 2048);
     // Green and blue are active low: a lit LED needs a low output level.
-    pmic.setGPIOOutput(M5PM1_Class::gpio4, g < 2048);
-    pmic.setGPIOOutput(M5PM1_Class::gpio0, b < 2048);
+    ok = pmic.setGPIOOutput(M5PM1_Class::gpio4, g < 2048) && ok;
+    return pmic.setGPIOOutput(M5PM1_Class::gpio0, b < 2048) && ok;
   }
 }
 

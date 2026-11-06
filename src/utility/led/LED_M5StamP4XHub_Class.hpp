@@ -24,6 +24,8 @@ namespace m5
     RGBColor* getBuffer(void) override { return &_rgb_buffer; }
 
   private:
+    bool _apply(void);
+
     static constexpr size_t led_count = 1;
     RGBColor _rgb_buffer;
     uint8_t _brightness = 63;
