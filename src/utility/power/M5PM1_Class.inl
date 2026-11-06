@@ -70,7 +70,7 @@ namespace m5
   {
     if (!_init) {
       std::uint32_t val = 0;
-      // The first transfer after an idle period can be NACKed; the next one answers.
+      // The PM1 can stop answering for a moment, for example after a START + STOP without an address.
       bool res = false;
       for (int retry = 3; !(res = readRegister(M5PM1_REG_DEVICE_ID, (uint8_t*)&val, 4)) && --retry; )
       {
