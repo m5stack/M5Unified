@@ -490,7 +490,8 @@ namespace m5
 #if defined ( __M5GFX_M5MODULEDISPLAY__ )
       if (cfg.external_display.module_display) {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
-        if (_board == board_t::board_M5Tab5 || _board == board_t::board_M5Tab5X)
+        if (_board == board_t::board_M5Tab5 || _board == board_t::board_M5Tab5X
+         || _board == board_t::board_M5CoreP4X)
 #elif defined (CONFIG_IDF_TARGET_ESP32S3)
         if (_board == board_t::board_M5StackCoreS3 || _board == board_t::board_M5StackCoreS3SE
          || _board == board_t::board_M5StackChan)
@@ -500,7 +501,9 @@ namespace m5
         if (false)
 #endif
         {
-          M5ModuleDisplay dsp(cfg.module_display);
+          auto module_cfg = cfg.module_display;
+          if (module_cfg.board == board_t::board_unknown) { module_cfg.board = _board; }
+          M5ModuleDisplay dsp(module_cfg);
           if (cfg.clear_display ? dsp.init() : dsp.init_without_reset(false)) {
             addDisplay(dsp);
           }
