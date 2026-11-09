@@ -1611,8 +1611,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #if defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_M5StamP4XHub)
     { /// Grove13 is a fan-out of the internal bus, so Ex_I2C shares its port and Wire stays free
-      /// for the other Grove sockets. The pin table keeps Port A unset: Wire on those pins would
-      /// take them from Wire1 and stop the internal bus.
+      /// for the other Grove sockets. The pin table keeps Port A unset: matching pins would move
+      /// In_I2C to port 0 above while M5GFX keeps the touch and the backlight on port 1, and Wire
+      /// on those pins would take them from Wire1 and stop the internal bus.
       ex_port = in_port;
       ex_scl = in_scl;
       ex_sda = in_sda;
