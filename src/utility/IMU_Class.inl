@@ -17,6 +17,7 @@
 #include "imu/MPU6886_Class.hpp"
 #include "imu/SH200Q_Class.hpp"
 #include "imu/BMI270_Class.hpp"
+#include "imu/LSM6DS3TRC_Class.hpp"
 #include "imu/BMM150_Class.hpp"
 #include "imu/AK8963_Class.hpp"
 
@@ -130,6 +131,31 @@ namespace m5
         }
 #endif
 
+      }
+    }
+
+    if (_imu == imu_t::imu_none)
+    {
+      auto lsm6ds3trc = new LSM6DS3TRC_Class();
+      if (!lsm6ds3trc->begin(i2c)) {
+        lsm6ds3trc->setAddress(LSM6DS3TRC_Class::SECONDARY_ADDRESS);
+        if (!lsm6ds3trc->begin(i2c)) {
+          delete lsm6ds3trc;
+          lsm6ds3trc = nullptr;
+        }
+      }
+      if (lsm6ds3trc != nullptr)
+      {
+        _imu_instance[0].reset(lsm6ds3trc);
+        _imu = imu_t::imu_lsm6ds3trc;
+
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+        if (board == m5::board_t::board_M5CoreP4X)
+        { // CoreP4X LSM6DS3TR-C: X=-Y, Y=-X, Z=-Z (sensor axes).
+          _internal_axisorder_fixed[sensor_index_accel] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
+          _internal_axisorder_fixed[sensor_index_gyro ] = (internal_axisorder_t)(axis_order_yxz | axis_invert_x | axis_invert_y | axis_invert_z);
+        }
+#endif
       }
     }
 

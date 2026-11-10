@@ -43,6 +43,7 @@
 #include "utility/imu/AK8963_Class.inl"
 #include "utility/imu/BMI270_Class.inl"
 #include "utility/imu/BMM150_Class.inl"
+#include "utility/imu/LSM6DS3TRC_Class.inl"
 #include "utility/imu/MPU6886_Class.inl"
 #include "utility/imu/SH200Q_Class.inl"
 #include "utility/RTC_Class.inl"

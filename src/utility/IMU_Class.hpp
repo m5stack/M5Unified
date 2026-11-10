@@ -18,6 +18,7 @@ namespace m5
     imu_mpu6886,
     imu_mpu9250,
     imu_bmi270,
+    imu_lsm6ds3trc,
   };
 
   class IMU_Class
