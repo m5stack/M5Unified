@@ -497,6 +497,8 @@ namespace m5
          || _board == board_t::board_M5StackChan)
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
         if (_board == board_t::board_M5Stack || _board == board_t::board_M5StackCore2 || _board == board_t::board_M5Tough)
+#elif defined (CONFIG_IDF_TARGET_ESP32C61)
+        if (_board == board_t::board_M5CoreMatrix)
 #else
         if (false)
 #endif
