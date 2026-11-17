@@ -34,6 +34,10 @@
 #include <hal/dac_types.h>
 #include <hal/dac_ll.h>
 #include <driver/rtc_io.h>
+// ESP-IDF 6.1.1 renamed the DAC LL functions (dac_ll_pad_*) and added this header with them.
+#if __has_include (<hal/dac_types_private.h>)
+ #define M5UNIFIED_DAC_LL_PAD_API
+#endif
 #endif
 
 #endif
@@ -123,6 +127,20 @@ namespace m5
           rtc_gpio_set_direction(gpio_num, RTC_GPIO_MODE_DISABLED);
           rtc_gpio_pullup_dis(gpio_num);
           rtc_gpio_pulldown_dis(gpio_num);
+ #if defined ( M5UNIFIED_DAC_LL_PAD_API )
+          dac_ll_pad_power_on(channel);
+        } else {
+          dac_ll_pad_power_down(channel);
+        }
+      }
+      if (dac_en == true) {
+        dac_ll_sync_by_adc(false);
+      }
+      // dac_ll_digi_enable_dma() was split into the data source (shared by both channels) and the
+      // DMA clock inversion. DIRECT also turns off the cosine generator of channel 0, which is not used here.
+      dac_ll_pad_set_data_source(DAC_CHAN_0, dac_en ? DAC_DATA_SOURCE_DMA : DAC_DATA_SOURCE_DIRECT);
+      dac_ll_dma_clk_inv(dac_en);
+ #else
           dac_ll_power_on(channel);
         } else {
           dac_ll_power_down(channel);
@@ -132,6 +150,7 @@ namespace m5
         dac_ll_rtc_sync_by_adc(false);
       }
       dac_ll_digi_enable_dma(dac_en);
+ #endif
 
       I2S0.conf2.lcd_en = true;
       I2S0.conf.tx_right_first = false;
