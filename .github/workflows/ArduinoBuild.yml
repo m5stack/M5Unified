@@ -26,9 +26,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Versions are split with the M5Unified / M5GFX CI so that the two together cover every
-          # arduino-esp32 series from 2.0 to 3.3 without building the same one twice.
+          # Older arduino-esp32 releases are split between the M5GFX and M5Unified CIs: each series from
+          # 2.0 to 3.2, and the oldest 3.3 with ESP32-C5, is built by only one of them. The M5Unified CI
+          # builds M5GFX from its develop / master branch, so an M5GFX pull request itself is not built
+          # on the releases listed only there (3.0 / 3.2). M5Unified is built only on the releases
+          # listed in the M5Unified CI.
+          # The latest release of each current series (3.3 and 4.0) is built by both CIs on
+          # esp32 / s3 / c5 / p4, so a PR to either repository is checked against the versions
+          # most users install.
           # Minimums: C6 / H2 3.0, P4 3.1, C5 3.3.
+          # The esp32p4 board targets chip revisions before 3 by default on 3.3 and revision 3 or
+          # later from 4.0; the other revision is built with ChipVariant (postv3 / prev3).
           # Espressif Board Manager: 3.0.7
           - board: esp32:esp32:esp32
             esp32_version: 3.0.7
@@ -58,18 +66,38 @@ jobs:
           - board: esp32:esp32:esp32p4
             esp32_version: 3.2.1
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # Espressif Board Manager: 3.3.12 (latest)
+          # Latest release of each current series, built by both CIs.
+          # Espressif Board Manager: 3.3.13 (latest 3.3)
           - board: esp32:esp32:esp32
-            esp32_version: 3.3.12
+            esp32_version: 3.3.13
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           - board: esp32:esp32:esp32s3
-            esp32_version: 3.3.12
+            esp32_version: 3.3.13
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           - board: esp32:esp32:esp32c5
-            esp32_version: 3.3.12
+            esp32_version: 3.3.13
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           - board: esp32:esp32:esp32p4
-            esp32_version: 3.3.12
+            esp32_version: 3.3.13
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32p4:ChipVariant=postv3
+            esp32_version: 3.3.13
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          # Espressif Board Manager: 4.0.0 (latest)
+          - board: esp32:esp32:esp32
+            esp32_version: 4.0.0
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32s3
+            esp32_version: 4.0.0
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32c5
+            esp32_version: 4.0.0
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32p4
+            esp32_version: 4.0.0
+            board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          - board: esp32:esp32:esp32p4:ChipVariant=prev3
+            esp32_version: 4.0.0
             board_manager_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
           # M5Stack Board Manager
           - board: m5stack:esp32:m5stack_core
