@@ -19,7 +19,12 @@ namespace m5
     }
     /// TimerCameraの内蔵RTCが初期化に失敗することがあったため、最初に空打ちする; 
     writeRegister8(0x00, 0x00);
-    _init = writeRegister8(0x00, 0x00) && writeRegister8(0x0E, 0x03);
+    // Keep a running timer (TE = 1) across a reboot. M5.begin() stops it with disableIRQ()
+    // unless cfg.disable_rtc_irq is false. A stopped timer gets TD = 1/60 Hz.
+    std::uint8_t timer_control = 0;
+    _init = writeRegister8(0x00, 0x00)
+         && readRegister(0x0E, &timer_control, 1)
+         && ((timer_control & 0x80) || writeRegister8(0x0E, 0x03));
     return _init;
   }
 
@@ -277,8 +282,8 @@ namespace m5
     static constexpr const std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
     bool ok = writeRegister(0x09, buf, 4);
 
-    // disable timer (bit7:0=disabled)
-    ok = writeRegister8(0x0E, 0) && ok;
+    // disable timer (bit7:0=disabled), TD = 1/60 Hz while unused for power saving
+    ok = writeRegister8(0x0E, 0x03) && ok;
 
     // clear flag and INT enable bits
     ok = writeRegister8(0x01, 0x00) && ok;

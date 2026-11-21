@@ -158,6 +158,9 @@ namespace m5
       bool external_rtc  = false;
 
       /// Turn off the IRQ bit of the RTC at startup.
+      /// When false, a PCF8563 timer set by M5.Rtc.setTimerIRQ() or M5.Power.timerSleep(seconds)
+      /// before the reboot keeps running (clearIRQ() alone does not stop it);
+      /// stop it with M5.Rtc.setTimerIRQ(0) or M5.Rtc.disableIRQ().
       bool disable_rtc_irq = true;
 
       /// system LED brightness (0=off / 255=max) (※ not RGBcolorLED)
