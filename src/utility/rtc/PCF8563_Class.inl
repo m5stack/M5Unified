@@ -282,8 +282,8 @@ namespace m5
     static constexpr const std::uint8_t buf[4] = { 0x80, 0x80, 0x80, 0x80 };
     bool ok = writeRegister(0x09, buf, 4);
 
-    // disable timer (bit7:0=disabled)
-    ok = writeRegister8(0x0E, 0) && ok;
+    // disable timer (bit7:0=disabled), TD = 1/60 Hz while unused for power saving
+    ok = writeRegister8(0x0E, 0x03) && ok;
 
     // clear flag and INT enable bits
     ok = writeRegister8(0x01, 0x00) && ok;
