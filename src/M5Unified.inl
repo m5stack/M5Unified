@@ -1994,7 +1994,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input);
       // PA Control Pin Init
-      this->In_I2C.bitOff(m5pm1_i2c_addr, 0x16, 1 << 3, 100000); // Set pin gpio3 as gpio function
+      this->In_I2C.bitOff(m5pm1_i2c_addr, 0x16, 0x03 << 6, 100000); // Set pin gpio3 as gpio function (2 bits per pin, gpio3 = bits 7:6)
       this->In_I2C.bitOn(m5pm1_i2c_addr, 0x10, 1 << 3, 100000);  // Set pin gpio3 mode: output
       this->In_I2C.bitOff(m5pm1_i2c_addr, 0x13, 1 << 3, 100000); // Set gpio3 push-pull mode
       this->In_I2C.bitOff(m5pm1_i2c_addr, 0x11, 1 << 3, 100000); // Set gpio3 output low
