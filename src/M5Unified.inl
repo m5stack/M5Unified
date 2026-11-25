@@ -116,7 +116,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5AtomVoiceS3R,GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5AtomS3RCam , GPIO_NUM_0 ,GPIO_NUM_45 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PaperS3    , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_1 ,GPIO_NUM_2  },
-{ board_t::board_M5PaperDIY   , GPIO_NUM_42,GPIO_NUM_41 , GPIO_NUM_42,GPIO_NUM_41 },
+{ board_t::board_M5PaperDIY   , GPIO_NUM_42,GPIO_NUM_41 , 255        ,255         }, // No Grove port (SYS_SDA/SCL reach the FPC-I2S only); In_I2C uses port 1, leaving Wire free
 { board_t::board_M5StamPLC   , GPIO_NUM_15,GPIO_NUM_13 , GPIO_NUM_1 ,GPIO_NUM_2  },
 { board_t::board_M5PowerHub   , GPIO_NUM_48,GPIO_NUM_45 , GPIO_NUM_16,GPIO_NUM_15 },
 { board_t::board_M5StampS3Bat , GPIO_NUM_47,GPIO_NUM_48 , 255        ,255         },
