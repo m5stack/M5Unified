@@ -459,9 +459,11 @@ namespace m5
       _begin(cfg);
 
 
-      // Unit PoEP4 has no built-in LCD; attach its LT8912B Display Out as a board display.
+      // Unit PoEP4 / PoEP4X have no built-in LCD; attach their LT8912B Display Out as a board display.
 #if defined ( __M5GFX_M5UNITPOEP4DISPLAYOUT__ )
-      if (cfg.external_display.unit_poep4_display_out && _board == board_t::board_M5UnitPoEP4 && getDisplayCount() == 0)
+      if (cfg.external_display.unit_poep4_display_out
+       && (_board == board_t::board_M5UnitPoEP4 || _board == board_t::board_M5UnitPoEP4X)
+       && getDisplayCount() == 0)
       {
         auto& display_out_cfg = _select_poep4_display_out_config(cfg);
         // The bridge sits on the internal bus: unless the sketch chose a bus itself, share

@@ -2421,6 +2421,7 @@ namespace m5
       break;
 
     case board_t::board_M5UnitPoEP4:
+    case board_t::board_M5UnitPoEP4X:
       for (int ledPin = 15; ledPin <= 17; ledPin++)
       {
         m5gfx::pinMode(ledPin, m5gfx::pin_mode_t::output);
