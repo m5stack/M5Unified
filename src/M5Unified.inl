@@ -143,6 +143,7 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_M5StamP4XHub , GPIO_NUM_1 ,GPIO_NUM_0  , 255        ,255        }, // StamP4X Hub (Grove13 is the same bus)
 { board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
 { board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
+{ board_t::board_M5UnitPoEP4X , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
 { board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #elif defined (CONFIG_IDF_TARGET_ESP32C5)
 { board_t::board_M5StampC5    , 255        ,255         , 255        ,255         },
@@ -2067,6 +2068,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       break;
 
     case board_t::board_M5UnitPoEP4:
+    case board_t::board_M5UnitPoEP4X:
       m5gfx::pinMode(GPIO_NUM_45, m5gfx::pin_mode_t::input);
       break;
 
@@ -3225,6 +3227,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     switch (_board)
     {
     case board_t::board_M5UnitPoEP4:
+    case board_t::board_M5UnitPoEP4X:
       use_rawstate_bits = 0b00001;
       btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_45)) & 1;
       break;
