@@ -523,9 +523,18 @@ namespace m5
 
         auto& ioe1 = M5.getIOExpander(0);
         // M5IOE1_G12 supplies the shared 3V3 rail for MBUS, TF card and sensors.
+        // M5GFX normally turns it on during board setup and waits. If the output latch
+        // and the pin level were not both high yet, wait here for the sensors on the
+        // rail (LSM6DS3TR-C boot: 15 ms).
+        const bool rail_was_on = ioe1.getWriteValue(M5IOE1_Class::gpio12)
+                              && ioe1.digitalRead(M5IOE1_Class::gpio12);
         ioe1.setHighImpedance(M5IOE1_Class::gpio12, false);
         ioe1.setDirection(M5IOE1_Class::gpio12, true);
         ioe1.digitalWrite(M5IOE1_Class::gpio12, true);
+        if (!rail_was_on)
+        {
+          m5gfx::delay(15);
+        }
 
         // M5IOE1_G6 is the active-low charger status input.
         ioe1.setDirection(M5IOE1_Class::gpio6, false);
