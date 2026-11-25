@@ -530,7 +530,8 @@ namespace m5
       const uint_fast8_t ex_i2c_sda = Ex_I2C.getSDA();
       const uint_fast8_t ex_i2c_scl = Ex_I2C.getSCL();
       const int_fast8_t ex_i2c_port = Ex_I2C.getPort();
-      const bool ex_i2c_enabled = (ex_i2c_sda < GPIO_NUM_MAX && ex_i2c_scl < GPIO_NUM_MAX && ex_i2c_port >= 0);
+      const bool ex_i2c_enabled = Ex_I2C.isEnabled();
+      (void)ex_i2c_sda; (void)ex_i2c_scl; (void)ex_i2c_port; // used only with the M5Unit* display headers
 #else
       const bool ex_i2c_enabled = true;
 #endif

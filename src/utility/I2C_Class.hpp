@@ -33,7 +33,7 @@ namespace m5
     bool begin(i2c_port_t port_num, int pin_sda, int pin_scl);
 
     /// begin I2C peripheral. (No communication is performed.)
-    /// @return success(true) or failed(false).
+    /// @return success(true) or failed(false). false without doing anything when !isEnabled().
     bool begin(void);
 
     /// release I2C peripheral.
@@ -129,7 +129,11 @@ namespace m5
     int8_t getSDA(void) const { return _pin_sda; }
     int8_t getSCL(void) const { return _pin_scl; }
 
-    bool isEnabled(void) const { return _port_num >= 0; }
+    /// @return true when setPort() / begin() gave this bus valid SDA / SCL pins.
+    /// false for a bus that the board does not have; then every call returns false (or 0)
+    /// without touching the bus. (Not whether the bus has been begun. A negative port is a
+    /// valid software I2C port.)
+    bool isEnabled(void) const { return _pin_sda >= 0 && _pin_scl >= 0; }
 
   private:
     i2c_port_t _port_num = (i2c_port_t)-1;
