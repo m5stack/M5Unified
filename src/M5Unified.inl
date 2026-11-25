@@ -2883,7 +2883,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   bool M5Unified::_begin_rtc_imu(const config_t& cfg)
   {
     bool port_a_used = false;
-    if (cfg.external_rtc || cfg.external_imu)
+    // A board without external I2C pins keeps Ex_I2C at port -1, which begin() would
+    // open as a software I2C port on whatever pins that port last used.
+    if ((cfg.external_rtc || cfg.external_imu) && Ex_I2C.isEnabled())
     {
       M5.Ex_I2C.begin();
     }
