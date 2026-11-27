@@ -28,6 +28,7 @@
 
 namespace m5
 {
+  class Buzzer_Class;
   class M5Unified;
 
   struct speaker_config_t
@@ -90,6 +91,7 @@ namespace m5
 
     bool begin(void);
 
+    /// Shut down Speaker output, including any Buzzer tone using Speaker.
     void end(void);
 
     bool isRunning(void) const { return _task_running.load(std::memory_order_acquire); }
@@ -103,18 +105,16 @@ namespace m5
 #endif
     }
 
-    /// now in playing or not.
-    /// @return false=not playing / true=playing
-    bool isPlaying(void) const volatile { return _play_channel_bits.load(); }
+    /// Whether any public Speaker channel is playing.
+    bool isPlaying(void) const volatile { return _play_channel_bits.load() & public_channel_mask; }
 
-    /// now in playing or not.
-    /// @param channel virtual channel number. (0~7), (default = automatically selected)
+    /// Playback state of a public Speaker channel.
+    /// @param channel Public channel number (0-7).
     /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
     size_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? _slot_occupied(_ch_info[channel].wavinfo[0]) + _slot_occupied(_ch_info[channel].wavinfo[1]) : 0; }
 
-    /// Get the number of channels that are playing.
-    /// @return number of channels that are playing.
-    size_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load()); }
+    /// Get the number of public Speaker channels that are playing.
+    size_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load() & public_channel_mask); }
 
     /// Register a function called when the playback task has finished reading
     /// the buffer of a request: from then on the caller may overwrite or free
@@ -171,11 +171,11 @@ namespace m5
     /// @return channel volume.
     uint8_t getChannelVolume(uint8_t channel) const { return (channel < sound_channel_max) ? _ch_info[channel].volume : 0; }
 
-    /// stop sound output.
+    /// Stop all public Speaker channels. Buzzer playback continues.
     void stop(void);
 
-    /// stop sound output for the specified virtual channel.
-    /// @param channel virtual channel number. (0~7)
+    /// Stop the specified public Speaker channel. Buzzer playback continues.
+    /// @param channel Public channel number (0-7). A higher number stops all public channels.
     void stop(uint8_t channel);
 
     /// play simple tone sound.
@@ -344,7 +344,11 @@ namespace m5
       float liner_buf[2][2] = { { 0, 0 }, { 0, 0 } };
     };
 
-    channel_info_t _ch_info[sound_channel_max];
+    static constexpr size_t buzzer_channel = sound_channel_max;
+    static constexpr size_t sound_channel_count = buzzer_channel + 1;
+    static constexpr uint16_t public_channel_mask = (1u << sound_channel_max) - 1;
+
+    channel_info_t _ch_info[sound_channel_count];
 
     static void spk_task(void* args);
 
@@ -387,6 +391,19 @@ namespace m5
     std::atomic<TaskHandle_t> _task_handle { nullptr };
     volatile SemaphoreHandle_t _task_semaphore = nullptr;
 #endif
+
+  private:
+    friend class Buzzer_Class;
+
+    bool _play_buzzer(const uint8_t* data, size_t length, float sample_rate, uint32_t repeat);
+    void _stop_channel(size_t channel);
+    bool _is_buzzer_playing() const
+    {
+      const auto& slots = _ch_info[buzzer_channel].wavinfo;
+      return (_play_channel_bits.load() & (1u << buzzer_channel))
+          || _slot_occupied(slots[0]) || _slot_occupied(slots[1]);
+    }
+    bool _queue_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, size_t channel, bool stop_current_sound, bool no_clear_index);
   };
 }
 
