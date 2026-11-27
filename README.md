@@ -28,6 +28,7 @@ In the Arduino IDE, once the M5Unified library is installed through Library Mana
 - **Buttons:** A demo of detecting and responding to button presses is in [Button](examples/Basic/Button/Button.ino).
 - **Touch:** A demo of detecting and reacting to touch events is in [Touch](examples/Basic/Touch/Touch.ino).
 - **Speaker:** An example of playing wave audio through built-in speakers and accessories that support audio is in [Speaker](examples/Basic/Speaker/Speaker.ino)
+- **Buzzer:** An example of playing simple tones through the built-in buzzer or speaker is in [Buzzer](examples/Basic/Buzzer/Buzzer.ino).
 - **Clock:** An example of connecting to an Internet time server over WiFi and setting the built-in clock is in [RTC](examples/Basic/Rtc/Rtc.ino).
 - **Microphone:** An example that records a short clip and plays it back through the speaker is in [Microphone](examples/Basic/Microphone/Microphone.ino).
 - **IMU:** An example demonstrating the accelerometer / gyro / magnetometer is in [IMU](examples/Basic/Imu/Imu.ino)

@@ -740,9 +740,9 @@ namespace m5
 
       size_t data_length = 0;
 
-      for (size_t ch = 0; ch < sound_channel_max; ++ch)
+      for (size_t ch = 0; ch < sound_channel_count; ++ch)
       {
-        if (0 == (self->_play_channel_bits.load() & (1 << ch))) { continue; }
+        if (0 == (self->_play_channel_bits.load() & (1u << ch))) { continue; }
 
         auto ch_info = &(self->_ch_info[ch]);
         int ch_diff = ch_info->diff;
@@ -791,7 +791,7 @@ label_next_wav:
 #if !defined (SDL_h_)
             xSemaphoreGive(self->_task_semaphore);
 #endif
-            if (released && self->_cb_buffer_release)
+            if (ch < sound_channel_max && released && self->_cb_buffer_release)
             {
               self->_cb_buffer_release(self->_cb_buffer_release_args, released, ch);
             }
@@ -812,12 +812,12 @@ label_next_wav:
 #if !defined (SDL_h_)
             xSemaphoreGive(self->_task_semaphore);
 #endif
-            self->_play_channel_bits.fetch_and(~(1 << ch));
+            self->_play_channel_bits.fetch_and(~(1u << ch));
             if (current_wav->data)
             { // finished with nothing queued behind it: release it here and
               // forget it, so the next adoption does not release it again.
               // (index is reset below anyway, so no_clear_index is unaffected.)
-              if (self->_cb_buffer_release)
+              if (ch < sound_channel_max && self->_cb_buffer_release)
               {
                 self->_cb_buffer_release(self->_cb_buffer_release_args, current_wav->data, ch);
               }
@@ -835,7 +835,7 @@ label_next_wav:
               }
               continue;
             }
-            self->_play_channel_bits.fetch_or(1 << ch);
+            self->_play_channel_bits.fetch_or(1u << ch);
             goto label_next_wav;
           }
         }
@@ -1216,7 +1216,7 @@ label_continue_sample:
       }
     }
     _play_channel_bits.store(0);
-    for (size_t ch = 0; ch < sound_channel_max; ++ch)
+    for (size_t ch = 0; ch < sound_channel_count; ++ch)
     {
       auto chinfo = &_ch_info[ch];
       chinfo->wavinfo[0].info.clear();
@@ -1234,10 +1234,10 @@ label_continue_sample:
   {
     wav_info_t tmp;
     tmp.stop_current = 1;
-    uint8_t bits = _play_channel_bits.load();
+    const auto bits = _play_channel_bits.load() & public_channel_mask;
     for (size_t ch = 0; ch < sound_channel_max; ++ch)
     {
-      if (bits & (1 << ch)) { _set_next_wav(ch, tmp); }
+      if (bits & (1u << ch)) { _set_next_wav(ch, tmp); }
     }
   }
 
@@ -1247,7 +1247,15 @@ label_continue_sample:
     {
       stop();
     }
-    else if (_play_channel_bits.load() & (1 << ch))
+    else
+    {
+      _stop_channel(ch);
+    }
+  }
+
+  void Speaker_Class::_stop_channel(size_t ch)
+  {
+    if (ch == buzzer_channel || (_play_channel_bits.load() & (1u << ch)))
     {
       wav_info_t tmp;
       tmp.stop_current = 1;
@@ -1283,14 +1291,21 @@ label_continue_sample:
     }
   }
 
-  /// One claim attempt: 1 = published, 0 = refused (never behind an endless
-  /// request), -1 = no free slot right now; the caller waits outside the
-  /// lock and retries. A lost claim is retried here: whoever changed the
-  /// slot made progress, so it cannot spin for long.
+  /// One claim attempt: 1 = published, 0 = skipped (endless request ahead or
+  /// idle buzzer stop), -1 = no free slot right now. The caller waits outside
+  /// the lock on -1. A lost claim is retried here because the slot made progress.
   int Speaker_Class::_set_next_wav_locked(size_t ch, const wav_info_t& wav)
   {
     auto chinfo = &_ch_info[ch];
-    uint8_t chmask = 1 << ch;
+    const uint16_t chmask = 1u << ch;
+    // The mixer can clear the bit while a replacement is queued. Check both
+    // slots before deciding whether a stop needs to wake the mixer.
+    if (ch == buzzer_channel && wav.repeat == 0 && !(_play_channel_bits.load() & chmask)
+     && (chinfo->wavinfo[0].state.load(std::memory_order_acquire) & wav_phase_mask) == wav_phase_empty
+     && (chinfo->wavinfo[1].state.load(std::memory_order_acquire) & wav_phase_mask) == wav_phase_empty)
+    {
+      return 0;
+    }
     const uint8_t claimed = wav_phase_writing | ((wav.repeat == 0) ? wav_state_stop_marker : 0);
     for (;;)
     {
@@ -1366,14 +1381,24 @@ label_continue_sample:
 
   bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
   {
-    // Only a queued request produces a release callback, so the answer is
-    // false whenever nothing was queued.
+    // Out-of-range public requests still select a free public channel.
+    const size_t ch = static_cast<size_t>(channel);
+    return _queue_raw(data, array_len, flg_16bit, flg_signed, sample_rate, flg_stereo, repeat_count,
+                      ch < sound_channel_max ? ch : sound_channel_count, stop_current_sound, no_clear_index);
+  }
+
+  bool Speaker_Class::_play_buzzer(const uint8_t* data, size_t length, float sample_rate, uint32_t repeat)
+  {
+    return _queue_raw(data, length, false, false, sample_rate, false, repeat, buzzer_channel, true, false);
+  }
+
+  bool Speaker_Class::_queue_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, size_t channel, bool stop_current_sound, bool no_clear_index)
+  {
+    // A call from the release callback may be racing end(). It must neither
+    // start the task nor wait for it to free a slot.
     const bool in_task = _in_task();
-    if (in_task)
-    { // from the release callback: an end() may be tearing the task down,
-      // and begin() from here would rebuild it underneath. Never start.
-      if (!_begun.load(std::memory_order_acquire)) { return false; }
-    }
+    if (in_task && !_begun.load(std::memory_order_acquire)) { return false; }
+
     wav_info_t info;
     info.data = data;
     info.length = array_len;
@@ -1384,18 +1409,20 @@ label_continue_sample:
     info.is_signed = flg_signed;
     info.stop_current = stop_current_sound;
     info.no_clear_index = no_clear_index;
-
     for (;;)
     {
       if (!in_task) { _lock_req(); }
-      bool ready = in_task ? _begun.load(std::memory_order_acquire) : _begin_raw();
+      // Use the configured rate so the Buzzer limit does not depend on startup.
+      const bool rate_ok = channel != buzzer_channel
+                        || sample_rate * 2.0 < static_cast<double>(_cfg.sample_rate) * array_len;
+      const bool ready = rate_ok && (in_task ? _begun.load(std::memory_order_acquire) : _begin_raw());
       int result = 0;
       if (ready && _task_handle.load(std::memory_order_acquire))
       {
         if (array_len != 0 && data != nullptr)
         {
-          size_t ch = (size_t)channel;
-          if (ch >= sound_channel_max)
+          size_t ch = channel;
+          if (ch == sound_channel_count)
           {
             size_t bits = _play_channel_bits.load();
             for (ch = sound_channel_max - 1; ch < sound_channel_max; --ch)
@@ -1403,7 +1430,7 @@ label_continue_sample:
               if (0 == ((bits >> ch) & 1)) { break; }
             }
           }
-          if (ch < sound_channel_max) { result = _set_next_wav_locked(ch, info); }
+          if (ch < sound_channel_count) { result = _set_next_wav_locked(ch, info); }
         }
       }
       if (!in_task) { _req_lock.store(false); }
