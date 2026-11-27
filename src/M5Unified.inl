@@ -1705,6 +1705,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         auto ioexp = new M5IOE1_Class;
         ioexp->begin();
         _io_expander[0].reset(ioexp);
+        Buzzer._attachIOE1(*ioexp);
       }
       break;
 #endif
@@ -2810,6 +2811,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     {
       Speaker.setCallback(this, spk_enable_cb);
       Speaker.config(spk_cfg);
+      Buzzer._speaker = &Speaker;
     }
   }
 
@@ -2917,6 +2919,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 
   void M5Unified::update( void )
   {
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+    Buzzer.update();
+#endif
     auto ms = m5gfx::millis();
     _updateMsec = ms;
 

@@ -2245,6 +2245,10 @@ namespace m5
 #if defined(M5UNIFIED_PC_BUILD)
     (void)withTimer;
 #else
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+    // Both powerOff() and timerSleep() reach this path on CoreMatrix.
+    Buzzer_Class::SleepGuard buzzer_sleep(M5.Buzzer);
+#endif
     bool use_deepsleep = true;
     bool gpio_wake_armed = false;  // GPIO wake armed by this call; released when the sleep is cancelled
     gpio_num_t rtc_pin = (gpio_num_t)_rtcIntPin;
@@ -2572,6 +2576,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) // || defined (CONFIG_IDF_TARGET_ESP32P4)
     ESP_LOGW("Power","deepSleep: deep sleep is not supported on this target.");
 #else
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+    Buzzer_Class::SleepGuard buzzer_sleep(M5.Buzzer);
+#endif
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_pmic == pmic_t::pmic_ip5306)
@@ -2702,6 +2709,9 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C6) || defined (CONFIG_IDF_TARGET_ESP32H2) || defined (CONFIG_IDF_TARGET_ESP32P4)
     ESP_LOGW("Power","lightSleep: light sleep is not supported on this target.");
 #else
+#if defined (CONFIG_IDF_TARGET_ESP32C61)
+    Buzzer_Class::SleepGuard buzzer_sleep(M5.Buzzer);
+#endif
 
 #if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
     if (_pmic == pmic_t::pmic_ip5306)

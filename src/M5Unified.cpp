@@ -61,6 +61,7 @@
 #include "utility/power/IP5306_Class.inl"
 #include "utility/power/M5PM1_Class.inl"
 #include "utility/Speaker_Class.inl"
+#include "utility/Buzzer_Class.inl"
 #include "utility/Mic_Class.inl"
 #include "M5Unified.inl"
 

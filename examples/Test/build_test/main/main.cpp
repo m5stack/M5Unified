@@ -26,6 +26,15 @@ static void test_speaker(void)
   M5.Speaker.stop();
 }
 
+static void test_buzzer(void)
+{
+  if (!M5.Buzzer.isEnabled()) { return; }
+  M5.Buzzer.tone(2000, 50);
+  while (M5.Buzzer.isPlaying()) { M5.update(); M5.delay(1); }
+  M5.Buzzer.tone(1000);
+  M5.Buzzer.stop();
+}
+
 static void test_mic(void)
 {
   if (!M5.Mic.isEnabled()) { return; }
@@ -115,6 +124,7 @@ void setup(void)
 
   test_display();
   test_speaker();
+  test_buzzer();
   test_mic();
   test_imu();
   test_touch();

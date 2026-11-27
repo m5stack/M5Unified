@@ -1412,8 +1412,7 @@ label_continue_sample:
     for (;;)
     {
       if (!in_task) { _lock_req(); }
-      // Buzzer passes one period per buffer. The configured output rate keeps
-      // its frequency limit stable across lazy startup and bounds interpolation.
+      // Use the configured rate so the Buzzer limit does not depend on startup.
       const bool rate_ok = channel != buzzer_channel
                         || sample_rate * 2.0 < static_cast<double>(_cfg.sample_rate) * array_len;
       const bool ready = rate_ok && (in_task ? _begun.load(std::memory_order_acquire) : _begin_raw());

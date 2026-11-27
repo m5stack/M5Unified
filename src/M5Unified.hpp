@@ -60,6 +60,7 @@ namespace m5
 #include "utility/Button_Class.hpp"
 #include "utility/Power_Class.hpp"
 #include "utility/Speaker_Class.hpp"
+#include "utility/Buzzer_Class.hpp"
 #include "utility/Mic_Class.hpp"
 #include "utility/Touch_Class.hpp"
 #include "utility/Log_Class.hpp"
@@ -81,6 +82,9 @@ namespace m5
 
   class M5Unified
   {
+    // The IO expanders must outlive Buzzer's PWM shutdown.
+    std::unique_ptr<IOExpander_Base> _io_expander[2];
+
   public:
     // Suppress deprecated-member initialization in the implicit constructor;
     // sketch accesses outside this definition still receive warnings.
@@ -226,6 +230,7 @@ namespace m5
     RTC_Class Rtc;
     Touch_Class Touch;
     Speaker_Class Speaker;
+    Buzzer_Class Buzzer;
     Mic_Class Mic;
     LED_Class Led;
 
@@ -788,7 +793,6 @@ namespace m5
 
      // Instances of all registered displays
     std::vector<M5GFX> _displays;
-    std::unique_ptr<IOExpander_Base> _io_expander[2];
 
     std::uint32_t _updateMsec = 0;
     std::uint16_t _touch_button_height = 0;
