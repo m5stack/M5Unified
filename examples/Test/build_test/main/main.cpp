@@ -30,7 +30,7 @@ static void test_buzzer(void)
 {
   if (!M5.Buzzer.isEnabled()) { return; }
   M5.Buzzer.tone(2000, 50);
-  while (M5.Buzzer.isPlaying()) { M5.update(); M5.delay(1); }
+  for (int i = 0; i < 200 && M5.Buzzer.isPlaying(); ++i) { M5.update(); M5.delay(1); }
   M5.Buzzer.tone(1000);
   M5.Buzzer.stop();
 }

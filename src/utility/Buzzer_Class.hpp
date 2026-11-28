@@ -45,8 +45,9 @@ namespace m5
     /// stop(). On CoreMatrix a finite tone stays true until M5.update() stops it.
     bool isPlaying() const;
 
-    /// Whether this board has a Buzzer output: CoreMatrix PWM, or the Speaker
-    /// output configured by M5.begin() (following later Speaker settings).
+    /// Whether this board has a Buzzer output: the Speaker output configured by
+    /// M5.begin() (following later Speaker settings). CoreMatrix always uses its
+    /// PWM buzzer, even when a Speaker output is configured.
     bool isEnabled() const;
 
   private:
