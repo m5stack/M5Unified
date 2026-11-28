@@ -707,8 +707,6 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     auto spk_cfg = self->Speaker.config();
     gpio_num_t codec_en_pin = GPIO_NUM_45;
     gpio_num_t spk_en_pin = GPIO_NUM_46;
-    m5gfx::pinMode(codec_en_pin, m5gfx::pin_mode_t::output);
-    m5gfx::pinMode(spk_en_pin, m5gfx::pin_mode_t::output);
     if (spk_cfg.pin_bck == GPIO_NUM_40)
     {
       static constexpr const uint8_t enabled_bulk_data[] = {
@@ -722,16 +720,23 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
         2, 0x37, 0x08,  // 0x37 DAC/ Bypass DAC equalizer - NOT default
         0
       };
+      // Set the level before switching to output: GPIO46 is released after board detection
+      // with its output latch high, so switching first would enable the amplifier briefly.
       if (enabled)
       {
         m5gfx::gpio_hi(codec_en_pin);
         m5gfx::gpio_hi(spk_en_pin);
-        in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
       }
       else
       {
         m5gfx::gpio_lo(codec_en_pin);
         m5gfx::gpio_lo(spk_en_pin);
+      }
+      m5gfx::pinMode(codec_en_pin, m5gfx::pin_mode_t::output);
+      m5gfx::pinMode(spk_en_pin, m5gfx::pin_mode_t::output);
+      if (enabled)
+      {
+        in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
       }
     }
 #endif
