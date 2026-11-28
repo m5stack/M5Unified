@@ -350,9 +350,9 @@ namespace m5
       // Power Hold pin for Capsule/Dial/DinMeter/AirQ.
       // Asserted before the board is known (those boards would power off otherwise).
       // Boards where GPIO46 is exposed to the application (camera VSYNC on CoreS3, camera data on
-      // AtomS3R Cam, header pin on StampS3 / AtomS3R Ext) get the pad restored once the board is
-      // known, and boards using it as the microphone data input get it released as an input,
-      // see below.
+      // AtomS3R Cam, header pin on StampS3 / AtomS3R Ext) and StampS3Mini get the pad restored
+      // once the board is known, and boards using it as the microphone data input or the speaker
+      // amplifier enable get it released as an input, see below.
       // Skipped when the application already ran Display.init(): GPIO46 may then carry the display
       // bus (StopWatch QSPI io2), which this output would overwrite. The hold is applied below,
       // once the pin map is known, only on boards that use GPIO46 as their power hold.
@@ -422,8 +422,8 @@ namespace m5
       }
       // Restore GPIO46 on boards exposing it to the application, including
       // candidates and package defaults, and release it on boards using it as the
-      // microphone input. Power hold and display bus pins configured by Display.init()
-      // retain their state.
+      // microphone input or the speaker amplifier enable. Power hold and display bus pins
+      // configured by Display.init() retain their state.
       switch (gpio46_hold ? board : board_t::board_unknown)
       {
       case board_t::board_M5StackCoreS3:
@@ -433,15 +433,19 @@ namespace m5
       case board_t::board_M5AtomS3RExt:
       case board_t::board_M5StampS3:
       case board_t::board_M5StampS3Bat:
+      case board_t::board_M5StampS3Mini:
         gpio46_backup.restore();
         break;
       // GPIO46 is the microphone data input (ES8311 ASDOUT on Cardputer ADV, PDM microphone
       // data on Cardputer / PaperMono). Release it as an input rather than restoring the saved
       // state, which may still be the output left by a previous run after a software reset.
       // The pull-down matches the reset default of GPIO46.
+      // On PaperColor GPIO46 is the speaker amplifier enable (active high, pulled down on the
+      // board); releasing it keeps the amplifier off until the speaker is started.
       case board_t::board_M5Cardputer:
       case board_t::board_M5CardputerADV:
       case board_t::board_M5PaperMono:
+      case board_t::board_M5PaperColor:
         m5gfx::pinMode(GPIO_NUM_46, m5gfx::pin_mode_t::input_pulldown);
         break;
       default:
