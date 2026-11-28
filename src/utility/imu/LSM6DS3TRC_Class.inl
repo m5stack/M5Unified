@@ -26,9 +26,18 @@ namespace m5
     }
     _init = false;
 
+    // Probe first, so that boards without this IMU do not pay for the boot wait
+    // (begin() is tried at two addresses during IMU detection). A device still in
+    // its power-on boot may not answer and is reported as absent: after powering
+    // the sensor, the caller waits 15 ms before calling begin().
+    std::uint8_t value;
+    if (!readRegister(REG_WHO_AM_I, &value, 1))
+    {
+      return imu_spec_none;
+    }
+
     // The device loads its trimming parameters during the power-on boot phase.
     vTaskDelay(pdMS_TO_TICKS(15) + 1);
-    std::uint8_t value;
     if (!readRegister(REG_WHO_AM_I, &value, 1) || value != DEVICE_ID)
     {
       return imu_spec_none;

@@ -2912,6 +2912,9 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
     }
     if (!M5.Imu.isEnabled() && cfg.external_imu && Ex_I2C.isEnabled())
     {
+      // The external port may have been powered just now (Power.setExtOutput() in _begin()).
+      // IMU drivers do not wait for a sensor that is still booting (LSM6DS3TR-C: 15 ms).
+      m5gfx::delay(15);
       port_a_used = M5.Imu.begin(&M5.Ex_I2C) || port_a_used;
     }
     return port_a_used;
